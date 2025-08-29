@@ -1,0 +1,10 @@
+^C:\USERS\RC1KI\ONEDRIVE - RADBOUD UNIVERSITEIT\DOCUMENTS\HANDEL\BEGIN\W32\TEST5 0825 CUDA\BUILD\CMAKEFILES\6A7FEA3BB8CF78E0A12C613B76C37347\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA" "-BC:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/build" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/build/Programma.sln"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd
