@@ -5,6 +5,21 @@
 #include <windowsx.h>
 #include <chrono>
 #include "Timer.hpp"
+#include <thread>
+#include <atomic>
+
+std::atomic<bool> running = true;
+void renderLoop(HWND hwnd) {
+    using clock = std::chrono::high_resolution_clock;
+    auto nextFrame = clock::now();
+
+    while (running) {
+        nextFrame += std::chrono::milliseconds(16); // target ~60 fps
+
+        InvalidateRect(hwnd, NULL, FALSE);
+        std::this_thread::sleep_until(nextFrame);
+    }
+}
 
 using std::cout;
 using std::cerr;
@@ -26,6 +41,7 @@ extern "C"
 {
   __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 }
+
 
 void WndCreate(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -99,11 +115,12 @@ void WndDraw(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
     EndPaint(hWnd, &ps);
 
-
+    double frameTime = (std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeOfPreviousFrame).count());
+    State::state.frameTimeAverager.addFrameTime(frameTime);
+    
     char title[200]; 
-    snprintf(title, sizeof(title), "Ruben leip programma: %.2f ms", (std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeOfPreviousFrame).count())); // NEW
+    snprintf(title, sizeof(title), "Ruben leip programma: %.1f ms  -  average: %.1f ms", frameTime, State::state.frameTimeAverager.getAverage()); // NEW
     SetWindowTextA(hWnd, title); // NEW
-
     timeOfPreviousFrame = std::chrono::high_resolution_clock::now();
 }
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
@@ -171,7 +188,7 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
         break;
  
         case WM_PAINT:
-            WndDraw(hwnd, msg, wParam, lParam);
+           WndDraw(hwnd, msg, wParam, lParam);
         break;
 
         case WM_CLOSE:
@@ -251,15 +268,20 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     GetWindowRect(hwnd, &windowRect);
     // Step 3: The Message Loop
+
+    std::thread renderThread(renderLoop, hwnd);
     while(GetMessage(&Msg, NULL, 0, 0) > 0)
     {
 
         TranslateMessage(&Msg);
         DispatchMessage(&Msg);
-        InvalidateRect(hwnd, NULL, FALSE);        
+        //InvalidateRect(hwnd, NULL, FALSE);        
     
         //SleepEx(0.5, TRUE);
     }
+
+    running = false;
+    renderThread.join();
 
     return (int)Msg.wParam;
 }

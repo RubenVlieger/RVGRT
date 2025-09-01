@@ -21,12 +21,12 @@ glm::dvec3 calcDirfromSphere(double pitch, double yaw)
 Character::Character() 
 {
     velocity = glm::vec3(0.0f, 0.0f, 0.0f);
-    position = glm::vec3(128.0f, 128.0f, 128.0f);
+    position = glm::vec3(128.0f, 466.0f, 128.0f);
 
     FOV = 60.0f;
 
-    yaw = 0.0f;
-    pitch = -std::numbers::pi;
+    yaw = -0.7f;
+    pitch = -std::numbers::pi - 0.3f;
     direction = calcDirfromSphere(pitch, yaw);
 
     speed = 2.0f;
@@ -58,11 +58,11 @@ void Character::Update()
     velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) + inputs.z * (vec3)direction;
     velocity *= speedDropoff;
 
-    vec3 jump = vec3(0.0f, 1.0f, 0.0f) * inputs.y * jumpSpeed;
+    vec3 jump = vec3(0.0f, 1.0f, 0.0f) * -inputs.y * jumpSpeed;
     vec3 gravity = vec3(0.0f, 1.0f, 0.0f) * gravityAmount;
 
     vec3 addVector = (velocity + jump + gravity) * State::state.deltaTime;
-
+    std::cout << camera.pos.y << std::endl;
     position = glm::mix(position, position + addVector, 0.5f);
     vec3 dirright = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f))); //direction.z, 0, direction.x
     vec3 dirup = normalize(cross((vec3)direction, dirright));

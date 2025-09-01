@@ -25,3 +25,35 @@ private:
     std::chrono::high_resolution_clock::time_point start;
     bool stopped;
 };
+
+
+
+#include <deque>
+
+class FrameTimeAverager {
+public:
+    FrameTimeAverager(size_t maxSize = 30) 
+        : maxSize(maxSize), sum(0.0) {}
+
+    void addFrameTime(double frametime) {
+        if (times.size() == maxSize) {
+            // remove oldest
+            sum -= times.front();
+            times.pop_front();
+        }
+        // add newest
+        times.push_back(frametime);
+        sum += frametime;
+    }
+
+    double getAverage() const {
+        if (times.empty()) return 0.0;
+        return sum / times.size();
+    }
+
+private:
+    size_t maxSize;
+    std::deque<double> times;
+    double sum;
+};
+

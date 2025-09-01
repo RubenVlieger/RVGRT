@@ -4,7 +4,7 @@
 #include "hitInfo.hpp"
 #include "Framebuffer.cuh"
 #include <bitset>
-
+#include "Timer.hpp"
 
 class StateRender;
 
@@ -17,6 +17,7 @@ public:
     float deltaXMouse;
     float deltaYMouse;
     std::bitset<256> keysPressed;
+    FrameTimeAverager frameTimeAverager;
 
     bool IsKeyDown(char key);
     glm::vec2 getMouseDelta();
