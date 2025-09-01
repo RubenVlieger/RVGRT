@@ -115,9 +115,230 @@ __device__ float simplex3D(float px, float py, float pz) {
     return 96.0f * (n0 + n1 + n2 + n3);
 }
 
-__device__ float Evaluate(float x, float y, float z) {
-    return simplex3D(x * 0.005f, y * 0.005f, z * 0.005f);
+// // Evaluate: fractal 3D noise + vertical bias + ground boost + optional hard/soft floor.
+// // Returns density: higher -> more likely solid (use e.g. density > 0.0f -> block).
+// __device__ float Evaluate(
+//     float x, float _y, float z,
+//     // noise/fractal params
+//     float baseFrequency = 0.003f,
+//     float baseAmplitude = 1.0f,
+//     int octaves = 5,
+//     float lacunarity = 2.0f,
+//     float persistence = 0.5f,
+//     // vertical falloff (make top sparser)
+//     float verticalBiasScale = 1.5f,
+//     float verticalBiasPower = 1.7f,
+//     // ground control (soft blended floor)
+//     float groundLayerStrength = 0.65f,   // low-freq chunky detail near floor
+//     float groundNoiseFreq = 0.01f,       // frequency for ground boost
+//     // floor params (soft/hard)
+//     float floorHeight = 12.0f,           // y <= floorHeight -> strongest floor
+//     float floorThickness = 6.0f,         // blend distance above floorHeight
+//     float floorStrength = 6.0f,          // strength of floor (raise density)
+//     bool useHardFloor = false            // if true, enforce hard solid floor
+// ) {
+//     const float Y_MAX = 512.0f;
+
+//     // Hard floor quick path (guaranteed solid under threshold).
+//     if (useHardFloor && _y <= floorHeight) {
+//         return 999.0f; // sufficiently large density so density>0 always true
+//     }
+
+//     // --- fractal noise ---
+//     float nx = x * baseFrequency;
+//     float ny = _y * baseFrequency;
+//     float nz = z * baseFrequency;
+
+//     float sum = 0.0f;
+//     float amp = baseAmplitude;
+//     float freq = 1.0f;
+//     for (int i = 0; i < octaves; ++i) {
+//         sum += simplex3D(nx * freq, ny * freq, nz * freq) * amp;
+//         freq *= lacunarity;
+//         amp *= persistence;
+//     }
+
+//     // --- vertical falloff (makes ceiling sparser) ---
+//     float yn = clampf(_y / Y_MAX, 0.0f, 1.0f);
+//     float s = smoothstepf(0.0f, 1.0f, yn);
+//     float verticalFalloff = powf(s, verticalBiasPower) * verticalBiasScale;
+
+//     // --- ground boost: low-frequency chunk noise that fades with height ---
+//     float groundNoise = simplex3D(x * groundNoiseFreq, 0.0f, z * groundNoiseFreq) * 0.6f;
+//     float groundBoost = groundNoise * groundLayerStrength * (1.0f - s);
+
+//     // --- soft floor contribution (blends to a strong positive density near y=0) ---
+//     // floorBlend = 0.0 at y <= floorHeight, 1.0 at y >= floorHeight+floorThickness
+//     float floorBlend = smoothstepf(floorHeight, floorHeight + floorThickness, _y);
+//     // floorContribution goes from floorStrength (at base) -> 0 (above thickness)
+//     float floorContribution = (1.0f - floorBlend) * floorStrength;
+
+//     // --- final density ---
+//     float density = sum - verticalFalloff + groundBoost + floorContribution;
+
+//     return density;
+// }
+
+
+
+
+
+
+// Basic FBM: returns approx in [-1, 1]
+__device__ float fbm3(float x, float y, float z, int octaves, float lacunarity, float persistence, float baseFreq) {
+    float sum = 0.0f;
+    float amp = 1.0f;
+    float ampSum = 0.0f;
+    float freq = baseFreq;
+    for (int i = 0; i < octaves; ++i) {
+        sum += simplex3D(x * freq, y * freq, z * freq) * amp;
+        ampSum += amp;
+        freq *= lacunarity;
+        amp *= persistence;
+    }
+    if (ampSum == 0.0f) return 0.0f;
+    return sum / ampSum; // approx in [-1,1]
 }
+
+// Ridged multifractal-ish 2D on (x,z) using simplex3D(x,0,z).
+// Returns in [0,1] (higher = sharper ridge)
+__device__ float ridged2D(float x, float z, int octaves, float lacunarity, float persistence, float baseFreq) {
+    float sum = 0.0f;
+    float amp = 1.0f;
+    float ampSum = 0.0f;
+    float freq = baseFreq;
+    for (int i = 0; i < octaves; ++i) {
+        float n = simplex3D(x * freq, 0.0f, z * freq); // [-1,1]
+        float signal = 1.0f - fabsf(n);                // [0,1]
+        signal = signal * signal;                      // sharpen ridge
+        sum += signal * amp;
+        ampSum += amp;
+        freq *= lacunarity;
+        amp *= persistence;
+    }
+    if (ampSum == 0.0f) return 0.0f;
+    return clampf(sum / ampSum, 0.0f, 1.0f);
+}
+
+// Domain warp helper: returns warped (x,z) pair via cheap FBM
+__device__ void domainWarp2D(float x, float z, float warpFreq, int warpOctaves, float warpAmp, float lacunarity, float persistence, float &outX, float &outZ) {
+    float wx = fbm3(x, 0.0f, z, warpOctaves, lacunarity, persistence, warpFreq);
+    float wz = fbm3(x + 37.0f, 0.0f, z - 17.0f, warpOctaves, lacunarity, persistence, warpFreq);
+    outX = x + wx * warpAmp;
+    outZ = z + wz * warpAmp;
+}
+
+// Main Evaluate: returns density (higher -> solid). Use `density > 0.0f` for block.
+__device__ float Evaluate(
+    float x, float _y, float z,
+
+    // global scale (map coord -> noise)
+    float baseFrequency = 0.003f,    // base coordinate scale for most FBM
+
+    // mountain (ridged) parameters (2D)
+    int mountainOctaves = 6,
+    float mountainLacunarity = 2.0f,
+    float mountainPersistence = 0.5f,
+    float mountainFreq = 0.0008f,    // lower -> bigger mountains
+    float mountainHeight = 160.0f,   // maximum mountain height above base
+    float mountainBase = 32.0f,      // base height offset (sea level / ground baseline)
+
+    // domain warp for interesting mountain shapes
+    float warpFreq = 0.0012f,
+    int warpOctaves = 3,
+    float warpAmp = 200.0f,
+
+    // vertical terracing (Minecraft-like steps)
+    float terraceHeight = 1.0f,      // quantize mountain height into steps (1.0 = blocky)
+    float terraceBlend = 0.25f,      // how soft the terracing edges are (0..1)
+
+    // 3D detail / overhangs (adds/subtracts from mountain height)
+    int detailOctaves = 4,
+    float detailLacunarity = 2.0f,
+    float detailPersistence = 0.5f,
+    float detailFreq = 0.008f,
+    float detailAmp = 18.0f,         // amplitude of 3D detail (positive -> overhangs)
+
+    // caves (subtractive): carve away where caveNoise > caveThreshold
+    int caveOctaves = 3,
+    float caveFreq = 0.04f,
+    float caveThreshold = 0.45f,     // higher => fewer caves
+    float caveSmooth = 0.12f,        // width of transition
+    float caveCarveStrength = 1.1f,  // how strongly caves carve density
+
+    // floor / bedrock
+    float floorHeight = 8.0f,
+    float floorThickness = 6.0f,
+    float floorStrength = 6.0f,
+    bool useHardFloor = false,
+
+    // top falloff (less blocks up top)
+    float topBiasScale = 1.6f,
+    float topBiasPower = 1.8f,
+
+    // small ground-layer low frequency to make plains look nicer
+    float groundLayerStrength = 0.35f,
+    float groundNoiseFreq = 0.01f,
+
+    // expected Y range for normalization (set to your map ceiling)
+    float Y_MAX = 512.0f
+) {
+    // Hard floor
+    if (useHardFloor && _y <= floorHeight) return 999.0f;
+
+    // --- Domain warp mountains on (x,z) ---
+    float wx, wz;
+    domainWarp2D(x, z, warpFreq, warpOctaves, warpAmp, mountainLacunarity, mountainPersistence, wx, wz);
+
+    // compute ridged mountain factor [0..1]
+    float ridged = ridged2D(wx, wz, mountainOctaves, mountainLacunarity, mountainPersistence, mountainFreq);
+
+    // mountain height (quantize for terraces)
+    float rawMountainH = mountainBase + ridged * mountainHeight; // base + ridge * scaled
+    // terracing: quantize to terraceHeight but blend edges by terraceBlend
+    if (terraceHeight > 0.0f) {
+        float q = floorf(rawMountainH / terraceHeight) * terraceHeight;
+        // soft blend between q and rawMountainH
+        float t = clampf((rawMountainH - q) / (terraceBlend * terraceHeight + 1e-6f), 0.0f, 1.0f);
+        rawMountainH = q * (1.0f - t) + rawMountainH * t;
+    }
+
+    // --- 3D detail to create overhangs + local bumps (can push some voxels above H to solid) ---
+    float detail = fbm3(x * detailFreq, _y * detailFreq, z * detailFreq, detailOctaves, detailLacunarity, detailPersistence, 1.0f);
+    // detail in [-1,1], scale by detailAmp
+    float mountainH_withDetail = rawMountainH + detail * detailAmp;
+
+    // --- low-frequency ground boost for lower plains ---
+    float yn = clampf(_y / Y_MAX, 0.0f, 1.0f);
+    float s = smoothstepf(0.0f, 1.0f, yn);
+    float groundNoise = fbm3(x * groundNoiseFreq, 0.0f, z * groundNoiseFreq, 4, 2.0f, 0.5f, 1.0f);
+    float groundBoost = groundNoise * groundLayerStrength * (1.0f - s);
+
+    // --- density from mountain surface: positive when solid
+    // if voxel y is below the (mountain height + detail), it becomes solid.
+    // We compute density = mountainH_withDetail - y + small smoothing noise
+    float density = mountainH_withDetail - _y;
+    density += groundBoost * 8.0f; // strengthen ground boost contribution
+
+    // --- caves: subtract density where cave field is strong -->
+    // caveNoise in [-1,1]. Map to [0,1], then smoothstep around threshold to create hollow regions.
+    float caveNoise = fbm3(x * caveFreq, _y * caveFreq, z * caveFreq, caveOctaves, 2.0f, 0.5f, 1.0f); // [-1,1]
+    float caveN01 = caveNoise * 0.5f + 0.5f;
+    float caveMask = smoothstepf(caveThreshold - caveSmooth, caveThreshold + caveSmooth, caveN01); // 0..1 where 1 = cave
+    density -= caveMask * caveCarveStrength * (10.0f); // carve; multiply to make caves deep
+
+    // --- top bias: make ceiling sparse (optional) ---
+    float topFalloff = powf(s, topBiasPower) * topBiasScale;
+    density -= topFalloff;
+
+    // --- floor contribution (soft) ---
+    float floorBlend = smoothstepf(floorHeight, floorHeight + floorThickness, _y);
+    float floorContribution = (1.0f - floorBlend) * floorStrength;
+    density += floorContribution;
+
+    return density;
+}
+
 
 
 extern "C" __global__
@@ -200,10 +421,8 @@ void CArray::fill()
         std::cout << "ERROR CARRAY NOT ALLOCATED" << std::endl;
         exit(1);
     }
-
     CUDA_CHECK(cudaMemset(dev_data, 0, SIZE));
-
-
+    CUDA_CHECK(cudaGetLastError());
 
     uint64_t totalBits = (uint64_t)SIZEX * (uint64_t)SIZEY * (uint64_t)SIZEZ;
     uint64_t numWords  = (totalBits + 31ull) / 32ull;
@@ -211,10 +430,11 @@ void CArray::fill()
     uint64_t threads = 256;
     uint64_t blocks64 = (numWords + threads - 1) / threads;
 
-    std::cout << blocks64 << std::endl;
+    std::cout << "blocks64: " << blocks64 << std::endl;
 
     // If blocks64 fits in a single grid dimension:
     fillKernelWords<<<blocks64, threads>>>(dev_data, numWords, totalBits);
+    CUDA_CHECK(cudaGetLastError());
 
 
     // int threads = 256;

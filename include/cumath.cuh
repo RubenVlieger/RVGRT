@@ -27,6 +27,77 @@ const uint64_t BYTESIZE = SIZEX*SIZEY*SIZEZ/8;
 // -------------------
 // Constructors
 // -------------------
+
+__device__ __forceinline__ uint64_t toIndex(int3 p) 
+{
+    return  (((uint64_t)p.x - (SIZEX>>1)) & MODX) | 
+           ((((uint64_t)p.y - (SIZEY>>1)) & MODY) << SHIX) | 
+           ((((uint64_t)p.z - (SIZEZ>>1)) & MODZ) << (SHIX + SHIY));
+}
+
+__device__ __forceinline__ uint64_t toIndex(uint64_t x, uint64_t y, uint64_t z ) 
+{
+    return  ((x - (SIZEX>>1)) & MODX) | 
+           (((y - (SIZEY>>1)) & MODY) << SHIX) | 
+           (((z - (SIZEZ>>1)) & MODZ) << (SHIX + SHIY));
+}
+
+// __device__ __forceinline__ uint64_t splitBy3(uint64_t a) {
+//     // keep only lower 21 bits
+//     a &= 0x1fffffULL;
+//     a = (a | (a << 32)) & 0x1f00000000ffffULL;
+//     a = (a | (a << 16)) & 0x1f0000ff0000ffULL;
+//     a = (a | (a << 8))  & 0x100f00f00f00f00fULL;
+//     a = (a | (a << 4))  & 0x10c30c30c30c30c3ULL; // note: slight variant of constants to cover masks
+//     a = (a | (a << 2))  & 0x1249249249249249ULL;
+//     return a;
+// }
+
+// __device__ __forceinline__ uint64_t mortonEncode(uint64_t x, uint64_t y, uint64_t z) {
+//     return (splitBy3(x) | (splitBy3(y) << 1) | (splitBy3(z) << 2));
+// }
+
+// // compact helper: reverse splitBy3
+// __device__ __forceinline__ uint64_t compactBy3(uint64_t x) {
+//     x &= 0x1249249249249249ULL;
+//     x = (x ^ (x >> 2))  & 0x10c30c30c30c30c3ULL;
+//     x = (x ^ (x >> 4))  & 0x100f00f00f00f00fULL;
+//     x = (x ^ (x >> 8))  & 0x1f0000ff0000ffULL;
+//     x = (x ^ (x >> 16)) & 0x1f00000000ffffULL;
+//     x = (x ^ (x >> 32)) & 0x1fffffULL;
+//     return x;
+// }
+
+// // decode morton -> x,y,z
+// __device__ __forceinline__ void mortonDecode(uint64_t morton, uint32_t &outX, uint32_t &outY, uint32_t &outZ) {
+//     outX = (uint32_t)compactBy3(morton);
+//     outY = (uint32_t)compactBy3(morton >> 1);
+//     outZ = (uint32_t)compactBy3(morton >> 2);
+// }
+
+// // --- IsSolid using Morton mapping ---
+// // Replace your old IsSolid with this. It now converts (x,y,z) -> morton index.
+// __device__ __forceinline__ bool IsSolid(int3 p, const uint32_t* __restrict__ bits) {
+//     // bounds check (important if SIZEX, SIZEY, SIZEZ are not power-of-two)
+// // #ifdef SIZEX
+// //     if (p.x < 0 || p.y < 0 || p.z < 0) return false;
+// //     if ((uint32_t)p.x >= (uint32_t)SIZEX || (uint32_t)p.y >= (uint32_t)SIZEY || (uint32_t)p.z >= (uint32_t)SIZEZ) return false;
+// // #endif
+
+//     uint64_t idx = mortonEncode((uint64_t)p.x, (uint64_t)p.y, (uint64_t)p.z);
+//     // same bit unpacking as before:
+//     return (bits[idx >> 5] >> (idx & 31)) & 1u;
+// }
+
+
+
+__device__ inline float clampf(float v, float a, float b) {
+    return fmaxf(a, fminf(b, v));
+}
+__device__ inline float smoothstepf(float edge0, float edge1, float x) {
+    float t = clampf((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
 __host__ __device__ inline float3 float3f(float x, float y, float z) { return make_float3(x, y, z); }
 __host__ __device__ inline float3 float3f(float v) { return make_float3(v, v, v); }
 __host__ __device__ inline float3 float3f(const float2 &xy, float z) { return make_float3(xy.x, xy.y, z); }

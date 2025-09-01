@@ -20,7 +20,8 @@ __device__ bool isCoarseBlockSolid(uint64_t cx, uint64_t cy, uint64_t cz, const 
                 // Simple boundary check
                 if (fine_x >= SIZEX || fine_y >= SIZEY || fine_z >= SIZEZ) continue;
 
-                uint64_t index = (uint64_t)(fine_z * SIZEY + fine_y) * SIZEX + fine_x;
+                uint64_t index = toIndex(fine_x, fine_y, fine_z);
+                //uint64_t index = (uint64_t)(fine_z * SIZEY + fine_y) * SIZEX + fine_x;
                 if ((fineData[index >> 5] >> (index & 31)) & 1) {
                     return true; // Found a solid voxel in this block
                 }

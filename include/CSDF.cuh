@@ -11,7 +11,7 @@
 #define C_SIZEZ (SIZEZ / COARSENESS)
 #define C_BYTESIZE (C_SIZEX * C_SIZEY * C_SIZEZ)
 
-#define MAX_DIST 32
+#define MAX_DIST 64
 
 class CSDF {
 public:

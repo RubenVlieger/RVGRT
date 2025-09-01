@@ -17,6 +17,13 @@ struct hitInfo {
     float3 normal;
 };
 
+
+
+__device__ __forceinline__ bool IsSolid(int3 p, const uint32_t* __restrict__ bits) {
+    int index = toIndex(p);
+    return (bits[index >> 5] >> (index & 31)) & 1;
+}
+
 __device__ __forceinline__ int toCoarseIndex(float3 pos) {
     int cx = floorf(pos.x) / COARSENESS;
     int cy = floorf(pos.y) / COARSENESS;
@@ -24,18 +31,6 @@ __device__ __forceinline__ int toCoarseIndex(float3 pos) {
     return cz * C_SIZEX * C_SIZEY + cy * C_SIZEX + cx;
 }
 
-
-__device__ __forceinline__ int toIndex(int3 p) 
-{
-    return   (p.x & MODX) | 
-            ((p.y  & MODY) << SHIX) | 
-            ((p.z  & MODZ) << (SHIX + SHIY));
-}
-
-__device__ __forceinline__ bool IsSolid(int3 p, const uint32_t* __restrict__ bits) {
-    int index = toIndex(p);
-    return (bits[index >> 5] >> (index & 31)) & 1;
-}
 __device__ __forceinline__ float getDistance(float3 pos, const unsigned char* __restrict__ csdf)
 {
     int cx = (int)(floorf(pos.x) * (1.0f / COARSENESS));
@@ -110,7 +105,7 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
         
         
         char mask = -128;
-        for (int i = 0; i < 100; i++) {
+        for (int i = 0; i < 200; i++) {
             HI.its++;
             // Check if we're in empty space far from any surface
             if ((i & 7) == 7) {
@@ -161,7 +156,7 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
             }
 
         }
-        
+    
         // If we completed the DDA loop without hitting anything and didn't jump ahead,
         // we're done
         if(jumped) continue;
@@ -192,10 +187,10 @@ __device__ float3 computeColor(float x,
     {
         color = -dir;
     }
-    if(hit.its > 50.0f)
-    {
-        color.x = 0.5f - color.x;
-    }
+    // if(hit.its > 50.0f)
+    // {
+    //     color.x = 0.5f - color.x;
+    // }
     return color;
 }
 
