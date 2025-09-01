@@ -4,6 +4,7 @@
 #include <device_launch_parameters.h>
 #include "cumath.cuh"
 #include "csdf.cuh"
+#include "cuda_fp16.h"
 
 __constant__ float3 c_sunDir;
 __constant__ float3 c_camPos, c_camFo, c_camUp, c_camRi;
@@ -16,8 +17,6 @@ struct hitInfo {
     float3 pos;
     float3 normal;
 };
-
-
 
 __device__ __forceinline__ bool IsSolid(int3 p, const uint32_t* __restrict__ bits) {
     int index = toIndex(p);
@@ -70,11 +69,12 @@ __device__ float3 approximateCSDF(float3 pos, float3 dir, const unsigned char* _
     return pos;
 }
 
-__device__ hitInfo trace(float3 camPos, float3 camDir, 
+__device__ hitInfo trace(float3 camPos, float3 camDir,
+                        half distance,
                         const uint32_t* __restrict__ bits,
                         const unsigned char* __restrict__ csdf) 
 {
-    float3 currentPos = camPos;
+    float3 currentPos = camPos + (distance - (half)2.0) * camDir;
     hitInfo HI; HI.hit = false;
     HI.its = 0.0f;
     
@@ -169,13 +169,14 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
 
 __device__ float3 computeColor(float x, 
                               float y, 
+                              half distance,
                               const uint32_t* __restrict__ bits, 
                               const unsigned char* __restrict__ csdf) 
 {
     float2 NDC = make_float2(x * 2.0f - 1.0f, y * 2.0f - 1.0f);
     float3 dir = normalize(c_camFo + NDC.x * c_camRi + NDC.y * c_camUp);
 
-    hitInfo hit = trace(c_camPos, dir, bits, csdf);
+    hitInfo hit = trace(c_camPos, dir, distance, bits, csdf);
 
     float3 color = make_float3(0.0f, 0.0f, 0.0f);
     
@@ -187,18 +188,33 @@ __device__ float3 computeColor(float x,
     {
         color = -dir;
     }
-    // if(hit.its > 50.0f)
-    // {
-    //     color.x = 0.5f - color.x;
-    // }
+    color.x = hit.its > 50 ? 1.0f : 0.0f;
     return color;
+}
+__device__ __forceinline__ half approximateDistance(int x, int y, 
+                                                  int distWidth, int distHeight, 
+                                                  const half* __restrict__ distBuffer)
+{
+    int lx = x / 2;
+    int ly = y / 2;
+
+    int lx1 = min(lx + 1, distWidth - 1);
+    int ly1 = min(ly + 1, distHeight - 1);
+
+    int idx00 = lx  + ly  * distWidth; // Top-left
+    int idx10 = lx1 + ly  * distWidth; // Top-right
+    int idx01 = lx  + ly1 * distWidth; // Bottom-left
+    int idx11 = lx1 + ly1 * distWidth; // Bottom-right
+    
+    return __hmin(__hmin(distBuffer[idx00], distBuffer[idx10]), __hmin(distBuffer[idx01], distBuffer[idx11]));
 }
 
 __global__ void renderKernel(uchar4* framebuffer, 
                              int width, 
                              int height, 
                              const uint32_t* __restrict__ bits,
-                             const unsigned char* __restrict__ csdf) 
+                             const unsigned char* __restrict__ csdf,
+                             const half* __restrict__ distBuffer) 
 {
     int ix = blockIdx.x * blockDim.x + threadIdx.x;
     int iy = blockIdx.y * blockDim.y + threadIdx.y;
@@ -207,12 +223,37 @@ __global__ void renderKernel(uchar4* framebuffer,
     float x = (float)ix / (float)width;
     float y = (float)iy / (float)height;
 
-    float3 col = computeColor(x, y, bits, csdf);
+    half dist = approximateDistance(ix, iy, width / 2, height/2, distBuffer);
+
+    float3 col = computeColor(x, y, dist, bits, csdf);
+
     unsigned char r = (unsigned char)(col.x * 255.0f);
     unsigned char g = (unsigned char)(col.y * 255.0f);
     unsigned char b = (unsigned char)(col.z * 255.0f);
 
     framebuffer[ix + iy * width] = make_uchar4(b, g, r, 255);
+}
+
+__global__ void distApproximationKernel(half* distBuffer,
+                                  int width, 
+                                  int height, 
+                                  const uint32_t* __restrict__ bits,
+                                  const unsigned char* __restrict__ csdf) 
+{
+    int ix = blockIdx.x * blockDim.x + threadIdx.x;
+    int iy = blockIdx.y * blockDim.y + threadIdx.y;
+    if (ix >= width || iy >= height) return;
+
+    float x = (float)ix / (float)width;
+    float y = (float)iy / (float)height;
+
+    float2 NDC = make_float2(x * 2.0f - 1.0f, y * 2.0f - 1.0f);
+    float3 dir = normalize(c_camFo + NDC.x * c_camRi + NDC.y * c_camUp);
+
+    hitInfo hit = trace(c_camPos, dir, (half)0.0f, bits, csdf);
+    half dist = hit.hit ? (half)distance(hit.pos, c_camPos) : (half)MAX_DIST;
+
+    distBuffer[ix + iy * width] = dist;
 }
 
 void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
@@ -228,7 +269,23 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
 
 
     dim3 block(16, 16);
-    dim3 grid((framebuffer.getWidth() + block.x - 1) / block.x,
+    dim3 grid(((framebuffer.getWidth() / 2) + block.x - 1) / block.x,
+              ((framebuffer.getHeight() / 2) + block.y - 1) / block.y);
+
+    distApproximationKernel<<<grid, block>>>(
+    reinterpret_cast<half*>(distBuffer.getPtr()),
+                            framebuffer.getWidth() / 2,
+                            framebuffer.getHeight() / 2,
+                            cArray.getPtr(), 
+                            csdf.getPtr()
+    );
+    
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
+
+
+    block = dim3(16, 16);
+    grid = dim3((framebuffer.getWidth() + block.x - 1) / block.x,
                 (framebuffer.getHeight() + block.y - 1) / block.y);
 
         renderKernel<<<grid, block>>>(
@@ -236,7 +293,8 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                               framebuffer.getWidth(),
                               framebuffer.getHeight(),
                               cArray.getPtr(), 
-                              csdf.getPtr()
+                              csdf.getPtr(),
+                              (half*)distBuffer.getPtr()
     );
 }
 

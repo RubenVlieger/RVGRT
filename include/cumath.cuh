@@ -10,9 +10,9 @@
         throw std::runtime_error("CUDA error"); \
     }
 
-const unsigned int SHIX = 11;
+const unsigned int SHIX = 10;
 const unsigned int SHIY = 9;
-const unsigned int SHIZ = 11;
+const unsigned int SHIZ = 10;
 
 const unsigned int MODX = (1<<SHIX) - 1;
 const unsigned int MODY = (1<<SHIY) - 1;

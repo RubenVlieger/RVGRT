@@ -28,6 +28,9 @@ void State::Create()
     render->framebuffer = Framebuffer();
     render->framebuffer.Allocate(dispWIDTH, dispHEIGHT);
 
+    render->distBuffer = CArray();
+    render->distBuffer.Allocate((dispWIDTH/2) * (dispHEIGHT/2) * 2);
+
     render->cArray = CArray();
     render->cArray.Allocate(BYTESIZE);
 

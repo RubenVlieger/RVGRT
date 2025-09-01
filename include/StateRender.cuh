@@ -24,6 +24,7 @@ public:
     uint32_t* bitsArray;
     CArray cArray;
     Framebuffer framebuffer;
+    CArray distBuffer;
     CSDF csdf;
 
     // GPU draw entrypoint
