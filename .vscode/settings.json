@@ -77,7 +77,12 @@
         "xstring": "cpp",
         "xtr1common": "cpp",
         "xutility": "cpp",
-        "__nullptr": "cpp"
+        "__nullptr": "cpp",
+        "filesystem": "cpp",
+        "fstream": "cpp",
+        "ranges": "cpp",
+        "span": "cpp",
+        "stack": "cpp"
     },
 
     "cmake.generator": "Visual Studio 17 2022",

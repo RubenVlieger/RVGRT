@@ -21,7 +21,7 @@ glm::dvec3 calcDirfromSphere(double pitch, double yaw)
 Character::Character() 
 {
     velocity = glm::vec3(0.0f, 0.0f, 0.0f);
-    position = glm::vec3(128.0f, 466.0f, 128.0f);
+    position = glm::vec3(128.0f, 350.0f, 128.0f);
 
     FOV = 60.0f;
 
@@ -38,6 +38,7 @@ Character::Character()
 }
 void Character::Update() 
 {
+    std::cout << position.y << std::endl;
     if (!lockMouse) {
         //vec3 deltaRotation = vec3(Game::window.mouseState.delta.first, 0.0f, Game::window.mouseState.delta.second) * deltaTime * sensitivity;
         //print(deltaRotation);

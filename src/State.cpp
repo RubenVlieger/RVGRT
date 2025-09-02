@@ -1,4 +1,5 @@
 #include "State.hpp"
+#define NOMINMAX
 #include <thread>
 #include <vector>
 #include <iostream>

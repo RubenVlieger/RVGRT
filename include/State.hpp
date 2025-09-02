@@ -8,12 +8,17 @@
 #include "d3d11.h"
 #include <atomic>
 
+#include "Texturepack.cuh"
+
 class StateRender;
 
 class State {
 public:
     HWND hwnd;
     StateRender* render;
+
+    //Texturepack texturepack(texturepack_png, texturepack_png_len);
+
     // Input & mouse
     glm::vec2 mouseDelta;
     float deltaTime = 16;

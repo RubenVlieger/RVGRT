@@ -1,8 +1,10 @@
 #pragma once
+
 #include <cuda_runtime.h>
 #include <math_constants.h>
 #include <cmath>
-
+#include "cuda_fp16.h"
+#include <algorithm>
 
 #define CUDA_CHECK(err) \
     if(err != cudaSuccess) { \
@@ -10,9 +12,9 @@
         throw std::runtime_error("CUDA error"); \
     }
 
-const unsigned int SHIX = 11;
+const unsigned int SHIX = 10;
 const unsigned int SHIY = 9;
-const unsigned int SHIZ = 11;
+const unsigned int SHIZ = 10;
 
 const unsigned int MODX = (1<<SHIX) - 1;
 const unsigned int MODY = (1<<SHIY) - 1;
@@ -90,6 +92,86 @@ __device__ __forceinline__ uint64_t toIndex(uint64_t x, uint64_t y, uint64_t z )
 // }
 
 
+struct half3 {
+    __half x, y, z;
+};
+
+// --- Constructors ---
+
+__host__ __device__ inline half3 make_half3(__half r, __half g, __half b) {
+    return { r, g, b };
+}
+
+__host__ __device__ inline half3 make_half3(float r, float g, float b) {
+    return { __float2half(r), __float2half(g), __float2half(b) };
+}
+
+__host__ __device__ inline half3 make_half3(float3 v) {
+    return { __float2half(v.x), __float2half(v.y), __float2half(v.z) };
+}
+
+__host__ __device__ inline float3 make_float3(half3 v) {
+    return make_float3(__half2float(v.x), __half2float(v.y), __half2float(v.z));
+}
+
+// --- Arithmetic ops in half precision ---
+
+__host__ __device__ inline half3 operator+(const half3& a, const half3& b) {
+    return make_half3(__hadd(a.x, b.x),
+                      __hadd(a.y, b.y),
+                      __hadd(a.z, b.z));
+}
+
+__host__ __device__ inline half3 operator-(const half3& a, const half3& b) {
+    return make_half3(__hsub(a.x, b.x),
+                      __hsub(a.y, b.y),
+                      __hsub(a.z, b.z));
+}
+
+__host__ __device__ inline half3 operator*(const half3& a, const half3& b) {
+    return make_half3(__hmul(a.x, b.x),
+                      __hmul(a.y, b.y),
+                      __hmul(a.z, b.z));
+}
+
+__host__ __device__ inline half3 operator*(const half3& a, __half s) {
+    return make_half3(__hmul(a.x, s),
+                      __hmul(a.y, s),
+                      __hmul(a.z, s));
+}
+
+__host__ __device__ inline half3 operator/(const half3& a, __half s) {
+    return make_half3(__hdiv(a.x, s),
+                      __hdiv(a.y, s),
+                      __hdiv(a.z, s));
+}
+
+// --- Dot product & length (returns float, since sum needs higher precision) ---
+
+__host__ __device__ inline float dot(const half3& a, const half3& b) {
+    __half hx = __hmul(a.x, b.x);
+    __half hy = __hmul(a.y, b.y);
+    __half hz = __hmul(a.z, b.z);
+    return __half2float(__hadd(__hadd(hx, hy), hz));
+}
+
+__host__ __device__ inline float length(const half3& v) {
+    return sqrtf(dot(v, v));
+}
+
+// --- Normalization (returns half3, scales in float for safety) ---
+
+__host__ __device__ inline half3 normalize(const half3& v) {
+    float len = length(v);
+    if (len > 0.0f) {
+        float inv = 1.0f / len;
+        return make_half3(__hmul(v.x, __float2half(inv)),
+                          __hmul(v.y, __float2half(inv)),
+                          __hmul(v.z, __float2half(inv)));
+    }
+    return make_half3(__float2half(0.f), __float2half(0.f), __float2half(0.f));
+}
+
 
 __device__ inline float clampf(float v, float a, float b) {
     return fmaxf(a, fminf(b, v));
@@ -164,6 +246,9 @@ __host__ __device__ inline float angle(const float3 &a, const float3 &b) {
     float d = dot(normalize(a), normalize(b));
     return acosf(fminf(fmaxf(d, -1.0f), 1.0f));
 }
+__host__ __device__ inline float3 reflect(const float3 &I, const float3 &N) {
+    return I - 2.0f * dot(I, N) * N;
+}
 __host__ __device__ inline float lengthsquared(const float3 &v) {
     return v.x*v.x + v.y*v.y + v.z*v.z;
 }
@@ -180,17 +265,16 @@ __host__ __device__ inline float3 round(const float3 &v) { return make_float3(ro
 __host__ __device__ inline float3 frac(const float3 &v) { return v - floor(v); }
 __host__ __device__ inline float3 sign(const float3 &v) { return make_float3((v.x>0)-(v.x<0), (v.y>0)-(v.y<0), (v.z>0)-(v.z<0)); }
 
-__host__ __device__ inline float3 min(const float3 &a, const float3 &b) { return make_float3(fminf(a.x,b.x), fminf(a.y,b.y), fminf(a.z,b.z)); }
-__host__ __device__ inline float3 max(const float3 &a, const float3 &b) { return make_float3(fmaxf(a.x,b.x), fmaxf(a.y,b.y), fmaxf(a.z,b.z)); }
-__host__ __device__ inline float3 clamp(const float3 &v, const float3 &mn, const float3 &mx) { return min(max(v,mn), mx); }
+__host__ __device__ inline float3 min3(const float3 &a, const float3 &b) { return make_float3(fminf(a.x,b.x), fminf(a.y,b.y), fminf(a.z,b.z)); }
+__host__ __device__ inline float3 max3(const float3 &a, const float3 &b) { return make_float3(fmaxf(a.x,b.x), fmaxf(a.y,b.y), fmaxf(a.z,b.z)); }
+__host__ __device__ inline float3 clamp(const float3 &v, const float3 &mn, const float3 &mx) { return min3(max3(v,mn), mx); }
 __host__ __device__ inline float3 lerp(const float3 &a, const float3 &b, float t) { return a + t*(b-a); }
-
-__host__ __device__ inline int3 min3(const int3 &a, const int3 &b) { return make_int3(min(a.x,b.x), min(a.y,b.y), min(a.z,b.z)); }
-__host__ __device__ inline int3 max3(const int3 &a, const int3 &b) { return make_int3(max(a.x,b.x), max(a.y,b.y), max(a.z,b.z)); }
+__host__ __device__ inline int3 min3(const int3 &a, const int3 &b) { return make_int3(std::min(a.x,b.x), std::min(a.y,b.y), std::min(a.z,b.z)); }
+__host__ __device__ inline int3 max3(const int3 &a, const int3 &b) { return make_int3(std::max(a.x,b.x), std::max(a.y,b.y), std::max(a.z,b.z)); }
 __host__ __device__ inline int3 clamp3(const int3 &v, int minVal, int maxVal) { return max3(min3(v,int3i(maxVal)), int3i(minVal)); }
 
-__host__ __device__ inline uint3 min3(const uint3 &a, const uint3 &b) { return make_uint3(min(a.x,b.x), min(a.y,b.y), min(a.z,b.z)); }
-__host__ __device__ inline uint3 max3(const uint3 &a, const uint3 &b) { return make_uint3(max(a.x,b.x), max(a.y,b.y), max(a.z,b.z)); }
+__host__ __device__ inline uint3 min3(const uint3 &a, const uint3 &b) { return make_uint3(std::min(a.x,b.x), std::min(a.y,b.y), std::min(a.z,b.z)); }
+__host__ __device__ inline uint3 max3(const uint3 &a, const uint3 &b) { return make_uint3(std::max(a.x,b.x), std::max(a.y,b.y), std::max(a.z,b.z)); }
 
 
 __host__ __device__ inline float3 sqrtf3(const float3 &v) { return make_float3(sqrtf(v.x), sqrtf(v.y), sqrtf(v.z)); }

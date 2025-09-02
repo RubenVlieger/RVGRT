@@ -1,0 +1,10 @@
+^C:\USERS\RC1KI\ONEDRIVE - RADBOUD UNIVERSITEIT\DOCUMENTS\HANDEL\BEGIN\W32\TEST5 0825 CUDA\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SC:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA" "-BC:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/build" --check-stamp-file "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/build/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

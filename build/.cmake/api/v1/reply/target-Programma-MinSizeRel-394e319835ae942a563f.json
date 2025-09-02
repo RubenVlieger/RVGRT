@@ -122,7 +122,8 @@
 				0,
 				1,
 				4,
-				6
+				6,
+				7
 			]
 		},
 		{
@@ -167,7 +168,7 @@
 				2,
 				3,
 				5,
-				7
+				8
 			]
 		}
 	],
@@ -235,7 +236,8 @@
 				4,
 				5,
 				6,
-				7
+				7,
+				8
 			]
 		}
 	],
@@ -281,6 +283,12 @@
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
 			"path" : "src/StateRender.cu",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 0,
+			"path" : "src/Texturepack.cu",
 			"sourceGroupIndex" : 0
 		},
 		{

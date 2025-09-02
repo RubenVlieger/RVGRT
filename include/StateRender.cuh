@@ -5,7 +5,7 @@
 #include "Framebuffer.cuh"
 #include "CSDF.cuh"
 
-
+#include "Texturepack.cuh"
 // A lightweight GPU-side RGBA pixel
 // struct uchar4 {
 //     unsigned char x, y, z, w;
@@ -25,6 +25,7 @@ public:
     CArray cArray;
     Framebuffer framebuffer;
     CArray distBuffer;
+    Texturepack texturepack;
     CSDF csdf;
 
     // GPU draw entrypoint

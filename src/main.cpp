@@ -1,6 +1,6 @@
 #define CONSOLE
-#define FULLSCREEN
-
+//#define FULLSCREEN
+#define NOMINMAX  // Prevent windows.h from defining min/max macros
 #include <windows.h>
 #include "State.hpp"    
 #include "StateRender.cuh"
@@ -29,7 +29,8 @@ extern "C" {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 }
 
-void renderLoop() {
+void renderLoop() 
+{
     using clock = std::chrono::steady_clock;
 
     auto lastTime = clock::now();
@@ -142,9 +143,9 @@ void WndCreate(HWND hwnd) {
     // State init
     State::state.Create();
 
-#ifdef FULLSCREEN
+#//ifdef FULLSCREEN
     ShowCursor(FALSE); // hide cursor
-#endif
+//#endif
 }
 
 LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {

@@ -270,7 +270,7 @@ __device__ float Evaluate(
     float floorHeight = 8.0f,
     float floorThickness = 6.0f,
     float floorStrength = 6.0f,
-    bool useHardFloor = false,
+    bool useHardFloor = true,
 
     // top falloff (less blocks up top)
     float topBiasScale = 1.6f,
@@ -285,6 +285,7 @@ __device__ float Evaluate(
 ) {
     // Hard floor
     if (useHardFloor && _y <= floorHeight) return 999.0f;
+    //if(_y <=340) return 999.0f;
 
     // --- Domain warp mountains on (x,z) ---
     float wx, wz;
@@ -336,6 +337,7 @@ __device__ float Evaluate(
     float floorContribution = (1.0f - floorBlend) * floorStrength;
     density += floorContribution;
 
+    
     return density;
 }
 
@@ -374,8 +376,8 @@ void fillKernelWords(uint32_t* __restrict__ data, uint64_t numWords, uint64_t to
         uint64_t x = bitIndex & (uint64_t)MODX;
 
         // call Evaluate (adapted to accept float/double as you have)
+      
         float v = Evaluate((float)x, (float)y, (float)z);
-
         bool solid = v > 0.7f;
         if (solid) {
             w |= (1u << bit);

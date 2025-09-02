@@ -6,21 +6,25 @@
 #include "csdf.cuh"
 #include "cuda_fp16.h"
 
+#include <curand_kernel.h> // needed if you use random roughness per pixel
+
+
 __constant__ float3 c_sunDir;
 __constant__ float3 c_camPos, c_camFo, c_camUp, c_camRi;
 
 
-
-struct hitInfo {
-    bool hit;
-    int its;
+struct hitInfo 
+{
     float3 pos;
     float3 normal;
+    half2 uv;
+    bool hit;
+    int its;
 };
 
 __device__ __forceinline__ bool IsSolid(int3 p, const uint32_t* __restrict__ bits) {
     int index = toIndex(p);
-    return (bits[index >> 5] >> (index & 31)) & 1;
+    return ((bits[index >> 5] >> (index & 31)) & 1);
 }
 
 __device__ __forceinline__ int toCoarseIndex(float3 pos) {
@@ -35,8 +39,15 @@ __device__ __forceinline__ float getDistance(float3 pos, const unsigned char* __
     int cx = (int)(floorf(pos.x) * (1.0f / COARSENESS));
     int cy = (int)(floorf(pos.y) * (1.0f / COARSENESS));
     int cz = (int)(floorf(pos.z) * (1.0f / COARSENESS));
-    
+
+    cx = min(cx, C_SIZEX - 1);
+    cy = min(cy, C_SIZEY - 1);
+    cz = min(cz, C_SIZEZ - 1);
+    cx = max(cx, 0);
+    cy = max(cy, 0);
+    cz = max(cz, 0);
     int cidx = cz * C_SIZEX * C_SIZEY + cy * C_SIZEX + cx;
+
     unsigned char dist = csdf[cidx];
     return (float)dist;
 }
@@ -45,9 +56,40 @@ __device__ __forceinline__ unsigned char getDistance(int3 pos, const unsigned ch
     int cx = pos.x / COARSENESS;
     int cy = pos.y / COARSENESS;
     int cz = pos.z / COARSENESS;
+
+    cx = min(cx, C_SIZEX - 1);
+    cy = min(cy, C_SIZEY - 1);
+    cz = min(cz, C_SIZEZ - 1);
+    cx = max(cx, 0);
+    cy = max(cy, 0);
+    cz = max(cz, 0);
     
     int cidx = cz * C_SIZEX * C_SIZEY + cy * C_SIZEX + cx;
     return csdf[cidx];
+}
+
+__device__ __forceinline__ float3 sampleSky(float3 dir)
+{
+    // --- Sky color ---
+    float sunDot = dot(dir, c_sunDir);
+    if (sunDot > 0.999f) {
+        // Bright yellow sun
+        return make_float3(1.0f, 0.9f, 0.2f) * 10.0f;
+    } else {
+        // Blue-ish sky, darkens towards horizon
+        return lerp(make_float3(0.5f, 0.7f, 1.0f), make_float3(0.0f, 0.0f, 0.0f), dir.y * 0.5f + 0.5f);
+    }
+}
+
+__device__ __forceinline__ float3 sampleTexture(half2 uv, cudaTextureObject_t texObj)
+{
+    //    float4 t = tex2D<float4>(texObj, __half2float(uv.x), __half2float(uv.y));
+    uv.x = uv.x * hrcp(16.0) + (half)1.f;
+    uv.y = uv.y * hrcp(16.0);
+
+    float4 t = tex2D<float4>(texObj, __half2float(uv.y), __half2float(uv.x));
+
+    return make_float3(t.x, t.y, t.z);
 }
 
 __device__ float3 approximateCSDF(float3 pos, float3 dir, const unsigned char* __restrict__ csdf)
@@ -60,10 +102,10 @@ __device__ float3 approximateCSDF(float3 pos, float3 dir, const unsigned char* _
 
         float dist = getDistance(pos, csdf);
         
-        if (dist < 2) 
+        if (dist <= 1.0f) 
             return pos;
         
-        pos = pos + dir * max(2.0f, dist);
+        pos = pos + dir * dist;
         iterations++;
     }
     return pos;
@@ -74,11 +116,20 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
                         const uint32_t* __restrict__ bits,
                         const unsigned char* __restrict__ csdf) 
 {
-    float3 currentPos = camPos + (distance - (half)2.0) * camDir;
+    float3 currentPos = camPos + distance * camDir;
     hitInfo HI; HI.hit = false;
     HI.its = 0.0f;
-    
-    bool jumped;
+
+    float3 deltaDist = make_float3(
+        (camDir.x != 0) ? fabsf(1.0f / camDir.x) : 1e10f,
+        (camDir.y != 0) ? fabsf(1.0f / camDir.y) : 1e10f,
+        (camDir.z != 0) ? fabsf(1.0f / camDir.z) : 1e10f);
+
+    int3 step = make_int3((camDir.x > 0) - (camDir.x < 0),
+                        (camDir.y > 0) - (camDir.y < 0),
+                        (camDir.z > 0) - (camDir.z < 0));
+
+    bool jumped = false;
     for (int majorIteration = 0; majorIteration < 5; majorIteration++) 
     {
         HI.its++;
@@ -87,15 +138,6 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
         
         // Phase 2: DDA for precise intersection
         int3 ipos = make_int3(floorf(currentPos.x), floorf(currentPos.y), floorf(currentPos.z));
-        int3 step = make_int3((camDir.x > 0) - (camDir.x < 0),
-                             (camDir.y > 0) - (camDir.y < 0),
-                             (camDir.z > 0) - (camDir.z < 0));
-        
-        float3 deltaDist = make_float3(
-            (camDir.x != 0) ? fabsf(1.0f / camDir.x) : 1e10f,
-            (camDir.y != 0) ? fabsf(1.0f / camDir.y) : 1e10f,
-            (camDir.z != 0) ? fabsf(1.0f / camDir.z) : 1e10f
-        );
         
         float3 tMax = make_float3(
             ((step.x > 0) ? (ipos.x + 1.0f - currentPos.x) : (currentPos.x - ipos.x)) * deltaDist.x,
@@ -103,18 +145,23 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
             ((step.z > 0) ? (ipos.z + 1.0f - currentPos.z) : (currentPos.z - ipos.z)) * deltaDist.z
         );
         
-        
         char mask = -128;
         for (int i = 0; i < 200; i++) {
             HI.its++;
-            // Check if we're in empty space far from any surface
-            if ((i & 7) == 7) {
+            // Check if we're in empty space far from any surface, but only sometimes :)
+            if ((i & 7) == 7) 
+            {
                 unsigned char dist = getDistance(ipos, csdf);
-                if (dist > 2) { // Use a smaller threshold
-                    // Jump ahead using CSDF
-                    currentPos = make_float3(ipos.x, ipos.y, ipos.z) + camDir * dist * COARSENESS;
+                if (dist > 2) {
+                    // Magical piece of mathematics, to compute a point inside the voxel which lies along the path.
+                    float3 voxelCenter = make_float3(ipos.x + 0.5f, ipos.y + 0.5f, ipos.z + 0.5f);
+                    float t = dot(voxelCenter - currentPos, camDir);
+                    float3 posOnRay = currentPos + t * camDir;
+
+                    // Perform the jump from this corrected position to stay on the correct path.
+                    currentPos = posOnRay + camDir * dist * COARSENESS;
                     jumped = true;
-                    break; // Break out of DDA loop to restart with CSDF
+                    break; // Break out of DDA loop to restart with the new, advanced position.
                 }
             }
             
@@ -125,10 +172,23 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
             
             if (IsSolid(ipos, bits)) {
                 HI.hit = true;
-                HI.normal = make_float3((mask & 1) ? -1.0f : 1.0f,
-                                       ((mask >> 1) & 1) ? -1.0f : 1.0f,
-                                       ((mask >> 2) & 1) ? -1.0f : 1.0f);
-                HI.pos = make_float3(ipos.x, ipos.y, ipos.z);
+                // Correctly set normal based on the stepped axis
+                if (mask == 0) {
+                    HI.normal = make_float3(-step.x, 0, 0);
+                    // Calculate exact intersection position
+                    HI.pos = currentPos + (tMax.x - deltaDist.x) * camDir;
+                    HI.uv = make_half2((HI.pos.y - (float)ipos.y), HI.pos.z - ipos.z);
+                    HI.uv.y = step.x == -1 ? (half)1.0f - HI.uv.y : HI.uv.y;
+                } else if (mask == 1) {
+                    HI.normal = make_float3(0, -step.y, 0);
+                    HI.pos = currentPos + (tMax.y - deltaDist.y) * camDir;
+                    HI.uv = make_half2(HI.pos.x - ipos.x, HI.pos.z - ipos.z);
+                } else if (mask == 2) {
+                    HI.normal = make_float3(0, 0, -step.z);
+                    HI.pos = currentPos + (tMax.z - deltaDist.z) * camDir;
+                    HI.uv = make_half2(HI.pos.x - ipos.x, HI.pos.y - ipos.y);
+                    HI.uv.x = step.z == 1 ? (half)1.0f - HI.uv.x : HI.uv.x;
+                }
                 return HI;
             }
             
@@ -154,43 +214,77 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
                     mask = 2; 
                 }
             }
-
         }
-    
-        // If we completed the DDA loop without hitting anything and didn't jump ahead,
-        // we're done
-        if(jumped) continue;
+        if(jumped) {
+            jumped = false;
+            continue;
+        }
         
         if (!HI.hit) break;
     }
-    
     return HI;
 }
 
-__device__ float3 computeColor(float x, 
-                              float y, 
-                              half distance,
-                              const uint32_t* __restrict__ bits, 
-                              const unsigned char* __restrict__ csdf) 
+__device__ float3 computeColor(float x,
+                               float y,
+                               half distance,
+                               const uint32_t* __restrict__ bits,
+                               const unsigned char* __restrict__ csdf,
+                               cudaTextureObject_t texObj) 
 {
+    // --- Primary ray direction ---
     float2 NDC = make_float2(x * 2.0f - 1.0f, y * 2.0f - 1.0f);
     float3 dir = normalize(c_camFo + NDC.x * c_camRi + NDC.y * c_camUp);
 
+    // --- Trace primary ray ---
     hitInfo hit = trace(c_camPos, dir, distance, bits, csdf);
 
     float3 color = make_float3(0.0f, 0.0f, 0.0f);
-    
+
     if (hit.hit) {
-        float diff = fmaxf(dot(hit.normal, c_sunDir), 0.0f);
-        color = make_float3(diff, diff, diff);
+        // --- Direct lighting (Lambertian diffuse) ---
+        float diffuse = fmaxf(dot(hit.normal, c_sunDir), 0.0f);
+        float3 baseColor = sampleTexture(hit.uv, texObj);
+        baseColor = baseColor * diffuse;
+
+        // --- Shadow ray ---
+        hitInfo shadow = trace(hit.pos + hit.normal * 1e-1f, c_sunDir, (half)0.0f, bits, csdf);
+        if (shadow.hit) {
+            baseColor = baseColor * 0.2f;  // Darker in shadow
+        }
+        color = color + baseColor;
+
+        // --- Reflection bounce ---
+
+        // float3 reflDir = normalize(reflect(dir, hit.normal));
+        // hitInfo reflHit = trace(hit.pos + hit.normal * 1e-3f, reflDir, distance, bits, csdf);
+        // if (reflHit.hit) {
+        //     // Simple reflection shading
+        //     float reflDiff = fmaxf(dot(reflHit.normal, c_sunDir), 0.0f);
+        //     float3 reflColor = make_float3(reflDiff, reflDiff, reflDiff);
+
+        //     // // Shadow check for reflection
+        //     hitInfo reflShadow = trace(reflHit.pos + reflHit.normal * 1e-3f, c_sunDir, (half)0.0f, bits, csdf);
+        //     if (reflShadow.hit) {
+        //         reflColor = reflColor * 0.1f;  // darker reflection if in shadow
+        //     }
+        //     // Add reflection (scaled to avoid over-brightness)
+        //     color = color * 0.9 + 0.1f * reflColor;
+        // }
+        // else 
+        //     color = color * 0.9 + 0.1f * sampleSky(reflDir);
+        
     }
-    else
-    {
-        color = -dir;
-    }
-    color.x = hit.its > 50 ? 1.0f : 0.0f;
+    else color = sampleSky(dir);
+    
+    // --- Example: force white debug marker if too many iterations ---
+    // if (hit.its > 50) {
+    //     color.x = 1.0f;
+    // }
+
     return color;
 }
+
 __device__ __forceinline__ half approximateDistance(int x, int y, 
                                                   int distWidth, int distHeight, 
                                                   const half* __restrict__ distBuffer)
@@ -214,7 +308,8 @@ __global__ void renderKernel(uchar4* framebuffer,
                              int height, 
                              const uint32_t* __restrict__ bits,
                              const unsigned char* __restrict__ csdf,
-                             const half* __restrict__ distBuffer) 
+                             const half* __restrict__ distBuffer,
+                             cudaTextureObject_t texObj) 
 {
     int ix = blockIdx.x * blockDim.x + threadIdx.x;
     int iy = blockIdx.y * blockDim.y + threadIdx.y;
@@ -223,15 +318,21 @@ __global__ void renderKernel(uchar4* framebuffer,
     float x = (float)ix / (float)width;
     float y = (float)iy / (float)height;
 
-    half dist = approximateDistance(ix, iy, width / 2, height/2, distBuffer);
+    half dist = approximateDistance(ix, iy, width / 2, height/2, distBuffer) - (half)2.0f;
 
-    float3 col = computeColor(x, y, dist, bits, csdf);
+    float3 col = computeColor(x, y, dist, bits, csdf, texObj);
+
+    // col.x = powf(col.x, 1.0f/2.2f);
+    // col.y = powf(col.y, 1.0f/2.2f);
+    // col.z = powf(col.z, 1.0f/2.2f);
+
+    col = clamp(col, make_float3(0.0f, 0.0f, 0.0f), make_float3(1.0f, 1.0f, 1.0f));
 
     unsigned char r = (unsigned char)(col.x * 255.0f);
     unsigned char g = (unsigned char)(col.y * 255.0f);
     unsigned char b = (unsigned char)(col.z * 255.0f);
 
-    framebuffer[ix + iy * width] = make_uchar4(b, g, r, 255);
+    framebuffer[ix + iy * width] = make_uchar4(r, g, b, 255);
 }
 
 __global__ void distApproximationKernel(half* distBuffer,
@@ -295,7 +396,8 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                               framebuffer.getHeight(),
                               cArray.getPtr(), 
                               csdf.getPtr(),
-                              (half*)distBuffer.getPtr()
+                              (half*)distBuffer.getPtr(),
+                              texturepack.texObject()
     );
 }
 

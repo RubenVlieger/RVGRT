@@ -52,7 +52,7 @@ __global__ void computeDistX(const uint32_t* fineData, unsigned char* distX) {
 
     // Scan left up to MAX_DIST
     for (uint64_t i = 1; i <= MAX_DIST; ++i) {
-        if (cx - i >= 0 && isCoarseBlockSolid(cx - i, cy, cz, fineData)) {
+    	if (i <= cx && isCoarseBlockSolid(cx - i, cy, cz, fineData)) {
             min_d = i;
             break;
         }
