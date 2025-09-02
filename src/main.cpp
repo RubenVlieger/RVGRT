@@ -1,283 +1,256 @@
 #define CONSOLE
+#define FULLSCREEN
+
 #include <windows.h>
-#include "State.hpp"	
+#include "State.hpp"    
 #include "StateRender.cuh"
 #include <windowsx.h>
 #include <chrono>
 #include "Timer.hpp"
 #include <thread>
 #include <atomic>
+#include <vector>
+#include "d3d11.h"
+#include <hidsdi.h>
+
+#pragma comment(lib, "d3d11.lib")
+#pragma comment(lib, "dxgi.lib") 
 
 std::atomic<bool> running = true;
-void renderLoop(HWND hwnd) {
-    using clock = std::chrono::high_resolution_clock;
-    auto nextFrame = clock::now();
-
-    while (running) {
-        nextFrame += std::chrono::milliseconds(16); // target ~60 fps
-
-        InvalidateRect(hwnd, NULL, FALSE);
-        std::this_thread::sleep_until(nextFrame);
-    }
-}
 
 using std::cout;
 using std::cerr;
 using std::endl;
 const char g_szClassName[] = "myWindowClass";
-HBITMAP hBitmap = NULL;
-HGDIOBJ hOldBitmap = NULL;
-
-char* bmp = NULL;
 
 RECT windowRect;
-bool fixMousePos = true;
-// Step 4: the Window Procedure
 
-auto timeOfPreviousFrame = std::chrono::high_resolution_clock::now();
-
-
-extern "C" 
-{
-  __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
+extern "C" {
+    __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 }
 
+void renderLoop() {
+    using clock = std::chrono::steady_clock;
 
-void WndCreate(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-#ifdef CONSOLE   
+    auto lastTime = clock::now();
+
+    while (running) {
+        Timer t1("FRAME TIME");
+
+        // Update game state
+        State::state.character.Update();
+        State::state.deltaTime = 0.016f;
+
+        // Render CUDA framebuffer
+        State::state.render->drawCUDA(
+            State::state.character.camera.pos,
+            State::state.character.camera.forward,
+            State::state.character.camera.up,
+            State::state.character.camera.right
+        );
+
+        // Copy CUDA D3D texture to backbuffer
+        State::state.render->framebuffer.CopyDeviceToTexture();
+        ID3D11DeviceContext* ctx = State::state.d3dContext;
+        ctx->CopyResource(State::state.backBufferTexture, State::state.render->framebuffer.getD3DTexture());
+
+        // Present
+        State::state.swapChain->Present(1, 0);
+
+        // Frame timing
+        double frameTimeMs = std::chrono::duration<double, std::milli>(clock::now() - lastTime).count();
+        State::state.frameTimeAverager.addFrameTime(frameTimeMs);
+        lastTime = clock::now();
+
+        // Update window title
+        char title[200];
+        snprintf(title, sizeof(title),
+                 "Ruben leip programma: %.1f ms - average: %.1f ms",
+                 frameTimeMs, State::state.frameTimeAverager.getAverage());
+        SetWindowTextA(State::state.hwnd, title);
+    }
+}
+
+void WndCreate(HWND hwnd) {
+#ifdef CONSOLE
     AllocConsole();
     FILE* fp;
     freopen_s(&fp, "CONOUT$", "w", stdout);
 #endif
 
-    HDC hdc = GetDC(hwnd);
+    // Step 1: Create D3D11 device and swap chain
+    DXGI_SWAP_CHAIN_DESC scd = {};
+    scd.BufferCount = 1;
+    scd.BufferDesc.Width  = State::dispWIDTH;
+    scd.BufferDesc.Height = State::dispHEIGHT;
+    scd.BufferDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    scd.BufferDesc.RefreshRate.Numerator = 0; // auto
+    scd.BufferDesc.RefreshRate.Denominator = 1;
+    scd.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    scd.OutputWindow = hwnd;
+    scd.SampleDesc.Count = 1;
+#ifdef FULLSCREEN
+    scd.Windowed = FALSE;
+    scd.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+#else
+    scd.Windowed = TRUE;
+    scd.SwapEffect = DXGI_SWAP_EFFECT_SEQUENTIAL;
+#endif
 
-    BITMAPINFO bmi;
-    memset(&bmi, 0, sizeof(BITMAPINFO));
-    bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bmi.bmiHeader.biWidth = State::dispWIDTH;
-    bmi.bmiHeader.biHeight = -State::dispHEIGHT; // top-down
-    bmi.bmiHeader.biPlanes = 1;
-    bmi.bmiHeader.biBitCount = 32;
-    bmi.bmiHeader.biCompression = BI_RGB;
-    bmi.bmiHeader.biSizeImage = (unsigned int)(State::dispWIDTH * State::dispHEIGHT * 4);
-    hBitmap = CreateDIBSection(hdc, &bmi, DIB_RGB_COLORS, (void**) &bmp, NULL, NULL);
-    ReleaseDC(NULL, hdc);
+    D3D_FEATURE_LEVEL featureLevel;
+    IDXGISwapChain* swapChain = nullptr;
+    ID3D11Device* device = nullptr;
+    ID3D11DeviceContext* context = nullptr;
 
-    for(int i = 0; i < State::dispWIDTH*State::dispHEIGHT; i++) ((unsigned int*)bmp)[i] = (0xFF00FFFFu);
+    HRESULT hr = D3D11CreateDeviceAndSwapChain(
+        nullptr,
+        D3D_DRIVER_TYPE_HARDWARE,
+        nullptr,
+        0,
+        nullptr,
+        0,
+        D3D11_SDK_VERSION,
+        &scd,
+        &swapChain,
+        &device,
+        &featureLevel,
+        &context
+    );
 
-    hOldBitmap = SelectObject(hdc, hBitmap);
-    State::state.setBitMap(bmp);
-
-    if (hBitmap == NULL) {
-        DWORD lastError = GetLastError();
-        cerr << "NO BITMAP WAS CREATED " << endl;
+    if (FAILED(hr)) {
+        fprintf(stderr, "Failed to create D3D11 device and swap chain!\n");
+        return;
     }
+
+    // Backbuffer and RTV
+    ID3D11Texture2D* backBuffer = nullptr;
+    swapChain->GetBuffer(0, IID_PPV_ARGS(&backBuffer));
+    ID3D11RenderTargetView* rtv = nullptr;
+    device->CreateRenderTargetView(backBuffer, nullptr, &rtv);
+    backBuffer->Release();
+
+    // Store in State
+    State::state.d3dDevice = device;
+    State::state.d3dContext = context;
+    State::state.swapChain = swapChain;
+    State::state.backBufferTexture = backBuffer;
+
+    // CUDA-D3D interop framebuffer
+    State::state.render->framebuffer.Allocate(State::dispWIDTH, State::dispHEIGHT);
+    State::state.render->framebuffer.InitializeInterop(device, context);
+
+    // State init
     State::state.Create();
+
+#ifdef FULLSCREEN
+    ShowCursor(FALSE); // hide cursor
+#endif
 }
 
-
-
-void WndDraw(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{    
-    PAINTSTRUCT     ps;
-    HDC             hdc;
-    BITMAP          bitmap;
-    HDC             hdcMem;
-
-
-    State::state.character.Update();
-    State::state.deltaTime = 0.016f;
-
-    //Timer t("drawCUDA");
-    State::state.render->drawCUDA(State::state.character.camera.pos,
-                                  State::state.character.camera.forward,
-                                  State::state.character.camera.up,
-                                  State::state.character.camera.right);
-    
-    State::state.render->framebuffer.readback((uint32_t*)State::state.bmp);
-    //t.s();
-
-    State::state.deltaXMouse = 0;
-    State::state.deltaYMouse = 0;
-
-    hdc = BeginPaint(hWnd, &ps);
-
-    hdcMem = CreateCompatibleDC(hdc);
-    hOldBitmap = SelectObject(hdcMem, hBitmap);
-
-    GetObject(hBitmap, sizeof(bitmap), &bitmap);
-    BitBlt(hdc, 0, 0, bitmap.bmWidth, bitmap.bmHeight, hdcMem, 0, 0, SRCCOPY);
-
-    SelectObject(hdcMem, hOldBitmap);
-    DeleteDC(hdcMem);
-
-    EndPaint(hWnd, &ps);
-
-    double frameTime = (std::chrono::duration<double, std::milli>(std::chrono::high_resolution_clock::now() - timeOfPreviousFrame).count());
-    State::state.frameTimeAverager.addFrameTime(frameTime);
-    
-    char title[200]; 
-    snprintf(title, sizeof(title), "Ruben leip programma: %.1f ms  -  average: %.1f ms", frameTime, State::state.frameTimeAverager.getAverage()); // NEW
-    SetWindowTextA(hWnd, title); // NEW
-    timeOfPreviousFrame = std::chrono::high_resolution_clock::now();
-}
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
-{
-    //cout << fixMousePos << endl;
-    switch(msg)
-    {
-        case WM_LBUTTONDOWN:
-        break;
-        case WM_RBUTTONDOWN:
-        break;  
-        
-        case WM_KEYDOWN:
-        {
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+    switch(msg) {
+        case WM_KEYDOWN: {
             unsigned long KC = (unsigned long)wParam;
-
             State::state.keysPressed.set(KC, 1);
-
-            if(KC == VK_ESCAPE) {
-                DestroyWindow(hwnd);
-                //fixMousePos = !fixMousePos;
-            }
+            if(KC == VK_ESCAPE) DestroyWindow(hwnd);
+            break;
         }
-        break;
-        case WM_KEYUP:
-        {
+        case WM_KEYUP: {
             unsigned char KC = (unsigned char)wParam;
             State::state.keysPressed.set(KC, 0);
+            break;
         }
-        break;
-
         case WM_CREATE:
-            WndCreate(hwnd, msg, wParam, lParam);
-        break;
-        
-        case WM_MOUSEMOVE:
-        break;
-
+            WndCreate(hwnd);
+            break;
         case WM_SIZE:
             GetWindowRect(hwnd, &windowRect);
-        break;
-
-        case WM_INPUT: 
-        {
-            constexpr unsigned int rawdatabuffersize = sizeof(RAWINPUT);
-            static RAWINPUT raw[sizeof(RAWINPUT)];
-            GetRawInputData((HRAWINPUT)lParam, RID_INPUT, raw, (unsigned int*)&rawdatabuffersize, sizeof(RAWINPUTHEADER));
-
-            if (raw->header.dwType == RIM_TYPEMOUSE)
-            {
+            break;
+        case WM_INPUT: {
+            // Read RAWINPUT deltas only
+            UINT size;
+            GetRawInputData((HRAWINPUT)lParam, RID_INPUT, nullptr, &size, sizeof(RAWINPUTHEADER));
+            static std::vector<BYTE> rawBuffer(size);
+            GetRawInputData((HRAWINPUT)lParam, RID_INPUT, rawBuffer.data(), &size, sizeof(RAWINPUTHEADER));
+            RAWINPUT* raw = (RAWINPUT*)rawBuffer.data();
+            if (raw->header.dwType == RIM_TYPEMOUSE) {
                 long mouseX = raw->data.mouse.lLastX;
                 long mouseY = raw->data.mouse.lLastY;
-
-                State::state.deltaXMouse += mouseX;
-                State::state.deltaYMouse += mouseY;
+                State::state.deltaXMouse.fetch_add(mouseX, std::memory_order_relaxed);
+                State::state.deltaYMouse.fetch_add(mouseY, std::memory_order_relaxed);
             }
-            if(fixMousePos) {
-                while(ShowCursor(FALSE) >= 0);
-                SetCursorPos(State::dispWIDTH / 2 + windowRect.left, State::dispHEIGHT / 2 + windowRect.top);
-            }
-            else
-                ShowCursor(TRUE);
-                //while(ShowCursor(TRUE) >= 0);
+            break;
         }
-        break;
- 
-        case WM_PAINT:
-           WndDraw(hwnd, msg, wParam, lParam);
-        break;
-
         case WM_CLOSE:
             DestroyWindow(hwnd);
-        break;
+            break;
         case WM_DESTROY:
             PostQuitMessage(0);
-        break;
+            break;
         default:
             return DefWindowProc(hwnd, msg, wParam, lParam);
     }
-    
     return 0;
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance,
-    LPSTR lpCmdLine, int nCmdShow)
-{
-    WNDCLASSEX wc;
-    HWND hwnd;
-    MSG Msg;
-
-    //Step 1: Registering the Window Class
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+    WNDCLASSEX wc = {};
     wc.cbSize        = sizeof(WNDCLASSEX);
     wc.style         = CS_HREDRAW | CS_VREDRAW;
     wc.lpfnWndProc   = WndProc;
-    wc.cbClsExtra    = 0;
-    wc.cbWndExtra    = 0;
     wc.hInstance     = hInstance;
     wc.hIcon         = LoadIcon(NULL, IDI_APPLICATION);
     wc.hCursor       = LoadCursor(NULL, IDC_ARROW);
     wc.hbrBackground = (HBRUSH)(COLOR_WINDOW+1);
-    wc.lpszMenuName  = NULL;
     wc.lpszClassName = g_szClassName;
     wc.hIconSm       = LoadIcon(NULL, IDI_APPLICATION);
 
-
-    if(!RegisterClassEx(&wc))
-    {
-        MessageBox(NULL, "Window Registration Failed!", "Error!",
-            MB_ICONEXCLAMATION | MB_OK);
+    if (!RegisterClassEx(&wc)) {
+        MessageBox(NULL, "Window Registration Failed!", "Error!", MB_ICONEXCLAMATION | MB_OK);
         return 0;
     }
 
-    // Step 2: Creating the Window
-    hwnd = CreateWindowEx(
-        WS_EX_CLIENTEDGE,
-        g_szClassName,
-        "Ruben leip programma",
+#ifdef FULLSCREEN
+    int screenWidth  = GetSystemMetrics(SM_CXSCREEN);
+    int screenHeight = GetSystemMetrics(SM_CYSCREEN);
+
+    State::state.hwnd = CreateWindowEx(
+        0, g_szClassName, "Ruben leip programma",
+        WS_POPUP, 0, 0, screenWidth, screenHeight,
+        NULL, NULL, hInstance, NULL
+    );
+#else
+    State::state.hwnd = CreateWindowEx(
+        WS_EX_CLIENTEDGE, g_szClassName, "Ruben leip programma",
         WS_OVERLAPPEDWINDOW,
         CW_USEDEFAULT, CW_USEDEFAULT, State::dispWIDTH, State::dispHEIGHT,
-        NULL, NULL, hInstance, NULL);
+        NULL, NULL, hInstance, NULL
+    );
+#endif
 
-    if(hwnd == NULL)
-    {
-        MessageBox(NULL, "Window Creation Failed!", "Error!",
-            MB_ICONEXCLAMATION | MB_OK);
+    if (!State::state.hwnd) {
+        MessageBox(NULL, "Window Creation Failed!", "Error!", MB_ICONEXCLAMATION | MB_OK);
         return 0;
     }
 
-	#ifndef HID_USAGE_PAGE_GENERIC
-	#define HID_USAGE_PAGE_GENERIC ((unsigned short) 0x01)
-	#endif
-	#ifndef HID_USAGE_GENERIC_MOUSE
-	#define HID_USAGE_GENERIC_MOUSE ((unsigned short) 0x02)
-	#endif
+    // Register RAWINPUT
+    RAWINPUTDEVICE rid[1] = {};
+    rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC;
+    rid[0].usUsage     = HID_USAGE_GENERIC_MOUSE;
+    rid[0].dwFlags     = RIDEV_INPUTSINK | RIDEV_NOLEGACY;
+    rid[0].hwndTarget  = State::state.hwnd;
+    RegisterRawInputDevices(rid, 1, sizeof(rid[0]));
 
-    RAWINPUTDEVICE rid[1];
-	rid[0].usUsagePage = HID_USAGE_PAGE_GENERIC;
-	rid[0].usUsage = HID_USAGE_GENERIC_MOUSE;
-	rid[0].dwFlags = RIDEV_INPUTSINK;
-	rid[0].hwndTarget = hwnd;
-	RegisterRawInputDevices(rid, 1, sizeof(rid[0]));
+    ShowWindow(State::state.hwnd, nCmdShow);
+    UpdateWindow(State::state.hwnd);
+    GetWindowRect(State::state.hwnd, &windowRect);
 
-    ShowWindow(hwnd, nCmdShow);
-    UpdateWindow(hwnd);
+    std::thread renderThread(renderLoop);
 
-    GetWindowRect(hwnd, &windowRect);
-    // Step 3: The Message Loop
-
-    std::thread renderThread(renderLoop, hwnd);
-    while(GetMessage(&Msg, NULL, 0, 0) > 0)
-    {
-
+    MSG Msg;
+    while (GetMessage(&Msg, NULL, 0, 0) > 0) {
         TranslateMessage(&Msg);
         DispatchMessage(&Msg);
-        //InvalidateRect(hwnd, NULL, FALSE);        
-    
-        //SleepEx(0.5, TRUE);
     }
 
     running = false;

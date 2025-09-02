@@ -257,13 +257,14 @@ __global__ void distApproximationKernel(half* distBuffer,
 }
 
 void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
-                        const glm::vec3& up, const glm::vec3& ri) 
+                           const glm::vec3& up, const glm::vec3& ri) 
 {
     // Upload camera + sun constants
     cudaMemcpyToSymbol(c_camPos, &pos, sizeof(glm::vec3));
     cudaMemcpyToSymbol(c_camFo, &fo, sizeof(glm::vec3));
     cudaMemcpyToSymbol(c_camUp, &up, sizeof(glm::vec3));
     cudaMemcpyToSymbol(c_camRi, &ri, sizeof(glm::vec3));
+
     glm::vec3 sunDir = glm::normalize(glm::vec3(10.f, 5.f, -4.f));
     cudaMemcpyToSymbol(c_sunDir, &sunDir, sizeof(glm::vec3));
 

@@ -60,6 +60,8 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
 endif()
 
+target_link_libraries(${APP_NAME} PRIVATE d3d11 dxgi)
+
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "Building in Release mode")

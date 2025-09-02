@@ -5,17 +5,20 @@
 #include "Framebuffer.cuh"
 #include <bitset>
 #include "Timer.hpp"
+#include "d3d11.h"
+#include <atomic>
 
 class StateRender;
 
 class State {
 public:
+    HWND hwnd;
     StateRender* render;
     // Input & mouse
     glm::vec2 mouseDelta;
     float deltaTime = 16;
-    float deltaXMouse;
-    float deltaYMouse;
+    std::atomic<long> deltaXMouse{0};
+    std::atomic<long> deltaYMouse{0};
     std::bitset<256> keysPressed;
     FrameTimeAverager frameTimeAverager;
 
@@ -28,8 +31,8 @@ public:
 
     // 3D world
     Character character = Character();
-    static constexpr int dispHEIGHT = 480*2;
-    static constexpr int dispWIDTH  = 640*2;
+    static constexpr int dispHEIGHT = 1200*2;
+    static constexpr int dispWIDTH = 1920*2;
 
     void Create();
 
@@ -38,5 +41,12 @@ public:
     // Constructor
     State();
 
+    IDXGISwapChain* swapChain;
+    ID3D11Device* d3dDevice;
+    ID3D11DeviceContext* d3dContext;
+    ID3D11Texture2D* backBufferTexture;
+
+
 private:
+
 };

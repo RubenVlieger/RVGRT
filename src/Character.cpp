@@ -41,8 +41,9 @@ void Character::Update()
     if (!lockMouse) {
         //vec3 deltaRotation = vec3(Game::window.mouseState.delta.first, 0.0f, Game::window.mouseState.delta.second) * deltaTime * sensitivity;
         //print(deltaRotation);
-        yaw += State::state.deltaXMouse * sensitivity * State::state.deltaTime * FOV;
-        pitch += State::state.deltaYMouse * sensitivity * State::state.deltaTime * FOV;
+
+        yaw += State::state.deltaXMouse.exchange(0) * sensitivity * State::state.deltaTime * FOV;
+        pitch += State::state.deltaYMouse.exchange(0) * sensitivity * State::state.deltaTime * FOV;
 
         yaw = fmod(yaw, std::numbers::pi * 2.0f);
         pitch = clamp(pitch, -4.5, -1.65);  

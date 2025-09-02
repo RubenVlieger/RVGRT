@@ -25,9 +25,6 @@ void State::Create()
 
     Timer t1("allocating");
     
-    render->framebuffer = Framebuffer();
-    render->framebuffer.Allocate(dispWIDTH, dispHEIGHT);
-
     render->distBuffer = CArray();
     render->distBuffer.Allocate((dispWIDTH/2) * (dispHEIGHT/2) * 2);
 
