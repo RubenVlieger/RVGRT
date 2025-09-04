@@ -3,12 +3,12 @@ This is yet another attempt at creating a minecraft-like voxel world engine.
 
 
 
-#Requirements:
+Requirements:
 Windows currently only (due to usage of Win32 library.) 
 D3D11, for the CUDA/W32 interop for presenting the image to the screen.
 CUDA-capable device (such as a Nvidia GPU)
 
-##To build: 
+To build: 
 * CMake 3.18 or later
 * CUDA Toolkit 12.6 or later is tested
 * Visual Studio 2022 (MSVC compiler) 
@@ -28,4 +28,4 @@ build/release/Application.exe
 
 
 
-For further questions, please reach my on my email: Ruben.Vlieger@ru.nl
+For further questions, please reach my on my email: ruben.vlieger@ru.nl
