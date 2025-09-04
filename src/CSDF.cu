@@ -4,12 +4,9 @@
 
 
 
-//================================================================================
-// KERNELS
-//================================================================================
-
 // Helper function to check if any bit is set within a coarse block.
-__device__ bool isCoarseBlockSolid(uint64_t cx, uint64_t cy, uint64_t cz, const uint32_t* fineData) {
+__device__ bool isCoarseBlockSolid(uint64_t cx, uint64_t cy, uint64_t cz, const uint32_t* fineData) 
+{
     for (uint64_t z = 0; z < COARSENESS; ++z) {
         for (uint64_t y = 0; y < COARSENESS; ++y) {
             for (uint64_t x = 0; x < COARSENESS; ++x) {
@@ -34,7 +31,8 @@ __device__ bool isCoarseBlockSolid(uint64_t cx, uint64_t cy, uint64_t cz, const 
 // Kernel 1: Initializes the grid and computes distance along the X-axis up to MAX_DIST.
 // Note: This is a local scan. It's simpler but less efficient than a true separable pass
 // for large radii, but effective for smaller radii like 8.
-__global__ void computeDistX(const uint32_t* fineData, unsigned char* distX) {
+__global__ void computeDistX(const uint32_t* fineData, unsigned char* distX) 
+{
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= C_BYTESIZE) return;
 
@@ -43,7 +41,8 @@ __global__ void computeDistX(const uint32_t* fineData, unsigned char* distX) {
     uint64_t cy = temp / C_SIZEX;
     uint64_t cx = temp % C_SIZEX;
 
-    if (isCoarseBlockSolid(cx, cy, cz, fineData)) {
+    if (isCoarseBlockSolid(cx, cy, cz, fineData)) 
+    {
         distX[idx] = 0;
         return;
     }
@@ -51,16 +50,20 @@ __global__ void computeDistX(const uint32_t* fineData, unsigned char* distX) {
     unsigned char min_d = MAX_DIST;
 
     // Scan left up to MAX_DIST
-    for (uint64_t i = 1; i <= MAX_DIST; ++i) {
-    	if (i <= cx && isCoarseBlockSolid(cx - i, cy, cz, fineData)) {
+    for (uint64_t i = 1; i <= MAX_DIST; ++i) 
+    {
+    	if (i <= cx && isCoarseBlockSolid(cx - i, cy, cz, fineData)) 
+        {
             min_d = i;
             break;
         }
     }
 
     // Scan right, but only up to the current minimum distance found
-    for (uint64_t i = 1; i < min_d; ++i) {
-        if (cx + i < C_SIZEX && isCoarseBlockSolid(cx + i, cy, cz, fineData)) {
+    for (uint64_t i = 1; i < min_d; ++i) 
+    {
+        if (cx + i < C_SIZEX && isCoarseBlockSolid(cx + i, cy, cz, fineData)) 
+        {
             min_d = i;
             break;
         }
@@ -70,7 +73,8 @@ __global__ void computeDistX(const uint32_t* fineData, unsigned char* distX) {
 
 
 // Kernel 2: Takes X distances and computes the 2D distance in the XY plane.
-__global__ void computeDistY(const unsigned char* distX, unsigned char* distY) {
+__global__ void computeDistY(const unsigned char* distX, unsigned char* distY) 
+{
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= C_BYTESIZE) return;
 
@@ -108,7 +112,8 @@ __global__ void computeDistY(const unsigned char* distX, unsigned char* distY) {
 }
 
 // Kernel 3: Takes XY distances and computes the final 3D distance.
-__global__ void computeDistZ(const unsigned char* distXY, unsigned char* finalCSDF) {
+__global__ void computeDistZ(const unsigned char* distXY, unsigned char* finalCSDF) 
+{
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= C_BYTESIZE) return;
 
@@ -144,10 +149,6 @@ __global__ void computeDistZ(const unsigned char* distXY, unsigned char* finalCS
 }
 
 
-//================================================================================
-// CLASS IMPLEMENTATION
-//================================================================================
-
 CSDF::CSDF() {}
 CSDF::~CSDF() {}
 
@@ -155,36 +156,35 @@ void CSDF::Allocate() {
     m_csdfArray.Allocate(C_BYTESIZE);
 }
 
-unsigned char* CSDF::getPtr() {
+unsigned char* CSDF::getPtr() 
+{
     return reinterpret_cast<unsigned char*>(m_csdfArray.getPtr());
 }
 
-void CSDF::Generate(CArray& fineArray) {
-    if (m_csdfArray.getSize() != C_BYTESIZE) {
+void CSDF::Generate(CArray& fineArray) 
+{
+    if (m_csdfArray.getSize() != C_BYTESIZE) 
+    {
         std::cerr << "CSDF not allocated or wrong size. Call Allocate() first." << std::endl;
         return;
     }
-
     // Create a temporary CArray for intermediate calculations.
     CArray tempArray;
     tempArray.Allocate(C_BYTESIZE);
 
     // Common launch configuration for the coarse grid
-    const uint64_t threads = 256;
-    uint64_t blocks = (C_BYTESIZE + threads - 1) / threads;
+    const unsigned long threads = 256;
+    unsigned int blocks = (unsigned int)((C_BYTESIZE + (uint64_t)threads - 1ull) / (uint64_t)threads);
     
     // --- Pass 1: X-axis distance ---
-    // Input: fineArray, Output: tempArray
     computeDistX<<<blocks, threads>>>(fineArray.getPtr(), reinterpret_cast<unsigned char*>(tempArray.getPtr()));
     CUDA_CHECK(cudaGetLastError());
     
     // --- Pass 2: Y-axis distance (creates 2D distance) ---
-    // Input: tempArray, Output: m_csdfArray
     computeDistY<<<blocks, threads>>>(reinterpret_cast<unsigned char*>(tempArray.getPtr()), getPtr());
     CUDA_CHECK(cudaGetLastError());
     
     // --- Pass 3: Z-axis distance (creates final 3D distance) ---
-    // Input: m_csdfArray, Output: tempArray (reusing buffer)
     computeDistZ<<<blocks, threads>>>(getPtr(), reinterpret_cast<unsigned char*>(tempArray.getPtr()));
     CUDA_CHECK(cudaGetLastError());
 

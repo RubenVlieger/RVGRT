@@ -82,7 +82,11 @@
         "fstream": "cpp",
         "ranges": "cpp",
         "span": "cpp",
-        "stack": "cpp"
+        "stack": "cpp",
+        "map": "cpp",
+        "queue": "cpp",
+        "set": "cpp",
+        "xtree": "cpp"
     },
 
     "cmake.generator": "Visual Studio 17 2022",

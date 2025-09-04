@@ -21,6 +21,9 @@
     <CudaCompile Include="..\src\CSDF.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
+    <CudaCompile Include="..\src\CuTex.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
     <CudaCompile Include="..\src\Framebuffer.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>

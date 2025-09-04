@@ -72,7 +72,8 @@ void renderLoop()
     }
 }
 
-void WndCreate(HWND hwnd) {
+void WndCreate(HWND hwnd) 
+{
 #ifdef CONSOLE
     AllocConsole();
     FILE* fp;
@@ -148,7 +149,8 @@ void WndCreate(HWND hwnd) {
 //#endif
 }
 
-LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
+LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) 
+{
     switch(msg) {
         case WM_KEYDOWN: {
             unsigned long KC = (unsigned long)wParam;
@@ -194,7 +196,8 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam) {
     return 0;
 }
 
-int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) {
+int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) 
+{
     WNDCLASSEX wc = {};
     wc.cbSize        = sizeof(WNDCLASSEX);
     wc.style         = CS_HREDRAW | CS_VREDRAW;

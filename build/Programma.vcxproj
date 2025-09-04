@@ -403,6 +403,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <CudaCompile Include="..\src\CSDF.cu" />
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\Camera.cpp" />
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\Character.cpp" />
+    <CudaCompile Include="..\src\CuTex.cu" />
     <CudaCompile Include="..\src\Framebuffer.cu" />
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\State.cpp" />
     <CudaCompile Include="..\src\StateRender.cu" />

@@ -67,6 +67,7 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\float.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\locale.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\malloc.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\math.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\memory.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\share.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\stddef.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\stdio.h
@@ -187,6 +188,7 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\winsvc.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\winuser.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\winver.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\wow64apiset.h
+C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\algorithm
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\atomic
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cassert
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cctype
@@ -281,6 +283,21 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_fp16.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_fp16.hpp
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_runtime.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_runtime_api.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_discrete.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_discrete2.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_globals.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_kernel.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_lognormal.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_mrg32k3a.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_mtgp32.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_mtgp32_kernel.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_normal.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_normal_static.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_philox4x32_x.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_poisson.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_precalc.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_uniform.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\device_atomic_functions.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\device_launch_parameters.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\device_types.h
@@ -310,6 +327,7 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\vector_types.h
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\CArray.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\CSDF.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\cumath.cuh
+C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\CuTex.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\Framebuffer.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\common.hpp
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\detail\compute_common.hpp
@@ -444,4 +462,6 @@ C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\vec3.hpp
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\vec4.hpp
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\vector_relational.hpp
+C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\RayTracing.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\StateRender.cuh
+C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\Texturepack.cuh

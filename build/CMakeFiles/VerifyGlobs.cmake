@@ -29,6 +29,7 @@ file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/RC1ki/OneDrive - Radboud Univ
 set(OLD_GLOB
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/CArray.cu"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/CSDF.cu"
+  "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/CuTex.cu"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/Framebuffer.cu"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/StateRender.cu"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/Texturepack.cu"

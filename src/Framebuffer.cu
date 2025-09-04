@@ -13,11 +13,13 @@ Framebuffer::Framebuffer()
     
 }   
 
-Framebuffer::~Framebuffer() {
+Framebuffer::~Framebuffer() 
+{
 
 }
 
-void Framebuffer::InitializeInterop(ID3D11Device* device, ID3D11DeviceContext* context) {
+void Framebuffer::InitializeInterop(ID3D11Device* device, ID3D11DeviceContext* context) 
+{
     d_context = context;
     // Create the D3D11 texture
     D3D11_TEXTURE2D_DESC desc = {};
@@ -38,7 +40,8 @@ void Framebuffer::InitializeInterop(ID3D11Device* device, ID3D11DeviceContext* c
                                       cudaGraphicsRegisterFlagsNone);
 }
 
-void Framebuffer::CleanupInterop() {
+void Framebuffer::CleanupInterop() 
+{
     if (cudaResource) {
         cudaGraphicsUnregisterResource(cudaResource);
         cudaResource = nullptr;
@@ -49,7 +52,8 @@ void Framebuffer::CleanupInterop() {
     }
 }
 
-void Framebuffer::CopyDeviceToTexture() {
+void Framebuffer::CopyDeviceToTexture() 
+{
     if (!cudaResource) return;
     // Map the D3D resource for CUDA access
     cudaGraphicsMapResources(1, &cudaResource, 0);
@@ -69,33 +73,37 @@ void Framebuffer::CopyDeviceToTexture() {
 
 
 
-void Framebuffer::Allocate(int w, int h) {
-    if (d_pixels) {
+void Framebuffer::Allocate(int _w, int _h) {
+    if (d_pixels) 
+    {
         Free(); // free old buffer
     }
-
-    width = w;
-    height = h;
+    width = _w;
+    height = _h;
 
     size_t size = width * height * sizeof(uint32_t);
     cudaError_t err = cudaMalloc(&d_pixels, size);
-    if (err != cudaSuccess) {
+    if (err != cudaSuccess) 
+    {
         std::cerr << "CUDA malloc failed: " << cudaGetErrorString(err) << std::endl;
         d_pixels = nullptr;
-    } else {
+    } else 
+    {
         // Optionally clear framebuffer
         cudaMemset(d_pixels, 0, size);
     }
 }
 
-void Framebuffer::Free() {
+void Framebuffer::Free() 
+{
     if (d_pixels) {
         cudaFree(d_pixels);
         d_pixels = nullptr;
     }
 }
 
-std::vector<uint32_t> Framebuffer::readback() const {
+std::vector<uint32_t> Framebuffer::readback() const 
+{
     std::vector<uint32_t> cpuBuffer(width * height);
     if (d_pixels) {
         cudaMemcpy(cpuBuffer.data(), d_pixels, width * height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
@@ -103,7 +111,8 @@ std::vector<uint32_t> Framebuffer::readback() const {
     return cpuBuffer;
 }
 
-void Framebuffer::readback(uint32_t* buffer) const {
+void Framebuffer::readback(uint32_t* buffer) const 
+{
     if (d_pixels) {
         cudaMemcpy(buffer, d_pixels, width * height * sizeof(uint32_t), cudaMemcpyDeviceToHost);
     }

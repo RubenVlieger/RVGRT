@@ -12,6 +12,7 @@
         throw std::runtime_error("CUDA error"); \
     }
 
+
 const unsigned int SHIX = 10;
 const unsigned int SHIY = 9;
 const unsigned int SHIZ = 10;
@@ -25,10 +26,6 @@ const unsigned int SIZEY = 1<<SHIY;
 const unsigned int SIZEZ = 1<<SHIZ;
 
 const uint64_t BYTESIZE = SIZEX*SIZEY*SIZEZ/8;
-
-// -------------------
-// Constructors
-// -------------------
 
 __device__ __forceinline__ uint64_t toIndex(int3 p) 
 {
@@ -209,7 +206,6 @@ __host__ __device__ inline uint3 operator*(const uint3 &a, unsigned int s) { ret
 __host__ __device__ inline uint3 operator*(unsigned int s, const uint3 &a) { return a*s; }
 __host__ __device__ inline uint3 operator/(const uint3 &a, const uint3 &b) { return make_uint3(a.x/b.x, a.y/b.y, a.z/b.z); }
 __host__ __device__ inline uint3 operator/(const uint3 &a, unsigned int s) { return make_uint3(a.x/s, a.y/s, a.z/s); }
-__host__ __device__ inline uint3 operator-(const uint3 &a) { return make_uint3(-a.x, -a.y, -a.z); }
 
 // -------------------
 // Arithmetic operators
@@ -263,7 +259,7 @@ __host__ __device__ inline float3 floor(const float3 &v) { return make_float3(fl
 __host__ __device__ inline float3 ceil(const float3 &v) { return make_float3(ceilf(v.x), ceilf(v.y), ceilf(v.z)); }
 __host__ __device__ inline float3 round(const float3 &v) { return make_float3(roundf(v.x), roundf(v.y), roundf(v.z)); }
 __host__ __device__ inline float3 frac(const float3 &v) { return v - floor(v); }
-__host__ __device__ inline float3 sign(const float3 &v) { return make_float3((v.x>0)-(v.x<0), (v.y>0)-(v.y<0), (v.z>0)-(v.z<0)); }
+__host__ __device__ inline float3 sign(const float3 &v) { return make_float3(((float)(v.x>0.0f)-(v.x<0.f)), (float)((v.y>0.f)-(v.y<0.f)), (float)((v.z>0.f)-(v.z<0.f))); }
 
 __host__ __device__ inline float3 min3(const float3 &a, const float3 &b) { return make_float3(fminf(a.x,b.x), fminf(a.y,b.y), fminf(a.z,b.z)); }
 __host__ __device__ inline float3 max3(const float3 &a, const float3 &b) { return make_float3(fmaxf(a.x,b.x), fmaxf(a.y,b.y), fmaxf(a.z,b.z)); }
@@ -285,9 +281,9 @@ __host__ __device__ inline float3 cosf3(const float3 &v) { return make_float3(co
 
 
 __device__ inline float3 sign3(const float3 &v) {
-    return make_float3((v.x > 0) - (v.x < 0),
-                       (v.y > 0) - (v.y < 0),
-                       (v.z > 0) - (v.z < 0));
+    return make_float3((float)((v.x > 0.f) - (v.x < 0.f)),
+                       (float)((v.y > 0.f) - (v.y < 0.f)),
+                       (float)((v.z > 0.f) - (v.z < 0.f)));
 }
 
 __device__ inline float3 abs3(const float3 &v) {

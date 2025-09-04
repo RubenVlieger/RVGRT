@@ -4,11 +4,6 @@
 #include "State.hpp"
 #include <numbers>
 
-// void print(vec3 v)
-// {
-//     cout << v.x << " " << v.y << " " << v.z << endl; 
-// }
-
 glm::dvec3 calcDirfromSphere(double pitch, double yaw) 
 {
     const float pih = std::numbers::pi_v<float> * 0.5f;
@@ -83,8 +78,8 @@ void Character::Update()
     camera.cameraAddFactor = rcpAspectRatio * -fovFactor;
     camera.cameraMultiplyFactor = fovFactor * rcpAspectRatio * rcpTwoImageSizes;
 
-    State::state.deltaXMouse = 0.0f;
-    State::state.deltaYMouse = 0.0f;
+    State::state.deltaXMouse.store(0);
+    State::state.deltaYMouse.store(0);
 }
 
 
