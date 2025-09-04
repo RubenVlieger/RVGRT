@@ -1,31 +1,47 @@
-This is yet another attempt at creating a minecraft-like voxel world engine. 
+# 🟩 Voxel World Engine (WIP)
+
+This is yet another attempt at creating a **Minecraft-like voxel world engine**, built with CUDA for efficient rendering, a platform which allows me to try certain algorithms and datastructures and optimization techniques for realtime rendering.  
+
+---
+
+## Features (so far)
+- Procedural voxel world generation (Minecraft-like).
+- CUDA + DirectX 11 interop for GPU-accelerated rendering.
+- GPU accelerated world generation
+- GPU accelerated coarse signed distance field creation
+- Lower resolution estimation of z-buffer (as optimization technique)
+- Dual based voxel raytracing algorithm consisting of distance estimation and final DDA for precise hits.
+- Usage of a texturepack, shadows and reflections
+- Currently a 600kb executable of which half is the texturepack.
+- Experimental engine
+
+---
+
+## Requirements
+- **OS**: Windows only currently (uses the Win32 API)  
+- **Graphics**: Direct3D 11 + CUDA-capable GPU (e.g., NVIDIA)  
 
 
+##  Build Instructions
+Make sure you have the following installed:
+- [CMake](https://cmake.org/) **3.18+**
+- [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) **12.6+** (tested)
+- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/) (MSVC compiler)
 
+### Steps
+```bash
+# Clone this repository
+git clone https://github.com/RubenVlieger/RVGRT.git
+cd RVGRT
 
-Requirements:
-Windows currently only (due to usage of Win32 library.) 
-D3D11, for the CUDA/W32 interop for presenting the image to the screen.
-CUDA-capable device (such as a Nvidia GPU)
+# Create build directory
+mkdir build && cd build
 
-To build: 
-* CMake 3.18 or later
-* CUDA Toolkit 12.6 or later is tested
-* Visual Studio 2022 (MSVC compiler) 
-
-
-
-
-#How to run?
-CD this_fodler
-
-mkdir build
-cd build
+# Generate project files
 cmake ..
 
-Or alternatively run the executable in 
-build/release/Application.exe
+# Build & run (or open in Visual Studio)
 
 
 
-For further questions, please reach my on my email: ruben.vlieger@ru.nl
+For further questions, please reach me by my email: ruben.vlieger@ru.nl
