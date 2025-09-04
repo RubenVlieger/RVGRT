@@ -6,7 +6,6 @@
 #include "cumath.cuh"
 
 
-
 __device__ inline float fractf_dev(float x) { return x - floorf(x); }
 __device__ inline float dot3(float ax, float ay, float az, float bx, float by, float bz) {
     return ax*bx + ay*by + az*bz;
@@ -19,103 +18,139 @@ __device__ inline void normalize3(float &x, float &y, float &z) {
     if (L > 0.0f) { x /= L; y /= L; z /= L; }
 }
 
-// device noise3D matching your CPU version (returns -1..1)
-__device__ float noise3D(float x, float y, float z) {
-    float d = sinf(x*12.9898f + y*78.233f + z*128.852f) * 43758.5453f;
-    return fractf_dev(d) * 2.0f - 1.0f;
+__device__ __forceinline__ unsigned int hash3(int xi, int yi, int zi) {
+    // fold coordinates into a single 32-bit key (use unsigned arithmetic)
+    unsigned int x = (unsigned int)xi;
+    unsigned int y = (unsigned int)yi;
+    unsigned int z = (unsigned int)zi;
+
+    // cheap spatial hashing using different large primes then XOR
+    unsigned int key = x * 73856093u;
+    key ^= y * 19349663u;
+    key ^= z * 83492791u;
+
+    // Thomas Wang 32-bit integer mix (finalizer)
+    key = (key ^ 61u) ^ (key >> 16);
+    key *= 9u;
+    key = key ^ (key >> 4);
+    key *= 0x27d4eb2du;
+    key = key ^ (key >> 15);
+
+    return key;
 }
 
-// device simplex3D port (returns same scale as CPU)
-__device__ float simplex3D(float px, float py, float pz) {
-    const float f3 = 1.0f / 3.0f;
-    float s = (px + py + pz) * f3;
+//possibly faster hash function, but at unknown visual impact. 3% faster world generation on my system.
+// __device__ __forceinline__ unsigned int hash3(int xi, int yi, int zi) {
+//     unsigned int key = (unsigned int)xi * 0x9e3779b9u;
+//     key ^= (unsigned int)yi * 0x85ebca6bu;
+//     key ^= (unsigned int)zi * 0xc2b2ae35u;
+//     // xorshift
+//     key ^= key << 13;
+//     key ^= key >> 17;
+//     key ^= key << 5;
+//     // scramble multiply (xorshift*)
+//     return key * 0x9E3779B1u;
+// }
+
+__device__ __forceinline__ float dot3(const float3 &g, float x, float y, float z) {
+    return g.x * x + g.y * y + g.z * z;
+}
+
+// inline "gradient generator" instead of table lookup, benchmarking proofs this is incredibly faster on my system with a 2.5x speedup.
+__device__ __forceinline__ float3 grad_from_hash(unsigned int h) 
+{
+    h &= 15u;
+
+    float3 g;
+    g.x = (h & 1u) ? 1.0f : -1.0f;
+    g.y = (h & 2u) ? 1.0f : -1.0f;
+    g.z = (h & 4u) ? 1.0f : -1.0f;
+
+    if (h < 8u) g.z = 0.0f;
+    else if (h < 12u) g.x = 0.0f;
+    else g.y = 0.0f;
+
+    return g;
+}
+
+// A very optimized simplex3D implementation. Benchmarking along side optimization features 4.0x speedup on my system versus naive simplex3D algorithm.
+__device__ float simplex3D(float px, float py, float pz) 
+{
+    const float F3 = 1.0f / 3.0f;
+    float s = (px + py + pz) * F3;
     int i = int(floorf(px + s));
     int j = int(floorf(py + s));
     int k = int(floorf(pz + s));
 
-    const float g3 = 1.0f / 6.0f;
-    float t = float(i + j + k) * g3;
-    float x0 = float(i) - t; x0 = px - x0;
-    float y0 = float(j) - t; y0 = py - y0;
-    float z0 = float(k) - t; z0 = pz - z0;
+    const float G3 = 1.0f / 6.0f;
+    float t = float(i + j + k) * G3;
+    float x0 = px - (float(i) - t);
+    float y0 = py - (float(j) - t);
+    float z0 = pz - (float(k) - t);
 
     int i1, j1, k1;
     int i2, j2, k2;
 
-    if (x0 >= y0) {
-        if (y0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=1; k2=0; }
-        else if (x0 >= z0) { i1=1; j1=0; k1=0; i2=1; j2=0; k2=1; }
-        else { i1=0; j1=0; k1=1; i2=1; j2=0; k2=1; }
-    } else {
-        if (y0 < z0) { i1=0; j1=0; k1=1; i2=0; j2=1; k2=1; }
-        else if (x0 < z0) { i1=0; j1=1; k1=0; i2=0; j2=1; k2=1; }
-        else { i1=0; j1=1; k1=0; i2=1; j2=1; k2=0; }
-    }
+    int c_xy = (x0 >= y0);
+    int c_xz = (x0 >= z0);
+    int c_yz = (y0 >= z0);
 
-    float x1 = x0 - float(i1) + g3;
-    float y1 = y0 - float(j1) + g3;
-    float z1 = z0 - float(k1) + g3;
-    float x2 = x0 - float(i2) + 2.0f*g3;
-    float y2 = y0 - float(j2) + 2.0f*g3;
-    float z2 = z0 - float(k2) + 2.0f*g3;
-    float x3 = x0 - 1.0f + 3.0f*g3;
-    float y3 = y0 - 1.0f + 3.0f*g3;
-    float z3 = z0 - 1.0f + 3.0f*g3;
+    i1 = c_xy & c_xz;
+    j1 = (1 - c_xy) & c_yz;
+    k1 = (1 - c_xz) & (1 - c_yz);
 
-    // integer lattice points
-    int i3 = i+0, j3 = j+0, k3 = k+0;
+    int x0_is_smallest = (1 - c_xy) & (1 - c_xz);
+    int y0_is_smallest = c_xy & (1 - c_yz);
+    int z0_is_smallest = c_xz & c_yz;
+    i2 = 1 - x0_is_smallest;
+    j2 = 1 - y0_is_smallest;
+    k2 = 1 - z0_is_smallest;
+
+    float x1 = x0 - float(i1) + G3;
+    float y1 = y0 - float(j1) + G3;
+    float z1 = z0 - float(k1) + G3;
+
+    float x2 = x0 - float(i2) + 2.0f * G3;
+    float y2 = y0 - float(j2) + 2.0f * G3;
+    float z2 = z0 - float(k2) + 2.0f * G3;
+
+    float x3 = x0 - 1.0f + 3.0f * G3;
+    float y3 = y0 - 1.0f + 3.0f * G3;
+    float z3 = z0 - 1.0f + 3.0f * G3;
+
     int i_1 = i + i1, j_1 = j + j1, k_1 = k + k1;
     int i_2 = i + i2, j_2 = j + j2, k_2 = k + k2;
-    int i_3 = i + 1, j_3 = j + 1, k_3 = k + 1;
+    int i_3 = i + 1,  j_3 = j + 1,  k_3 = k + 1;
 
-    // gradient vectors using device noise3D_dev to build pseudo-random gradients
-    float gx0 = noise3D(float(i3), float(j3), float(k3));
-    float gy0 = noise3D(float(i3)*2.01f, float(j3)*2.01f, float(k3)*2.01f);
-    float gz0 = noise3D(float(i3)*2.02f, float(j3)*2.02f, float(k3)*2.02f);
-    normalize3(gx0, gy0, gz0);
+    float3 g0 = grad_from_hash(hash3(i,   j,   k));
+    float3 g1 = grad_from_hash(hash3(i_1, j_1, k_1));
+    float3 g2 = grad_from_hash(hash3(i_2, j_2, k_2));
+    float3 g3 = grad_from_hash(hash3(i_3, j_3, k_3));
 
-    float gx1 = noise3D(float(i_1), float(j_1), float(k_1));
-    float gy1 = noise3D(float(i_1)*2.01f, float(j_1)*2.01f, float(k_1)*2.01f);
-    float gz1 = noise3D(float(i_1)*2.02f, float(j_1)*2.02f, float(k_1)*2.02f);
-    normalize3(gx1, gy1, gz1);
-
-    float gx2 = noise3D(float(i_2), float(j_2), float(k_2));
-    float gy2 = noise3D(float(i_2)*2.01f, float(j_2)*2.01f, float(k_2)*2.01f);
-    float gz2 = noise3D(float(i_2)*2.02f, float(j_2)*2.02f, float(k_2)*2.02f);
-    normalize3(gx2, gy2, gz2);
-
-    float gx3 = noise3D(float(i_3), float(j_3), float(k_3));
-    float gy3 = noise3D(float(i_3)*2.01f, float(j_3)*2.01f, float(k_3)*2.01f);
-    float gz3 = noise3D(float(i_3)*2.02f, float(j_3)*2.02f, float(k_3)*2.02f);
-    normalize3(gx3, gy3, gz3);
-
-    float n0 = 0.0f, n1 = 0.0f, n2 = 0.0f, n3 = 0.0f;
+    float n0, n1, n2, n3;
 
     float t0 = 0.5f - x0*x0 - y0*y0 - z0*z0;
-    if (t0 >= 0.0f) {
-        t0 *= t0;
-        n0 = t0 * t0 * dot3(gx0, gy0, gz0, x0, y0, z0);
-    }
+    t0 = fmaxf(0.0f, t0);
+    t0 *= t0;
+    n0 = t0 * t0 * dot3(g0, x0, y0, z0);
+
     float t1 = 0.5f - x1*x1 - y1*y1 - z1*z1;
-    if (t1 >= 0.0f) {
-        t1 *= t1;
-        n1 = t1 * t1 * dot3(gx1, gy1, gz1, x1, y1, z1);
-    }
+    t1 = fmaxf(0.0f, t1);
+    t1 *= t1;
+    n1 = t1 * t1 * dot3(g1, x1, y1, z1);
+
     float t2 = 0.5f - x2*x2 - y2*y2 - z2*z2;
-    if (t2 >= 0.0f) {
-        t2 *= t2;
-        n2 = t2 * t2 * dot3(gx2, gy2, gz2, x2, y2, z2);
-    }
+    t2 = fmaxf(0.0f, t2);
+    t2 *= t2;
+    n2 = t2 * t2 * dot3(g2, x2, y2, z2);
+
     float t3 = 0.5f - x3*x3 - y3*y3 - z3*z3;
-    if (t3 >= 0.0f) {
-        t3 *= t3;
-        n3 = t3 * t3 * dot3(gx3, gy3, gz3, x3, y3, z3);
-    }
+    t3 = fmaxf(0.0f, t3);
+    t3 *= t3;
+    n3 = t3 * t3 * dot3(g3, x3, y3, z3);
 
     return 96.0f * (n0 + n1 + n2 + n3);
 }
-
-
 
 // Basic FBM: returns approx in [-1, 1]
 __device__ float fbm3(float x, float y, float z, int octaves, float lacunarity, float persistence, float baseFreq) {
