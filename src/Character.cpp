@@ -33,11 +33,8 @@ Character::Character()
 }
 void Character::Update() 
 {
-    std::cout << position.y << std::endl;
-    if (!lockMouse) {
-        //vec3 deltaRotation = vec3(Game::window.mouseState.delta.first, 0.0f, Game::window.mouseState.delta.second) * deltaTime * sensitivity;
-        //print(deltaRotation);
-
+    if (!lockMouse) 
+    {
         yaw += State::state.deltaXMouse.exchange(0) * sensitivity * State::state.deltaTime * FOV;
         pitch += State::state.deltaYMouse.exchange(0) * sensitivity * State::state.deltaTime * FOV;
 
@@ -45,9 +42,6 @@ void Character::Update()
         pitch = clamp(pitch, -4.5, -1.65);  
         direction = calcDirfromSphere(pitch, yaw);
     }
-
-    //print(direction);
-
     vec3 inputs = vec3((IsKeyDown(0x44) ? 1.0f : 0.0f) + (IsKeyDown(0x41) ? -1.0f : 0.0f), //D - A
                        (IsKeyDown(0x20) ? 1.0f : 0.0f) + (IsKeyDown(0x5A) ? -1.0f : 0.0f), // space - z
                        (IsKeyDown(0x57) ? 1.0f : 0.0f) + (IsKeyDown(0x53) ? -1.0f : 0.0f)) * speed; // W  - S
