@@ -74,7 +74,8 @@ __device__ float3 computeColor(float x,
                                half distance,
                                const uint32_t* __restrict__ bits,
                                const unsigned char* __restrict__ csdf,
-                               cudaTextureObject_t texObj) 
+                               cudaTextureObject_t texObj,
+                               cudaTextureObject_t shadowTexture) 
 {
     // --- Primary ray direction ---
     float2 NDC = make_float2(x * 2.0f - 1.0f, y * 2.0f - 1.0f);
@@ -114,11 +115,13 @@ __device__ float3 computeColor(float x,
         baseColor = baseColor * diffuse;
 
         // --- Shadow ray ---
-        hitInfo shadow = trace(hit.pos + hit.normal * 1e-1f, c_sunDir, (half)0.0f, bits, csdf);
-        if (shadow.hit) {
-            baseColor = baseColor * 0.2f;  // Darker in shadow
-        }
-        color = color + baseColor;
+        float shadow = tex2D<float>(shadowTexture, x, y);
+
+        // hitInfo shadow = trace(hit.pos + hit.normal * 1e-1f, c_sunDir, (half)0.0f, bits, csdf);
+        // if (shadow.hit) {
+        //     baseColor = baseColor * 0.2f;  // Darker in shadow
+        // }
+        color = color + baseColor * shadow;
 
         // --- Reflection bounce ---
 
@@ -188,7 +191,7 @@ __global__ void renderKernel(uchar4* framebuffer,
 
     half dist = approximateDistance(ix, iy, width / 2, height/2, distBuffer) - (half)2.0f;
 
-    float3 col = computeColor(x, y, dist, bits, csdf, texObj);
+    float3 col = computeColor(x, y, dist, bits, csdf, texObj, shadowTexture);
 
     col = clamp(col, make_float3(0.0f, 0.0f, 0.0f), make_float3(1.0f, 1.0f, 1.0f));
 
@@ -206,8 +209,8 @@ __global__ void distApproximationKernel(half* distBuffer,
                                   const unsigned char* __restrict__ csdf,
                                   float* shadowBuffer) 
 {
-    int ix = blockIdx.x * blockDim.x + threadIdx.x;
-    int iy = blockIdx.y * blockDim.y + threadIdx.y;
+    uint64_t ix = blockIdx.x * blockDim.x + threadIdx.x;
+    uint64_t iy = blockIdx.y * blockDim.y + threadIdx.y;
     if (ix >= width || iy >= height) return;
 
     float x = (float)ix / (float)width;
@@ -225,14 +228,14 @@ __global__ void distApproximationKernel(half* distBuffer,
         hitInfo shadow = trace(hit.pos + hit.normal * 1e-1f, c_sunDir, (half)0.0f, bits, csdf);
         shadowValue = shadow.hit ? 0.2f : 1.0f;
     }
-
-    //shadowBuffer[ix + iy * width] = shadowValue;
+    shadowBuffer[ix + iy * width] = shadowValue; // w/ 11ms
     distBuffer[ix + iy * width] = dist;
 }
 
+
 void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                            const glm::vec3& up, const glm::vec3& ri) 
-{
+{    
     // Upload camera + sun constants
     float currentTime = (float)(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() % 1000000)* 0.001f; 
     cudaMemcpyToSymbol(c_time, &currentTime, sizeof(float));
@@ -243,7 +246,6 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
 
     glm::vec3 sunDir = glm::normalize(glm::vec3(10.f, 5.f, -4.f));
     cudaMemcpyToSymbol(c_sunDir, &sunDir, sizeof(glm::vec3));
-
 
     dim3 block(16, 16);
     dim3 grid(((framebuffer.getWidth() / 2) + block.x - 1) / block.x,
@@ -260,7 +262,6 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
     
     CUDA_CHECK(cudaDeviceSynchronize());
     CUDA_CHECK(cudaGetLastError());
-
 
     block = dim3(16, 16);
     grid = dim3((framebuffer.getWidth() + block.x - 1) / block.x,

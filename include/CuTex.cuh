@@ -11,6 +11,15 @@
 // for efficient reading in other kernels.
 class CuTex {
 public:
+
+    CuTex(const CuTex&) = delete;
+    CuTex& operator=(const CuTex&) = delete;
+
+    // add move semantics
+    CuTex(CuTex&& other) noexcept;
+    CuTex& operator=(CuTex&& other) noexcept;
+
+
     // Main constructor to create and manage the linear buffer and texture object.
     // It assumes a single-channel float format (F32).
     CuTex(int _width, int _height,
@@ -34,11 +43,15 @@ public:
     // Returns the raw device pointer for writing.
     float* getDevPtr() const { return dev_ptr; }
 
+    size_t getWidth() const { return width; }
+    size_t getHeight() const { return height; }
+
+
     // Test whether the texture was successfully created.
     bool valid() const { return tex_obj != 0 && dev_ptr != nullptr; }
 
 private:
     cudaTextureObject_t tex_obj = 0;
     float* dev_ptr = nullptr;
-    int width = 0, height = 0;
+    size_t width = 0, height = 0;
 };
