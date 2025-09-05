@@ -5,38 +5,61 @@
 #include "cumath.cuh"
 #include "TerrainGeneration.cuh"
 
-
-// Kernel to fill every value inside the CArray, the for loop is made such that it does not need atomics to write. 
 extern "C" __global__
-void fillKernel(uint32_t* __restrict__ data, uint64_t numWords, uint64_t totalBits)
+void fillKernel(uint32_t* __restrict__ data, uint64_t numWords)
 {
-    // 64-bit idx to support very large worlds
-    uint64_t wordIdx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
+    // compute *linear* block index (works for any gridDim.x/y/z)
+    uint64_t linearBlockIdx = (uint64_t)blockIdx.x
+                            + (uint64_t)blockIdx.y * (uint64_t)gridDim.x
+                            + (uint64_t)blockIdx.z * (uint64_t)gridDim.x * (uint64_t)gridDim.y;
+
+    uint64_t wordIdx = linearBlockIdx * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (wordIdx >= numWords) return;
 
     uint64_t baseBit = wordIdx * 32ull;
-
     uint32_t w = 0u;
-    for (uint64_t bit = 0; bit < 32; ++bit) 
-    {
-        uint64_t bitIndex = baseBit + (uint64_t)bit;
-
+    for (uint64_t bit = 0; bit < 32; ++bit) {
+        uint64_t bitIndex = baseBit + bit;
         uint64_t z = bitIndex >> (SHIX + SHIY);
         uint64_t y = (bitIndex >> SHIX) & (uint64_t)MODY;
         uint64_t x = bitIndex & (uint64_t)MODX;
-
-        // call Evaluate (adapted to accept float/double as you have)
-    
         float v = Evaluate((float)x, (float)y, (float)z);
-        bool solid = v > 0.7f;
-        if (solid) {
-            w |= (1u << bit);
-        }
+        if (v > 0.7f) w |= (1u << bit);
     }
-
-    // store with a single write
     data[wordIdx] = w;
 }
+
+// Kernel to fill every value inside the CArray, the for loop is made such that it does not need atomics to write. 
+// extern "C" __global__
+// void fillKernel(uint32_t* __restrict__ data, uint64_t numWords, uint64_t totalBits)
+// {
+//     // 64-bit idx to support very large worlds
+//     uint64_t wordIdx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
+//     if (wordIdx >= numWords) return;
+
+//     uint64_t baseBit = wordIdx * 32ull;
+
+//     uint32_t w = 0u;
+//     for (uint64_t bit = 0; bit < 32; ++bit) 
+//     {
+//         uint64_t bitIndex = baseBit + (uint64_t)bit;
+
+//         uint64_t z = bitIndex >> (SHIX + SHIY);
+//         uint64_t y = (bitIndex >> SHIX) & (uint64_t)MODY;
+//         uint64_t x = bitIndex & (uint64_t)MODX;
+
+//         // call Evaluate (adapted to accept float/double as you have)
+    
+//         float v = Evaluate((float)x, (float)y, (float)z);
+//         bool solid = v > 0.7f;
+//         if (solid) {
+//             w |= (1u << bit);
+//         }
+//     }
+
+//     // store with a single write
+//     data[wordIdx] = w;
+// }
 
 uint32_t* CArray::getPtr() 
 {
@@ -63,7 +86,7 @@ void CArray::fill()
     const unsigned int threads = 256;
     unsigned int blocks64 = (unsigned int)((numWords + (uint64_t)threads - 1ull) / (uint64_t)threads);
 
-    fillKernel<<<blocks64, threads>>>(dev_data, numWords, totalBits);
+    fillKernel<<<blocks64, threads>>>(dev_data, numWords);
     CUDA_CHECK(cudaGetLastError());
 }
 

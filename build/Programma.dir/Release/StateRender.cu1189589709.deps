@@ -67,7 +67,6 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\float.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\locale.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\malloc.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\math.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\memory.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\share.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\stddef.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\ucrt\stdio.h
@@ -194,6 +193,7 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.3313
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cctype
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cerrno
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cfloat
+C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\chrono
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\climits
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\clocale
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cmath
@@ -222,6 +222,7 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.3313
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\memory
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\new
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\ostream
+C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\ratio
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\sal.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\stdarg.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\stdexcept
@@ -258,6 +259,7 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.3313
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\yvals.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\yvals_core.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_bit_utils.hpp
+C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_chrono.hpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_iter_core.hpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_sanitizer_annotate_container.hpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_system_error_abi.hpp
@@ -283,21 +285,6 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_fp16.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_fp16.hpp
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_runtime.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_runtime_api.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_discrete.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_discrete2.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_globals.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_kernel.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_lognormal.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_mrg32k3a.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_mtgp32.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_mtgp32_kernel.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_normal.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_normal_static.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_philox4x32_x.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_poisson.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_precalc.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\curand_uniform.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\device_atomic_functions.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\device_launch_parameters.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\device_types.h
@@ -462,5 +449,7 @@ C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\vec3.hpp
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\vec4.hpp
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\vector_relational.hpp
+C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\RayTracing.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\StateRender.cuh
+C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\TerrainGeneration.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\Texturepack.cuh

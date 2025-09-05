@@ -13,32 +13,32 @@
     }
 
 
-const unsigned int SHIX = 10;
-const unsigned int SHIY = 9;
-const unsigned int SHIZ = 10;
+const uint64_t SHIX = 10;
+const uint64_t SHIY = 9;
+const uint64_t SHIZ = 10;
 
-const unsigned int MODX = (1<<SHIX) - 1;
-const unsigned int MODY = (1<<SHIY) - 1;
-const unsigned int MODZ = (1<<SHIZ) - 1;
+const uint64_t MODX = (1<<SHIX) - 1;
+const uint64_t MODY = (1<<SHIY) - 1;
+const uint64_t MODZ = (1<<SHIZ) - 1;
 
-const unsigned int SIZEX = 1<<SHIX;
-const unsigned int SIZEY = 1<<SHIY;
-const unsigned int SIZEZ = 1<<SHIZ;
+const uint64_t SIZEX = 1<<SHIX;
+const uint64_t SIZEY = 1<<SHIY;
+const uint64_t SIZEZ = 1<<SHIZ;
 
 const uint64_t BYTESIZE = SIZEX*SIZEY*SIZEZ/8;
 
 __device__ __forceinline__ uint64_t toIndex(int3 p) 
 {
-    return  (((uint64_t)p.x - (SIZEX>>1)) & MODX) | 
-           ((((uint64_t)p.y - (SIZEY>>1)) & MODY) << SHIX) | 
-           ((((uint64_t)p.z - (SIZEZ>>1)) & MODZ) << (SHIX + SHIY));
+    return  (((uint64_t)p.x) & MODX) | 
+           ((((uint64_t)p.y) & MODY) << SHIX) | 
+           ((((uint64_t)p.z) & MODZ) << (SHIX + SHIY));
 }
 
 __device__ __forceinline__ uint64_t toIndex(uint64_t x, uint64_t y, uint64_t z ) 
 {
-    return  ((x - (SIZEX>>1)) & MODX) | 
-           (((y - (SIZEY>>1)) & MODY) << SHIX) | 
-           (((z - (SIZEZ>>1)) & MODZ) << (SHIX + SHIY));
+    return  (x & MODX) | 
+           ((y & MODY) << SHIX) | 
+           ((z & MODZ) << (SHIX + SHIY));
 }
 
 // __device__ __forceinline__ uint64_t splitBy3(uint64_t a) {

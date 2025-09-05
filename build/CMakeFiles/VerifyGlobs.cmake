@@ -32,6 +32,7 @@ set(OLD_GLOB
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/CuTex.cu"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/Framebuffer.cu"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/StateRender.cu"
+  "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/TerrainGeneration.cu"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/Texturepack.cu"
   )
 if(NOT "${NEW_GLOB}" STREQUAL "${OLD_GLOB}")

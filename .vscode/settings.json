@@ -86,7 +86,8 @@
         "map": "cpp",
         "queue": "cpp",
         "set": "cpp",
-        "xtree": "cpp"
+        "xtree": "cpp",
+        "__bit_reference": "cpp"
     },
 
     "cmake.generator": "Visual Studio 17 2022",

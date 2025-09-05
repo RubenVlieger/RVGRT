@@ -30,6 +30,9 @@
     <CudaCompile Include="..\src\StateRender.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
+    <CudaCompile Include="..\src\TerrainGeneration.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
     <CudaCompile Include="..\src\Texturepack.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>

@@ -18,7 +18,7 @@ struct hitInfo
 };
 
 __device__ __forceinline__ bool IsSolid(int3 p, const uint32_t* __restrict__ bits) {
-    int index = toIndex(p);
+    uint64_t index = toIndex(p);
     return ((bits[index >> 5] >> (index & 31)) & 1);
 }
 
@@ -35,9 +35,9 @@ __device__ __forceinline__ float getDistance(float3 pos, const unsigned char* __
     int cy = (int)(floorf(pos.y) * (1.0f / COARSENESS));
     int cz = (int)(floorf(pos.z) * (1.0f / COARSENESS));
 
-    cx = min(cx, C_SIZEX - 1);
-    cy = min(cy, C_SIZEY - 1);
-    cz = min(cz, C_SIZEZ - 1);
+    cx = min(cx, (int)C_SIZEX - 1);
+    cy = min(cy, (int)C_SIZEY - 1);
+    cz = min(cz, (int)C_SIZEZ - 1);
     cx = max(cx, 0);
     cy = max(cy, 0);
     cz = max(cz, 0);
@@ -52,9 +52,9 @@ __device__ __forceinline__ unsigned char getDistance(int3 pos, const unsigned ch
     int cy = pos.y / COARSENESS;
     int cz = pos.z / COARSENESS;
 
-    cx = min(cx, C_SIZEX - 1);
-    cy = min(cy, C_SIZEY - 1);
-    cz = min(cz, C_SIZEZ - 1);
+    cx = min(cx, (int)C_SIZEX - 1);
+    cy = min(cy, (int)C_SIZEY - 1);
+    cz = min(cz, (int)C_SIZEZ - 1);
     cx = max(cx, 0);
     cy = max(cy, 0);
     cz = max(cz, 0);
