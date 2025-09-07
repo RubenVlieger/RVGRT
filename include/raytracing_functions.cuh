@@ -78,3 +78,7 @@ __device__ float3 traceCone(float3 pos,
                             float3 dir,
                             const uchar4* __restrict__ GIdata,
                             const unsigned char* __restrict__ csdf);
+
+
+__device__ float3 sampleSky(float3 dir, float3 sunDir);
+__device__ float3 sampleTexture(half2 uv, float3 pos, cudaTextureObject_t texObj);

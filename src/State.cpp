@@ -6,7 +6,7 @@
 #include <StateRender.cuh>
 #include <CArray.cuh>
 #include "Timer.hpp"
-
+#include "Texturepack.cuh"
 #include "CoarseArray.cuh"
 #include "CuTex.cuh"
 
@@ -55,6 +55,6 @@ void State::Create()
 
 
     Timer t4("Building GI");
-    render->GIdata.GenerateGIdata(render->cArray, render->csdf);
+    render->GIdata.InitializeGIData(render->cArray, render->csdf, render->texturepack);
     t4.s();
 }

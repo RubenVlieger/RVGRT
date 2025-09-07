@@ -5,6 +5,61 @@
 #include "cuda_fp16.h"
 #include "CoarseArray.cuh"
 #include "raytracing_functions.cuh"
+#include "TerrainGeneration.cuh"
+
+__device__ float3 sampleSky(float3 dir, float3 sunDir)
+{
+    // --- Sky color ---
+    float sunDot = dot(dir, sunDir);
+    if (sunDot > 0.999f) {
+        // Bright yellow sun
+        return c_sunColor;
+    } else {
+        // Blue-ish sky, darkens towards horizon
+        float t = clampf(0.5f * (dir.y + 1.0f), 0.0f, 1.0f); 
+        // dir.y=-1 -> 0, dir.y=1 -> 1
+
+        return lerp(make_float3(0.2f, 0.4f, 0.8f),   // horizon blue
+                    make_float3(0.6f, 0.8f, 1.0f),   // zenith blue
+                    t);
+    }
+}
+
+__device__ float3 sampleTexture(half2 uv, float3 pos, cudaTextureObject_t texObj)
+{
+    const half2 texStoneID = make_half2(0.0f / 16.0f, 1.0f / 16.0f);
+    const half2 texDirtID = make_half2(0.0f / 16.0f, 2.0f / 16.0f);
+    const half2 texCobbleID = make_half2(1.0f / 16.0f, 0.0f / 16.0f);
+    const half2 texIronID = make_half2(2.0f / 16.0f, 1.0f / 16.0f);
+    const half2 texDiamondID = make_half2(3.0f / 16.0f, 2.0f / 16.0f);
+    const half2 texStone2ID = make_half2(0.0f / 16.0f, 0.0f / 16.0f);
+    const half2 texSandStoneID = make_half2(11.0f / 16.0f, 0.0f / 16.0f);
+    const half2 texCoalID = make_half2(2.0f / 16.0f, 2.0f / 16.0f);
+
+    half2 whichBlock = make_half2(0.0f, 8.0f/16.0f);
+
+    const float freq = 0.05f;
+    float eval = simplex3D(floorf(pos.x) * freq, floorf(pos.y) * freq, floorf(pos.z)* freq);
+    float eval2 = simplex3D(floorf(pos.x + 121.3) * freq * 0.3f, floorf(pos.y + 1321.3) * freq * 0.3f, floorf(pos.z + 721.5)* freq * 0.3f);
+    eval = eval*0.4f + eval2 * 0.6f;
+
+    if(eval < -1.3f) whichBlock = texStoneID;
+    else if(eval < -1.2f) whichBlock = texDiamondID;
+    else if(eval < -0.7f) whichBlock = texIronID;
+    else if(eval < 0.0f) whichBlock = texStoneID;
+    else if(eval < 0.1f) whichBlock = texCoalID;
+    else if(eval < 0.4f) whichBlock = texCobbleID;
+    else if(eval < 0.8f)whichBlock = texDirtID;
+    else if(eval < 1.2f) whichBlock = texStone2ID;
+    else whichBlock = texStoneID;
+
+    uv.x = ((uv.x * hrcp(16.0))) + whichBlock.x;
+    uv.y = ((uv.y * hrcp(16.0))) + whichBlock.y;
+
+    float4 t = tex2D<float4>(texObj, __half2float(uv.y), __half2float(uv.x));
+
+    return make_float3(t.x, t.y, t.z);
+}
 
 
 __device__ float3 approximateCSDF(float3 pos, float3 dir, const unsigned char* __restrict__ csdf)

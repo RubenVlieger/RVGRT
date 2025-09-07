@@ -4,6 +4,9 @@
 #include "raytracing_functions.cuh"
 #include "glm/glm.hpp"
 
+#define BOUNCE_STRENGTH 0.9f // How much light is transferred from neighbors.
+#define NUM_BOUNCE_SAMPLES 6 // We'll sample the 6 direct neighbors.
+
 // Helper function to check if any bit is set within a coarse block.
 __device__ bool isCoarseBlockSolid(uint64_t cx, uint64_t cy, uint64_t cz, const uint32_t* fineData) 
 {
@@ -205,9 +208,9 @@ void CoarseArray::GenerateSDF(CArray& fineArray)
 }
 
 __constant__ float3 c_sunDir2;
-__global__ void GlobalIlluminate(uchar4* GIdata,
-                                 const uint32_t* __restrict__ bits,
-                                 const unsigned char* __restrict__ csdf)
+__global__ void InitialGlobalIlluminate(uchar4* GIdata,
+                                        const uint32_t* __restrict__ bits,
+                                        const unsigned char* __restrict__ csdf)
 {
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= GI_BYTESIZE) return;
@@ -224,7 +227,6 @@ __global__ void GlobalIlluminate(uchar4* GIdata,
                                  (cz + 0.5f) * COARSENESSGI);
 
     float3 accumulatedColor = make_float3(0.0f, 0.0f, 0.0f);
-
     hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.0001f, bits, csdf);
 
     if (!shadowHit.hit) {
@@ -241,19 +243,254 @@ __global__ void GlobalIlluminate(uchar4* GIdata,
                                 accumulatedColor.z * 255,
                                 255); // Alpha can be used for opacity if needed
 }
-void CoarseArray::UpdateGI(CArray& fineArray, CoarseArray csdf)
-{
 
+
+
+__device__ unsigned int random_state;
+__device__ void init_random_state(int thread_id, int frame_number) {
+    // Initialize with a value that is unique for each thread and changes every frame
+    random_state = thread_id + frame_number * 198491317;
 }
-void CoarseArray::GenerateGIdata(CArray& fineArray, CoarseArray csdf)
+
+__device__ float random_float() {
+    // XOR shift algorithm
+    random_state ^= (random_state << 13);
+    random_state ^= (random_state >> 17);
+    random_state ^= (random_state << 5);
+    // Convert to a float in [0, 1]
+    return float(random_state) / float(4294967295.0f);
+}
+__device__ float3 random_direction_in_sphere() {
+    float3 p;
+    do {
+        p = make_float3(random_float() * 2.0f - 1.0f,
+                        random_float() * 2.0f - 1.0f,
+                        random_float() * 2.0f - 1.0f);
+    } while (dot(p, p) >= 1.0f); // Reject points outside the unit sphere
+    return normalize(p);
+}
+
+__global__ void GlobalIlluminate(uchar4* GIdata_curr,
+                                 const uint32_t* __restrict__ bits,
+                                 const unsigned char* __restrict__ csdf,
+                                 cudaTextureObject_t texturepack,
+                                 unsigned int frameNumber,
+                                 uint64_t offset) // NEW: for random seeding
+{
+    uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x + offset;
+    if (idx >= GI_BYTESIZE) return;
+
+        // --- 1. Setup ---
+    init_random_state(idx, frameNumber);
+
+    uint64_t cz = idx / (GI_SIZEX * GI_SIZEY);
+    uint64_t temp = idx % (GI_SIZEX * GI_SIZEY);
+    uint64_t cy = temp / GI_SIZEX;
+    uint64_t cx = temp % GI_SIZEX;
+
+    float3 worldPos = make_float3((cx + 0.5f) * COARSENESSGI,
+                                 (cy + 0.5f) * COARSENESSGI,
+                                 (cz + 0.5f) * COARSENESSGI);
+
+    // If this GI cell is inside a solid block, it should be black.
+    int3 voxel_ipos = make_int3(floorf(worldPos.x), floorf(worldPos.y), floorf(worldPos.z));
+    if (IsSolid(voxel_ipos, bits)) {
+        GIdata_curr[idx] = make_uchar4(0, 0, 0, 255);
+        return;
+    }
+
+    // --- 2. Calculate a new color sample for this frame ---
+    float3 newSample = make_float3(0.0f, 0.0f, 0.0f);
+
+    // Contribution from Direct Light (Sun)
+    hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.001f, bits, csdf);
+    if (!shadowHit.hit) {
+        newSample += c_sunColor;
+    }
+
+    // Contribution from Indirect Light (1 random bounce)
+    float3 randomDir = random_direction_in_sphere();
+    hitInfo bounceHit = trace(worldPos, randomDir, 0.001f, bits, csdf);
+
+    if (bounceHit.hit) {
+        // We hit a surface. Sample the GI data from the *previous* frame at that location.
+        float3 hitPos = bounceHit.pos;
+        int gx = (int)(floorf(hitPos.x) / COARSENESSGI);
+        int gy = (int)(floorf(hitPos.y) / COARSENESSGI);
+        int gz = (int)(floorf(hitPos.z) / COARSENESSGI);
+
+        if (gx >= 0 && gx < GI_SIZEX && gy >= 0 && gy < GI_SIZEY && gz >= 0 && gz < GI_SIZEZ) {
+            uint64_t hit_idx = (uint64_t)gz * GI_SIZEX * GI_SIZEY + (uint64_t)gy * GI_SIZEX + gx;
+            uchar4 prevSample = GIdata_curr[hit_idx];
+            float3 bouncedColor = make_float3(prevSample.x / 255.0f, prevSample.y / 255.0f, prevSample.z / 255.0f);
+
+            // Modulate by surface albedo (texture color) for color bleeding
+            // NOTE: Assumes sampleTexture exists from previous context
+            float3 surfaceAlbedo = sampleTexture(bounceHit.uv, bounceHit.pos, texturepack);
+            newSample += bouncedColor * surfaceAlbedo;
+        }
+    } else {
+        // We didn't hit anything, so we hit the sky.
+        // NOTE: Assumes sampleSky exists from previous context
+        newSample += sampleSky(randomDir, c_sunDir2);
+    }
+
+    // --- 3. Blend with the previous frame's result to converge ---
+    const float LEARNING_RATE = 0.04f; // How much the new sample influences the result. Lower = smoother convergence.
+    uchar4 prevData = GIdata_curr[idx];
+    float3 previousColor = make_float3(prevData.x / 255.0f, prevData.y / 255.0f, prevData.z / 255.0f);
+
+    // Linearly interpolate between the old color and the new sample
+    float3 finalColor = lerp(previousColor, newSample, LEARNING_RATE);
+
+    // --- 4. Store the updated result in the current buffer ---
+    finalColor.x = fminf(finalColor.x, 2.0f); // Allow for brightness > 1 temporarily
+    finalColor.y = fminf(finalColor.y, 2.0f);
+    finalColor.z = fminf(finalColor.z, 2.0f);
+
+    GIdata_curr[idx] = make_uchar4(fminf(finalColor.x, 1.0f) * 255,
+                                   fminf(finalColor.y, 1.0f) * 255,
+                                   fminf(finalColor.z, 1.0f) * 255,
+                                   255);
+}
+
+void CoarseArray::InitializeGIData(CArray& fineArray, CoarseArray csdf, Texturepack& texturepack)
 {
     glm::vec3 sunDir = glm::normalize(glm::vec3(10.f, 5.f, -4.f));
     cudaMemcpyToSymbol(c_sunDir2, &sunDir, sizeof(glm::vec3));
 
-    const unsigned long threads = 256;
+    const unsigned long threads = 128;
     unsigned int blocks = (unsigned int)((GI_SIZE + (uint64_t)threads - 1ull) / (uint64_t)threads);
     
-    // --- Pass 1: X-axis distance ---
-    GlobalIlluminate<<<blocks, threads>>>((uchar4*)m_csdfArray.getPtr(), fineArray.getPtr(), reinterpret_cast<unsigned char*>(csdf.getPtr()));
+    InitialGlobalIlluminate<<<blocks, threads>>>((uchar4*)m_csdfArray.getPtr(), fineArray.getPtr(), reinterpret_cast<unsigned char*>(csdf.getPtr())) ;
     CUDA_CHECK(cudaGetLastError());    
 }
+
+
+
+
+#define RAYPS (64*64*64*2)
+static int frameNumber = 0;
+static uint64_t offsetCounter = 0;
+
+void CoarseArray::UpdateGIData(CArray& fineArray, CoarseArray csdf, Texturepack& texturepack)
+{
+    glm::vec3 sunDir = glm::normalize(glm::vec3(10.f, 5.f, -4.f));
+    cudaMemcpyToSymbol(c_sunDir2, &sunDir, sizeof(glm::vec3));
+
+    const unsigned long threads = 128;
+    unsigned int blocks = (unsigned int)((RAYPS + (uint64_t)threads - 1ull) / (uint64_t)threads);
+
+ //   unsigned int blocks = (unsigned int)((RAYPS + (uint64_t)threads - 1ull) / (uint64_t)threads);
+    
+
+    GlobalIlluminate<<<blocks, threads>>>((uchar4*)m_csdfArray.getPtr(), fineArray.getPtr(), reinterpret_cast<unsigned char*>(csdf.getPtr()), texturepack.texObject(), frameNumber, offsetCounter) ;
+    CUDA_CHECK(cudaGetLastError());    
+    frameNumber++;
+    
+
+    if(offsetCounter + RAYPS >= GI_SIZE) 
+        offsetCounter = 0;
+    else offsetCounter += RAYPS;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// __global__ void GlobalIlluminate(uchar4* GIdata_curr,             // The buffer we are writing to
+//                                  const uchar4* __restrict__ GIdata_prev, // The buffer from the previous frame
+//                                  const uint32_t* __restrict__ bits,
+//                                  const unsigned char* __restrict__ csdf)
+// {
+//     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
+//     if (idx >= GI_BYTESIZE) return;
+
+//     // --- 1. Calculate the world position of this GI voxel ---
+//     uint64_t cz = idx / (GI_SIZEX * GI_SIZEY);
+//     uint64_t temp = idx % (GI_SIZEX * GI_SIZEY);
+//     uint64_t cy = temp / GI_SIZEX;
+//     uint64_t cx = temp % GI_SIZEX;
+
+//     int3 gpos = make_int3(cx, cy, cz); // GI voxel grid position
+
+//     // The world position is the center of the coarse voxel
+//     float3 worldPos = make_float3((gpos.x + 0.5f) * COARSENESSGI,
+//                                  (gpos.y + 0.5f) * COARSENESSGI,
+//                                  (gpos.z + 0.5f) * COARSENESSGI);
+
+//     // --- 2. Light Injection: Calculate Direct Light ---
+//     float3 directLight = make_float3(0.0f, 0.0f, 0.0f);
+//     // Before tracing, check if this GI voxel is inside a solid block. If so, it can't receive light.
+//     int3 voxel_ipos = make_int3(floorf(worldPos.x), floorf(worldPos.y), floorf(worldPos.z));
+//     if (!IsSolid(voxel_ipos, bits))
+//     {
+//         hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.0001f, bits, csdf);
+//         if (!shadowHit.hit) {
+//             // If we didn't hit anything, this voxel is lit by the sun
+//             directLight = c_sunColor;
+//         }
+//     }
+
+
+//     // --- 3. Light Propagation: Gather Bounced Light from Neighbors ---
+//     float3 bouncedLight = make_float3(0.0f, 0.0f, 0.0f);
+//     int samples = 0;
+
+//     // Define offsets to the 6 direct neighbors
+//     int3 offsets[] = { {1,0,0}, {-1,0,0}, {0,1,0}, {0,-1,0}, {0,0,1}, {0,0,-1} };
+
+//     for(int i = 0; i < NUM_BOUNCE_SAMPLES; i++)
+//     {
+//         int3 neighbor_gpos = gpos + offsets[i];
+
+//         // Bounds check for the neighbor
+//         if (neighbor_gpos.x >= 0 && neighbor_gpos.x < GI_SIZEX &&
+//             neighbor_gpos.y >= 0 && neighbor_gpos.y < GI_SIZEY &&
+//             neighbor_gpos.z >= 0 && neighbor_gpos.z < GI_SIZEZ)
+//         {
+//             // Simple occlusion check: is the neighbor voxel solid? If so, don't gather light from it.
+//             float3 neighbor_worldPos = make_float3((neighbor_gpos.x + 0.5f) * COARSENESSGI, (neighbor_gpos.y + 0.5f) * COARSENESSGI, (neighbor_gpos.z + 0.5f) * COARSENESSGI);
+//             int3 neighbor_voxel_ipos = make_int3(floorf(neighbor_worldPos.x), floorf(neighbor_worldPos.y), floorf(neighbor_worldPos.z));
+
+//             if (!IsSolid(neighbor_voxel_ipos, bits))
+//             {
+//                 // If not occluded, read the color from the PREVIOUS frame's buffer
+//                 uint64_t neighbor_idx = (uint64_t)neighbor_gpos.z * GI_SIZEX * GI_SIZEY + (uint64_t)neighbor_gpos.y * GI_SIZEX + neighbor_gpos.x;
+//                 uchar4 prevSample = GIdata_prev[neighbor_idx];
+//                 bouncedLight += make_float3(prevSample.x / 255.0f, prevSample.y / 255.0f, prevSample.z / 255.0f);
+//                 samples++;
+//             }
+//         }
+//     }
+
+//     if (samples > 0) {
+//         bouncedLight = bouncedLight / (float)samples; // Average the collected light
+//     }
+
+//     // --- 4. Final Combination ---
+//     // The final color is the direct light plus the bounced light from neighbors.
+//     float3 finalColor = directLight + bouncedLight * BOUNCE_STRENGTH;
+
+//     // Clamp the color to avoid overflow when converting back to uchar
+//     finalColor.x = fminf(finalColor.x, 1.0f);
+//     finalColor.y = fminf(finalColor.y, 1.0f);
+//     finalColor.z = fminf(finalColor.z, 1.0f);
+
+//     // Write the final result to the CURRENT frame's buffer
+//     GIdata_curr[idx] = make_uchar4(finalColor.x * 255,
+//                                    finalColor.y * 255,
+//                                    finalColor.z * 255,
+//                                    255);
+// }

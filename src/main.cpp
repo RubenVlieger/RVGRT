@@ -12,6 +12,7 @@
 #include <vector>
 #include "d3d11.h"
 #include <hidsdi.h>
+#include "Texturepack.cuh"
 
 #pragma comment(lib, "d3d11.lib")
 #pragma comment(lib, "dxgi.lib") 
@@ -35,8 +36,9 @@ void renderLoop()
 
     auto lastTime = clock::now();
 
-    while (running) {
-        Timer t1("FRAME TIME");
+    while (running) 
+    {
+        State::state.render->GIdata.UpdateGIData(State::state.render->cArray, State::state.render->csdf, State::state.render->texturepack);
 
         // Update game state
         State::state.character.Update();

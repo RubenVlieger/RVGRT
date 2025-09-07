@@ -53,7 +53,7 @@ void Character::Update()
     vec3 gravity = vec3(0.0f, 1.0f, 0.0f) * gravityAmount;
 
     vec3 addVector = (velocity + jump + gravity) * State::state.deltaTime;
-    std::cout << camera.pos.y << std::endl;
+
     position = glm::mix(position, position + addVector, 0.5f);
     vec3 dirright = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f))); //direction.z, 0, direction.x
     vec3 dirup = normalize(cross((vec3)direction, dirright));

@@ -14,60 +14,8 @@
 __constant__ float3 c_sunDir;
 __constant__ float c_time;
 __constant__ float3 c_camPos, c_camFo, c_camUp, c_camRi;
-
-__device__ __forceinline__ float3 sampleSky(float3 dir)
-{
-    // --- Sky color ---
-    float sunDot = dot(dir, c_sunDir);
-    if (sunDot > 0.999f) {
-        // Bright yellow sun
-        return c_sunColor;
-    } else {
-        // Blue-ish sky, darkens towards horizon
-        float t = clampf(0.5f * (dir.y + 1.0f), 0.0f, 1.0f); 
-        // dir.y=-1 -> 0, dir.y=1 -> 1
-
-        return lerp(make_float3(0.2f, 0.4f, 0.8f),   // horizon blue
-                    make_float3(0.6f, 0.8f, 1.0f),   // zenith blue
-                    t);
-    }
-}
-
-__device__ __forceinline__ float3 sampleTexture(half2 uv, float3 pos, cudaTextureObject_t texObj)
-{
-    const half2 texStoneID = make_half2(0.0f / 16.0f, 1.0f / 16.0f);
-    const half2 texDirtID = make_half2(0.0f / 16.0f, 2.0f / 16.0f);
-    const half2 texCobbleID = make_half2(1.0f / 16.0f, 0.0f / 16.0f);
-    const half2 texIronID = make_half2(2.0f / 16.0f, 1.0f / 16.0f);
-    const half2 texDiamondID = make_half2(3.0f / 16.0f, 2.0f / 16.0f);
-    const half2 texStone2ID = make_half2(0.0f / 16.0f, 0.0f / 16.0f);
-    const half2 texSandStoneID = make_half2(11.0f / 16.0f, 0.0f / 16.0f);
-    const half2 texCoalID = make_half2(2.0f / 16.0f, 2.0f / 16.0f);
-
-    half2 whichBlock = make_half2(0.0f, 8.0f/16.0f);
-
-    const float freq = 0.05f;
-    float eval = simplex3D(floorf(pos.x) * freq, floorf(pos.y) * freq, floorf(pos.z)* freq);
-    float eval2 = simplex3D(floorf(pos.x + 121.3) * freq * 0.3f, floorf(pos.y + 1321.3) * freq * 0.3f, floorf(pos.z + 721.5)* freq * 0.3f);
-    eval = eval*0.4f + eval2 * 0.6f;
-
-    if(eval < -1.3f) whichBlock = texStoneID;
-    else if(eval < -1.2f) whichBlock = texDiamondID;
-    else if(eval < -0.7f) whichBlock = texIronID;
-    else if(eval < 0.0f) whichBlock = texStoneID;
-    else if(eval < 0.1f) whichBlock = texCoalID;
-    else if(eval < 0.4f) whichBlock = texCobbleID;
-    else if(eval < 0.8f)whichBlock = texDirtID;
-    else if(eval < 1.2f) whichBlock = texStone2ID;
-    else whichBlock = texStoneID;
-
-    uv.x = ((uv.x * hrcp(16.0))) + whichBlock.x;
-    uv.y = ((uv.y * hrcp(16.0))) + whichBlock.y;
-
-    float4 t = tex2D<float4>(texObj, __half2float(uv.y), __half2float(uv.x));
-
-    return make_float3(t.x, t.y, t.z);
-}
+__constant__ float3 c_waterColor = {0.0f, 0.1f, 0.3f};
+__constant__ float c_waterReflectivity = 0.08f;
 
 // Function which returns the color of a pixel, first casting a primary ray, and depending on this result a shadow ray/ reflections.
 __device__ float3 computeColor(float x,
@@ -77,7 +25,7 @@ __device__ float3 computeColor(float x,
                                const unsigned char* __restrict__ csdf,
                                cudaTextureObject_t texObj,
                                cudaTextureObject_t shadowTexture,
-                               const uchar4* __restrict__ GIdata) // <-- NEW PARAMETER
+                               const uchar4* __restrict__ GIdata)
 {
     // --- Primary ray direction ---
     float2 NDC = make_float2(x * 2.0f - 1.0f, y * 2.0f - 1.0f);
@@ -89,23 +37,40 @@ __device__ float3 computeColor(float x,
     float3 color = make_float3(0.0f, 0.0f, 0.0f);
 
     //If it hits water, compute the reflection!
-    if(hit.hit && hit.pos.y < 31.001f)
+if(hit.hit && hit.pos.y < 31.001f)
     {
-        // Your existing water reflection code remains unchanged
-        float nx = fbm3D(hit.pos.x, hit.pos.z, c_time, 3, 0.06f, 2.0f, 0.6f);
-        float ny = fbm3D(hit.pos.z, hit.pos.x, c_time + 112.0f, 3, 0.06f, 2.0f, 0.6f);
-        float3 reflDir = normalize(reflect(dir, hit.normal) + make_float3(nx * 0.1f, ny * 0.1f, 0.0f));
-        hitInfo reflHit = trace(hit.pos + hit.normal * 1e-3f, reflDir, distance, bits, csdf);
+        // Add wave distortion to the normal for a wavy look
+        float nx_wave = fbm3D(hit.pos.x, hit.pos.z, c_time, 3, 0.06f, 2.0f, 0.6f);
+        float ny_wave = fbm3D(hit.pos.z, hit.pos.x, c_time + 112.0f, 3, 0.06f, 2.0f, 0.6f);
+        float3 distortedNormal = normalize(hit.normal + make_float3(nx_wave * 0.1f, ny_wave * 0.1f, 0.0f));
+
+        float3 reflDir = reflect(dir, distortedNormal);
+
+        // *** PROBLEM 1 FIX: Use a large, constant view distance for the reflection ray. ***
+        hitInfo reflHit = trace(hit.pos, reflDir, 0.001f, bits, csdf);
+
+        float3 finalReflectionColor;
         if (reflHit.hit) {
+            // We hit a voxel, get its texture and shadow it
             float3 reflColor = sampleTexture(reflHit.uv, reflHit.pos, texObj);
-            hitInfo reflShadow = trace(reflHit.pos + reflHit.normal * 1e-3f, c_sunDir, (half)0.0f, bits, csdf);
+            hitInfo reflShadow = trace(reflHit.pos + reflHit.normal * 1e-3f, c_sunDir, 0.001f, bits, csdf);
             if (reflShadow.hit) {
-                reflColor = reflColor * 0.1f;
+                reflColor = reflColor * 0.1f; // Apply shadow to the reflection
             }
-            color = lerp(reflColor, make_float3(0.0f, 0.1f, 0.3f), 0.8f);
+            finalReflectionColor = reflColor;
         } else {
-            color = sampleSky(reflDir);
+            // The reflection ray hit the sky
+            finalReflectionColor = sampleSky(reflDir, c_sunDir);
         }
+
+        // *** PROBLEM 2 FIX: Calculate Fresnel effect for realistic reflectivity. ***
+        // (Using Schlick's approximation)
+        float NdotV = fmaxf(dot(hit.normal, -dir), 0.0f); // Use original normal for stable Fresnel
+        float fresnelFactor = c_waterReflectivity + (1.0f - c_waterReflectivity) * powf(1.0f - NdotV, 5.0f);
+
+        // The final color is a mix of the water's base color and the reflected scene,
+        // controlled by the Fresnel factor.
+        color = lerp(c_waterColor, finalReflectionColor, fresnelFactor);
     }
     else if (hit.hit)
     {
@@ -146,7 +111,7 @@ __device__ float3 computeColor(float x,
         // --- Final Color Composition ---
         // Combine direct and indirect lighting.
         // Also add a tiny bit of ambient light from the sky for areas that get no light.
-        float3 ambient = sampleSky(hit.normal) * 0.05f * baseColor;
+        float3 ambient = sampleSky(hit.normal, c_sunDir) * 0.05f * baseColor;
         color = directLight + indirectLight + ambient;
 #else
     color = directLight;
@@ -156,10 +121,16 @@ __device__ float3 computeColor(float x,
     else
     {
         // No hit, sample sky
-        color = sampleSky(dir);
+        color = sampleSky(dir, c_sunDir);
     }
 
-    return color;
+
+    float fogfactor = 0.0f;
+    if(hit.hit)
+        fogfactor = powf(1.0 / 2.71828, (length(hit.pos - c_camPos) * 0.0004f));
+    else fogfactor = 1.0f;
+
+    return fogfactor * color + (1.0f - fogfactor) * make_float3(0.95f, 0.95f, 1.0f);
 }
 
 // A function which returns the result of the estimated raydistance x.
@@ -247,6 +218,7 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                            const glm::vec3& up, const glm::vec3& ri) 
 {    
     // Upload camera + sun constants
+
     float currentTime = (float)(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() % 1000000)* 0.001f; 
     cudaMemcpyToSymbol(c_time, &currentTime, sizeof(float));
     cudaMemcpyToSymbol(c_camPos, &pos, sizeof(glm::vec3));
@@ -257,7 +229,7 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
     glm::vec3 sunDir = glm::normalize(glm::vec3(10.f, 5.f, -4.f));
     cudaMemcpyToSymbol(c_sunDir, &sunDir, sizeof(glm::vec3));
 
-    dim3 block(16, 8);
+    dim3 block(16, 16);
     dim3 grid(((framebuffer.getWidth() / 2) + block.x - 1) / block.x,
               ((framebuffer.getHeight() / 2) + block.y - 1) / block.y);
 
