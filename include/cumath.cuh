@@ -223,6 +223,24 @@ __host__ __device__ inline float3 operator-(const float3 &a) { return make_float
 __host__ __device__ inline bool operator==(const float3 &a, const float3 &b) { return (a.x==b.x && a.y==b.y && a.z==b.z); }
 __host__ __device__ inline bool operator!=(const float3 &a, const float3 &b) { return !(a==b); }
 
+__host__ __device__ inline float3& operator+=(float3& a, const float3& b) {
+    a.x += b.x;
+    a.y += b.y;
+    a.z += b.z;
+    return a;
+};
+__host__ __device__ inline float3& operator-=(float3& a, const float3& b) {
+    a.x -= b.x;
+    a.y -= b.y;
+    a.z -= b.z;
+    return a;
+}
+__host__ __device__ inline float3& operator*=(float3& a, float s) {
+    a.x *= s;
+    a.y *= s;
+    a.z *= s;
+    return a;
+}
 // -------------------
 // Vector functions
 // -------------------

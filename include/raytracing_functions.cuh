@@ -5,6 +5,12 @@
 #include "cuda_fp16.h"
 #include "CoarseArray.cuh"
 
+
+#define NUM_CONES 6
+#define CONE_ANGLE 0.4f       // Radians, controls the spread of the cone
+#define GI_MAX_DISTANCE 64.0f // How far a cone will trace
+#define GI_STEP_SIZE 1.5f     // Initial step size for cone marching
+
 struct hitInfo 
 {
     float3 pos;
@@ -67,3 +73,8 @@ __device__ hitInfo trace(float3 camPos, float3 camDir, half distance,
 
 __device__ float3 traceCone(float3 pos, float3 dir, const float4* __restrict__ radianceVoxels,
                            const unsigned char* __restrict__ csdf);
+
+__device__ float3 traceCone(float3 pos,
+                            float3 dir,
+                            const uchar4* __restrict__ GIdata,
+                            const unsigned char* __restrict__ csdf);

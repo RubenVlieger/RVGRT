@@ -9,6 +9,8 @@
 #include "TerrainGeneration.cuh"
 #include <chrono>
 
+#define INCLUDEGI
+
 __constant__ float3 c_sunDir;
 __constant__ float c_time;
 __constant__ float3 c_camPos, c_camFo, c_camUp, c_camRi;
@@ -74,8 +76,8 @@ __device__ float3 computeColor(float x,
                                const uint32_t* __restrict__ bits,
                                const unsigned char* __restrict__ csdf,
                                cudaTextureObject_t texObj,
-                               cudaTextureObject_t shadowTexture, 
-                               const uchar4* __restrict__ GIdata) 
+                               cudaTextureObject_t shadowTexture,
+                               const uchar4* __restrict__ GIdata) // <-- NEW PARAMETER
 {
     // --- Primary ray direction ---
     float2 NDC = make_float2(x * 2.0f - 1.0f, y * 2.0f - 1.0f);
@@ -89,38 +91,73 @@ __device__ float3 computeColor(float x,
     //If it hits water, compute the reflection!
     if(hit.hit && hit.pos.y < 31.001f)
     {
-        float nx = fbm3D(hit.pos.x, hit.pos.z, c_time , 3, 0.06f, 2.0f, 0.6f);//simplex3D(hit.pos.x * 0.1f, hit.pos.z * 0.1f, c_time * 0.3f);
+        // Your existing water reflection code remains unchanged
+        float nx = fbm3D(hit.pos.x, hit.pos.z, c_time, 3, 0.06f, 2.0f, 0.6f);
         float ny = fbm3D(hit.pos.z, hit.pos.x, c_time + 112.0f, 3, 0.06f, 2.0f, 0.6f);
-
-        float3 reflDir = normalize(reflect(dir, hit.normal) + make_float3(nx*0.1f, ny*0.1f, 0.0f));
+        float3 reflDir = normalize(reflect(dir, hit.normal) + make_float3(nx * 0.1f, ny * 0.1f, 0.0f));
         hitInfo reflHit = trace(hit.pos + hit.normal * 1e-3f, reflDir, distance, bits, csdf);
         if (reflHit.hit) {
-            float reflDiff = fmaxf(dot(reflHit.normal, c_sunDir), 0.0f);
             float3 reflColor = sampleTexture(reflHit.uv, reflHit.pos, texObj);
-
             hitInfo reflShadow = trace(reflHit.pos + reflHit.normal * 1e-3f, c_sunDir, (half)0.0f, bits, csdf);
             if (reflShadow.hit) {
-                reflColor = reflColor * 0.1f;  // darker reflection if in shadow
+                reflColor = reflColor * 0.1f;
             }
-            // Add reflection (scaled to avoid over-brightness)
             color = lerp(reflColor, make_float3(0.0f, 0.1f, 0.3f), 0.8f);
-        }
-        else 
+        } else {
             color = sampleSky(reflDir);
+        }
     }
+    else if (hit.hit)
+    {
+        // --- Get surface properties ---
+        float3 baseColor = sampleTexture(hit.uv, hit.pos, texObj);
 
-    else if (hit.hit) {
         // --- Direct lighting (Lambertian diffuse) ---
         float diffuse = fmaxf(dot(hit.normal, c_sunDir), 0.0f);
-        float3 baseColor = sampleTexture(hit.uv, hit.pos, texObj);
-        baseColor = baseColor * diffuse;
-
-        // --- Shadow ray --- // from lower resolution as an optimization step.
         float shadow = tex2D<float>(shadowTexture, x, y);
+        float3 directLight = baseColor * diffuse * shadow;
 
-        color = color + baseColor * shadow;
+        // ==================================================
+        // --- GLOBAL ILLUMINATION VIA VOXEL CONE TRACING ---
+        // ==================================================
+#ifdef INCLUDEGI
+        float3 indirectLight = make_float3(0.0f, 0.0f, 0.0f);
+
+        // Define cone directions in a hemisphere around the surface normal.
+        float3 up = hit.normal;
+        float3 right = normalize(cross(up, make_float3(0.577f, 0.577f, 0.577f))); // Arbitrary non-parallel vector
+        float3 forward = normalize(cross(up, right));
+
+        // Trace cones in the hemisphere
+        indirectLight += traceCone(hit.pos, up, GIdata, csdf);
+        indirectLight += traceCone(hit.pos, lerp(up, right, 0.5f), GIdata, csdf);
+        indirectLight += traceCone(hit.pos, lerp(up, -right, 0.5f), GIdata, csdf);
+        indirectLight += traceCone(hit.pos, lerp(up, forward, 0.5f), GIdata, csdf);
+        indirectLight += traceCone(hit.pos, lerp(up, -forward, 0.5f), GIdata, csdf);
+        // Add one more cone for a total of 6
+        indirectLight += traceCone(hit.pos, lerp(up, lerp(right, forward, 0.5f), 0.5f), GIdata, csdf);
+
+
+        // Average the result and modulate by the surface color (albedo)
+        // The GI_STRENGTH is an artistic control to balance GI
+        const float GI_STRENGTH = 0.6f;
+        indirectLight = (indirectLight / (float)NUM_CONES) * baseColor * GI_STRENGTH;
+
+        // --- Final Color Composition ---
+        // Combine direct and indirect lighting.
+        // Also add a tiny bit of ambient light from the sky for areas that get no light.
+        float3 ambient = sampleSky(hit.normal) * 0.05f * baseColor;
+        color = directLight + indirectLight + ambient;
+#else
+    color = directLight;
+#endif
+
     }
-    else color = sampleSky(dir);
+    else
+    {
+        // No hit, sample sky
+        color = sampleSky(dir);
+    }
 
     return color;
 }
