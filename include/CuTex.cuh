@@ -46,6 +46,9 @@ public:
     size_t getWidth() const { return width; }
     size_t getHeight() const { return height; }
 
+    size_t getPitchBytes() const { return pitchBytes; }
+    int getPitchElems() const { return static_cast<int>(pitchBytes / sizeof(float)); }
+
 
     // Test whether the texture was successfully created.
     bool valid() const { return tex_obj != 0 && dev_ptr != nullptr; }
@@ -54,4 +57,5 @@ private:
     cudaTextureObject_t tex_obj = 0;
     float* dev_ptr = nullptr;
     size_t width = 0, height = 0;
+    size_t pitchBytes = 0;
 };

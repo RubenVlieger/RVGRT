@@ -4,8 +4,8 @@ AdditionalCompilerOptions=
 AdditionalDependencies=
 AdditionalDeps=
 AdditionalLibraryDirectories=
-AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native
-AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native
+AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr --ptxas-options=-allow-expensive-optimizations=true -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native
+AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr --ptxas-options=-allow-expensive-optimizations=true -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native
 CodeGeneration=
 CodeGeneration=
 CompileOut=Programma.dir\Release\Framebuffer.obj

@@ -24,7 +24,7 @@ Character::Character()
     pitch = -std::numbers::pi - 0.3f;
     direction = calcDirfromSphere(pitch, yaw);
 
-    speed = 10.0f;
+    speed = 30.0f;
     speedDropoff = 0.95f;
     jumpSpeed = -30.0f;
     sensitivity = 0.015f;

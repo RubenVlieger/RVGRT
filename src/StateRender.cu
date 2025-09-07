@@ -207,7 +207,8 @@ __global__ void distApproximationKernel(half* distBuffer,
                                   int height, 
                                   const uint32_t* __restrict__ bits,
                                   const unsigned char* __restrict__ csdf,
-                                  float* shadowBuffer) 
+                                  float* shadowBuffer,
+                                  int shadowPitchElems) 
 {
     uint64_t ix = blockIdx.x * blockDim.x + threadIdx.x;
     uint64_t iy = blockIdx.y * blockDim.y + threadIdx.y;
@@ -228,7 +229,7 @@ __global__ void distApproximationKernel(half* distBuffer,
         hitInfo shadow = trace(hit.pos + hit.normal * 1e-1f, c_sunDir, (half)0.0f, bits, csdf);
         shadowValue = shadow.hit ? 0.2f : 1.0f;
     }
-    shadowBuffer[ix + iy * width] = shadowValue; // w/ 11ms
+    shadowBuffer[ix + iy * shadowPitchElems] = shadowValue; // w/ 11ms
     distBuffer[ix + iy * width] = dist;
 }
 
@@ -247,7 +248,7 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
     glm::vec3 sunDir = glm::normalize(glm::vec3(10.f, 5.f, -4.f));
     cudaMemcpyToSymbol(c_sunDir, &sunDir, sizeof(glm::vec3));
 
-    dim3 block(16, 16);
+    dim3 block(16, 8);
     dim3 grid(((framebuffer.getWidth() / 2) + block.x - 1) / block.x,
               ((framebuffer.getHeight() / 2) + block.y - 1) / block.y);
 
@@ -257,7 +258,8 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                             framebuffer.getHeight() / 2,
                             cArray.getPtr(), 
                             csdf.getPtr(),
-                            shadowTex.getDevPtr()
+                            shadowTex.getDevPtr(),
+                            shadowTex.getPitchElems()
     );
     
     CUDA_CHECK(cudaDeviceSynchronize());

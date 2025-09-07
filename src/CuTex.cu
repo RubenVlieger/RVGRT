@@ -23,11 +23,14 @@ CuTex::CuTex(CuTex&& other) noexcept
     dev_ptr = other.dev_ptr;
     width = other.width;
     height = other.height;
+    pitchBytes = other.pitchBytes;
+
 
     // leave other in a safe-to-destruct state
     other.tex_obj = 0;
     other.dev_ptr = nullptr;
     other.width = other.height = 0;
+    other.pitchBytes = 0;
 }
 
 // Move assignment
@@ -43,11 +46,14 @@ CuTex& CuTex::operator=(CuTex&& other) noexcept
         dev_ptr = other.dev_ptr;
         width = other.width;
         height = other.height;
+        pitchBytes = other.pitchBytes;
+
 
         // null out other
         other.tex_obj = 0;
         other.dev_ptr = nullptr;
         other.width = other.height = 0;
+        other.pitchBytes = 0;
     }
     return *this;
 }
@@ -79,6 +85,7 @@ CuTex::CuTex(int _width, int _height,
         dev_ptr = nullptr;
         return;
     }
+    pitchBytes = pitch;
 
     // Zero the memory
     err = cudaMemset2D(dev_ptr, pitch, 0, width * sizeof(float), height);

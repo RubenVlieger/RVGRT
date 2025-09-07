@@ -87,6 +87,10 @@
 					"fragment" : "--expt-relaxed-constexpr"
 				},
 				{
+					"backtrace" : 3,
+					"fragment" : "--ptxas-options=-allow-expensive-optimizations=true"
+				},
+				{
 					"fragment" : "-std=c++17"
 				}
 			],

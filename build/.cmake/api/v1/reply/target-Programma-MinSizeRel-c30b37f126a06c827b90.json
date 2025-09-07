@@ -2,10 +2,10 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "RelWithDebInfo/Programma.exe"
+			"path" : "MinSizeRel/Programma.exe"
 		},
 		{
-			"path" : "RelWithDebInfo/Programma.pdb"
+			"path" : "MinSizeRel/Programma.pdb"
 		}
 	],
 	"backtrace" : 1,
@@ -72,7 +72,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-D_WINDOWS -Xcompiler=\"/W3 /GR /EHsc\" -Xcompiler=\"-MD -Zi -O2 -Ob1\" -DNDEBUG -arch=native"
+					"fragment" : "-D_WINDOWS -Xcompiler=\"/W3 /GR /EHsc\" -Xcompiler=\"-MD -O1 -Ob1\" -DNDEBUG -arch=native"
 				},
 				{
 					"backtrace" : 3,
@@ -85,6 +85,10 @@
 				{
 					"backtrace" : 3,
 					"fragment" : "--expt-relaxed-constexpr"
+				},
+				{
+					"backtrace" : 3,
+					"fragment" : "--ptxas-options=-allow-expensive-optimizations=true"
 				},
 				{
 					"fragment" : "-std=c++17"
@@ -132,7 +136,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /Zi /O2 /Ob1 /DNDEBUG"
+					"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /O1 /Ob1 /DNDEBUG"
 				},
 				{
 					"fragment" : "-std:c++20"
@@ -186,11 +190,11 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /Zi /O2 /Ob1 /DNDEBUG",
+				"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /O1 /Ob1 /DNDEBUG",
 				"role" : "flags"
 			},
 			{
-				"fragment" : "/machine:x64 /NODEFAULTLIB:LIBCMT /debug /INCREMENTAL /subsystem:windows",
+				"fragment" : "/machine:x64 /NODEFAULTLIB:LIBCMT /INCREMENTAL:NO /subsystem:windows",
 				"role" : "flags"
 			},
 			{

@@ -36,8 +36,8 @@ public:
 
     // 3D world
     Character character = Character();
-    static constexpr int dispHEIGHT = 1200*2;
-    static constexpr int dispWIDTH = 1920*2;
+    static constexpr int dispHEIGHT = 1200;
+    static constexpr int dispWIDTH = 1920;
 
     void Create();
 
