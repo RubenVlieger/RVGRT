@@ -7,7 +7,7 @@
 #include <CArray.cuh>
 #include "Timer.hpp"
 
-#include "CSDF.cuh"
+#include "CoarseArray.cuh"
 #include "CuTex.cuh"
 
 State::State() 
@@ -34,8 +34,11 @@ void State::Create()
 
     render->bitsArray = new uint32_t[BYTESIZE / 4];
 
-    render->csdf = CSDF();
-    render->csdf.Allocate();
+    render->csdf = CoarseArray();
+    render->csdf.AllocateSDF();
+
+    render->GIdata = CoarseArray();
+    render->GIdata.AllocateGI();
 
     render->shadowTex = CuTex(dispWIDTH/2, dispHEIGHT/2, cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat),cudaAddressModeWrap ,cudaFilterModeLinear);
 
@@ -47,6 +50,11 @@ void State::Create()
     t2.s();
 
     Timer t3("BUILDING CSDF");
-    render->csdf.Generate(render->cArray);
+    render->csdf.GenerateSDF(render->cArray);
     t3.s();
+
+
+    Timer t4("Building GI");
+    render->GIdata.GenerateGIdata(render->cArray, render->csdf);
+    t4.s();
 }

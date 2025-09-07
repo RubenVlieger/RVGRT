@@ -18,7 +18,7 @@
     <CudaCompile Include="..\src\CArray.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
-    <CudaCompile Include="..\src\CSDF.cu">
+    <CudaCompile Include="..\src\CoarseArray.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
     <CudaCompile Include="..\src\CuTex.cu">
@@ -34,6 +34,9 @@
       <Filter>Source Files</Filter>
     </CudaCompile>
     <CudaCompile Include="..\src\Texturepack.cu">
+      <Filter>Source Files</Filter>
+    </CudaCompile>
+    <CudaCompile Include="..\src\raytracing_functions.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
   </ItemGroup>

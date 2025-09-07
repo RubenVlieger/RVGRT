@@ -1,68 +1,10 @@
 #pragma once
-#include "StateRender.cuh"
-#include "CArray.cuh"
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include "cumath.cuh"
-#include "csdf.cuh"
 #include "cuda_fp16.h"
-
-
-struct hitInfo 
-{
-    float3 pos;
-    float3 normal;
-    half2 uv;
-    bool hit;
-    int its;
-};
-
-__device__ __forceinline__ bool IsSolid(int3 p, const uint32_t* __restrict__ bits) {
-    uint64_t index = toIndex(p);
-    return ((bits[index >> 5] >> (index & 31)) & 1);
-}
-
-__device__ __forceinline__ int toCoarseIndex(float3 pos) {
-    int cx = floorf(pos.x) / COARSENESS;
-    int cy = floorf(pos.y) / COARSENESS;
-    int cz = floorf(pos.z) / COARSENESS;
-    return cz * C_SIZEX * C_SIZEY + cy * C_SIZEX + cx;
-}
-
-__device__ __forceinline__ float getDistance(float3 pos, const unsigned char* __restrict__ csdf)
-{
-    int cx = (int)(floorf(pos.x) * (1.0f / COARSENESS));
-    int cy = (int)(floorf(pos.y) * (1.0f / COARSENESS));
-    int cz = (int)(floorf(pos.z) * (1.0f / COARSENESS));
-
-    cx = min(cx, (int)C_SIZEX - 1);
-    cy = min(cy, (int)C_SIZEY - 1);
-    cz = min(cz, (int)C_SIZEZ - 1);
-    cx = max(cx, 0);
-    cy = max(cy, 0);
-    cz = max(cz, 0);
-    int cidx = cz * C_SIZEX * C_SIZEY + cy * C_SIZEX + cx;
-
-    unsigned char dist = csdf[cidx];
-    return (float)dist;
-}
-__device__ __forceinline__ unsigned char getDistance(int3 pos, const unsigned char* __restrict__ csdf)
-{
-    int cx = pos.x / COARSENESS;
-    int cy = pos.y / COARSENESS;
-    int cz = pos.z / COARSENESS;
-
-    cx = min(cx, (int)C_SIZEX - 1);
-    cy = min(cy, (int)C_SIZEY - 1);
-    cz = min(cz, (int)C_SIZEZ - 1);
-    cx = max(cx, 0);
-    cy = max(cy, 0);
-    cz = max(cz, 0);
-    
-    int cidx = cz * C_SIZEX * C_SIZEY + cy * C_SIZEX + cx;
-    return csdf[cidx];
-}
-
+#include "CoarseArray.cuh"
+#include "raytracing_functions.cuh"
 
 
 __device__ float3 approximateCSDF(float3 pos, float3 dir, const unsigned char* __restrict__ csdf)
@@ -136,7 +78,7 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
                     float3 posOnRay = currentPos + t * camDir;
 
                     // Jump in rendered space along camDir
-                    currentPos = posOnRay + camDir * ((float)dist * COARSENESS);
+                    currentPos = posOnRay + camDir * ((float)dist * COARSENESSSDF);
                     jumped = true;
                     break; // restart DDA from new advanced position
                 }
@@ -201,4 +143,103 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
         if (!HI.hit) break;
     }
     return HI;
+}
+
+
+
+/**
+ * This file contains the modified computeColor function and a new helper function 
+ * traceCone, which implements Voxel Cone Tracing for global illumination.
+ * * PREREQUISITE:
+ * This code assumes the existence of a 3D Radiance Voxel Grid named 'radianceVoxels'.
+ * This grid must be populated in a prior compute pass (the "Light Injection" pass)
+ * where direct lighting is calculated for each emissive voxel in the scene.
+ * It should have the same coarse dimensions as your `csdf`.
+ */
+
+// --- New VCT Constants (tweak these for performance vs. quality) ---
+#define NUM_CONES 6
+#define CONE_ANGLE 0.4f // Radians, controls the spread of the cone
+#define GI_MAX_DISTANCE 64.0f // How far a cone will trace
+#define GI_STEP_SIZE 1.5f     // Initial step size for cone marching
+
+// --- Forward declaration for the new radiance grid parameter ---
+// This would likely be a cudaTextureObject_t for a 3D texture in a real implementation
+// For simplicity, we'll pass it as a float4 pointer.
+// The float4 stores {R, G, B, Opacity}
+struct float4;
+
+
+// =================================================================================
+// NEW HELPER FUNCTION: traceCone
+// =================================================================================
+/**
+ * @brief Traces a single cone through the radiance and distance fields to gather indirect light.
+ * * @param pos The starting position of the cone trace (i.e., the primary hit point).
+ * @param dir The direction of the cone.
+ * @param radianceVoxels The pre-computed 3D grid of scene radiance.
+ * @param csdf The coarse signed distance field for occlusion checks.
+ * @return float3 The accumulated indirect light color.
+ */
+__device__ float3 traceCone(float3 pos,
+                            float3 dir,
+                            const uchar4* __restrict__ radianceVoxels,
+                            const unsigned char* __restrict__ csdf)
+{
+    float3 accumulatedColor = make_float3(0.0f, 0.0f, 0.0f);
+    float accumulatedAlpha = 0.0f; // Represents how occluded the cone is.
+    
+    float currentDist = GI_STEP_SIZE * 2.0f; // Start slightly away from the surface to avoid self-occlusion
+    float3 currentPos = pos + dir * currentDist;
+
+    for (int i = 0; i < 20; ++i) // Limit steps to avoid infinite loops
+    {
+        // Stop if the cone is fully occluded or has traveled too far
+        if (accumulatedAlpha > 0.99f || currentDist > GI_MAX_DISTANCE) {
+            break;
+        }
+
+        // 1. Check for occlusion using your existing CSDF
+        float sceneDist = getDistance(currentPos, csdf) * COARSENESSGI;
+        
+        // 2. Calculate the cone's current width (radius)
+        float coneWidth = currentDist * tanf(CONE_ANGLE);
+
+        // 3. If the nearest surface is closer than the cone's width, it's an occlusion
+        if (sceneDist < coneWidth)
+        {
+            // For simplicity, we stop the cone entirely.
+            // A more advanced technique would partially occlude based on how much `sceneDist` covers `coneWidth`.
+            accumulatedAlpha = 1.0f;
+            continue; // Go to the next iteration, which will break the loop
+        }
+
+        // 4. Sample the radiance grid if we're not occluded
+        int cx = (int)(floorf(currentPos.x) * (1.0f / COARSENESSGI));
+        int cy = (int)(floorf(currentPos.y) * (1.0f / COARSENESSGI));
+        int cz = (int)(floorf(currentPos.z) * (1.0f / COARSENESSGI));
+        
+        // Bounds check for the coarse grid
+        if (cx >= 0 && cx < GI_SIZEX && cy >= 0 && cy < GI_SIZEY && cz >= 0 && cz < GI_SIZEZ)
+        {
+            int cidx = cz * GI_SIZEX * GI_SIZEY + cy * GI_SIZEX + cx;
+            uchar4 voxelSample =  radianceVoxels[cidx];
+            
+            float3 voxelColor = make_float3(voxelSample.x, voxelSample.y, voxelSample.z);
+            float voxelAlpha = voxelSample.w;
+
+            // Blend the sampled color into our accumulated color
+            // The amount of light we add is determined by the voxel's alpha and how much "space" is left in our cone
+            float blendFactor = (1.0f - accumulatedAlpha) * voxelAlpha;
+            accumulatedColor = accumulatedColor + voxelColor * blendFactor;
+            accumulatedAlpha += blendFactor;
+        }
+
+        // 5. March the cone forward
+        // The step size should be proportional to the cone's current width to avoid missing details
+        currentDist += max(GI_STEP_SIZE, coneWidth * 0.5f);
+        currentPos = pos + dir * currentDist;
+    }
+
+    return accumulatedColor;
 }

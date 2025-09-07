@@ -3,16 +3,15 @@
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
 #include "cumath.cuh"
-#include "csdf.cuh"
+#include "CoarseArray.cuh"
 #include "cuda_fp16.h"
-#include "RayTracing.cuh"
+#include "raytracing_functions.cuh"
 #include "TerrainGeneration.cuh"
 #include <chrono>
+
 __constant__ float3 c_sunDir;
 __constant__ float c_time;
 __constant__ float3 c_camPos, c_camFo, c_camUp, c_camRi;
-
-
 
 __device__ __forceinline__ float3 sampleSky(float3 dir)
 {
@@ -20,7 +19,7 @@ __device__ __forceinline__ float3 sampleSky(float3 dir)
     float sunDot = dot(dir, c_sunDir);
     if (sunDot > 0.999f) {
         // Bright yellow sun
-        return make_float3(1.0f, 0.9f, 0.2f) * 10.0f;
+        return c_sunColor;
     } else {
         // Blue-ish sky, darkens towards horizon
         float t = clampf(0.5f * (dir.y + 1.0f), 0.0f, 1.0f); 
@@ -75,7 +74,8 @@ __device__ float3 computeColor(float x,
                                const uint32_t* __restrict__ bits,
                                const unsigned char* __restrict__ csdf,
                                cudaTextureObject_t texObj,
-                               cudaTextureObject_t shadowTexture) 
+                               cudaTextureObject_t shadowTexture, 
+                               const uchar4* __restrict__ GIdata) 
 {
     // --- Primary ray direction ---
     float2 NDC = make_float2(x * 2.0f - 1.0f, y * 2.0f - 1.0f);
@@ -86,6 +86,7 @@ __device__ float3 computeColor(float x,
 
     float3 color = make_float3(0.0f, 0.0f, 0.0f);
 
+    //If it hits water, compute the reflection!
     if(hit.hit && hit.pos.y < 31.001f)
     {
         float nx = fbm3D(hit.pos.x, hit.pos.z, c_time , 3, 0.06f, 2.0f, 0.6f);//simplex3D(hit.pos.x * 0.1f, hit.pos.z * 0.1f, c_time * 0.3f);
@@ -114,42 +115,12 @@ __device__ float3 computeColor(float x,
         float3 baseColor = sampleTexture(hit.uv, hit.pos, texObj);
         baseColor = baseColor * diffuse;
 
-        // --- Shadow ray ---
+        // --- Shadow ray --- // from lower resolution as an optimization step.
         float shadow = tex2D<float>(shadowTexture, x, y);
 
-        // hitInfo shadow = trace(hit.pos + hit.normal * 1e-1f, c_sunDir, (half)0.0f, bits, csdf);
-        // if (shadow.hit) {
-        //     baseColor = baseColor * 0.2f;  // Darker in shadow
-        // }
         color = color + baseColor * shadow;
-
-        // --- Reflection bounce ---
-
-        //float3 reflDir = normalize(reflect(dir, hit.normal));
-        // hitInfo reflHit = trace(hit.pos + hit.normal * 1e-3f, reflDir, distance, bits, csdf);
-        // if (reflHit.hit) {
-        //     // Simple reflection shading
-        //     float reflDiff = fmaxf(dot(reflHit.normal, c_sunDir), 0.0f);
-        //     float3 reflColor = sampleTexture(reflHit.uv, reflHit.pos, texObj) * diffuse;
-
-        //     // // Shadow check for reflection
-        //     hitInfo reflShadow = trace(reflHit.pos + reflHit.normal * 1e-3f, c_sunDir, (half)0.0f, bits, csdf);
-        //     if (reflShadow.hit) {
-        //         reflColor = reflColor * 0.1f;  // darker reflection if in shadow
-        //     }
-        //     // Add reflection (scaled to avoid over-brightness)
-        //     color = color * 0.9 + 0.1f * reflColor;
-        // }
-        // else 
-        //     color = color * 0.9 + 0.1f * sampleSky(reflDir);
-        
     }
     else color = sampleSky(dir);
-    
-    // --- Example: force white debug marker if too many iterations ---
-    // if (hit.its > 100) {
-    //     color.x = 1.0f;
-    // }
 
     return color;
 }
@@ -179,6 +150,7 @@ __global__ void renderKernel(uchar4* framebuffer,
                              const uint32_t* __restrict__ bits,
                              const unsigned char* __restrict__ csdf,
                              const half* __restrict__ distBuffer,
+                             uchar4* __restrict__ GIdata,
                              cudaTextureObject_t texObj,
                              cudaTextureObject_t shadowTexture) 
 {
@@ -191,7 +163,7 @@ __global__ void renderKernel(uchar4* framebuffer,
 
     half dist = approximateDistance(ix, iy, width / 2, height/2, distBuffer) - (half)2.0f;
 
-    float3 col = computeColor(x, y, dist, bits, csdf, texObj, shadowTexture);
+    float3 col = computeColor(x, y, dist, bits, csdf, texObj, shadowTexture, GIdata);
 
     col = clamp(col, make_float3(0.0f, 0.0f, 0.0f), make_float3(1.0f, 1.0f, 1.0f));
 
@@ -221,7 +193,7 @@ __global__ void distApproximationKernel(half* distBuffer,
     float3 dir = normalize(c_camFo + NDC.x * c_camRi + NDC.y * c_camUp);
 
     hitInfo hit = trace(c_camPos, dir, (half)0.0f, bits, csdf);
-    half dist = hit.hit ? (half)distance(hit.pos, c_camPos) : (half)MAX_DIST;
+    half dist = hit.hit ? (half)distance(hit.pos, c_camPos) : (half)SDF_MAX_DIST;
 
     float shadowValue = 1.0f;
     if(hit.hit)
@@ -276,6 +248,7 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                               cArray.getPtr(), 
                               csdf.getPtr(),
                               (half*)distBuffer.getPtr(),
+                              (uchar4*)GIdata.getPtr(),
                               texturepack.texObject(),
                               shadowTex.getTexObj()
     );

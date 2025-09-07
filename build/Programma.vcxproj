@@ -400,9 +400,9 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemGroup>
   <ItemGroup>
     <CudaCompile Include="..\src\CArray.cu" />
-    <CudaCompile Include="..\src\CSDF.cu" />
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\Camera.cpp" />
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\Character.cpp" />
+    <CudaCompile Include="..\src\CoarseArray.cu" />
     <CudaCompile Include="..\src\CuTex.cu" />
     <CudaCompile Include="..\src\Framebuffer.cu" />
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\State.cpp" />
@@ -410,6 +410,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <CudaCompile Include="..\src\TerrainGeneration.cu" />
     <CudaCompile Include="..\src\Texturepack.cu" />
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\main.cpp" />
+    <CudaCompile Include="..\src\raytracing_functions.cu" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\build\ZERO_CHECK.vcxproj">

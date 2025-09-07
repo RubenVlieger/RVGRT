@@ -280,7 +280,7 @@ __device__ __forceinline__ float fbm2D(float x, float z, int octaves, float freq
 }
 
 
-
+// +- 14 gigaSimplex/second
 __device__ __forceinline__ float Evaluate( float x, float y, float z) {
 
     const float GROUND_LEVEL = 10.0f;              // Base height of the terrain surface before noise is added. (World height is 512).

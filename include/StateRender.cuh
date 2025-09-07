@@ -3,7 +3,7 @@
 #include <glm/glm.hpp>
 #include "CArray.cuh"
 #include "Framebuffer.cuh"
-#include "CSDF.cuh"
+#include "CoarseArray.cuh"
 #include "CuTex.cuh"
 
 #include "Texturepack.cuh"
@@ -21,7 +21,8 @@ public:
     CArray distBuffer;
     Texturepack texturepack;
     CuTex shadowTex;
-    CSDF csdf;
+    CoarseArray csdf;
+    CoarseArray GIdata;
 
     void drawCUDA(const glm::vec3& pos,
                   const glm::vec3& fo,
