@@ -16,6 +16,7 @@ file(GLOB NEW_GLOB LIST_DIRECTORIES true "C:/Users/RC1ki/OneDrive - Radboud Univ
 set(OLD_GLOB
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/Camera.cpp"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/Character.cpp"
+  "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/FSR1.cpp"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/State.cpp"
   "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/src/main.cpp"
   )

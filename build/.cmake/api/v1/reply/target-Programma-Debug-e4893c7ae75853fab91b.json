@@ -2,10 +2,10 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "MinSizeRel/Programma.exe"
+			"path" : "Debug/Programma.exe"
 		},
 		{
-			"path" : "MinSizeRel/Programma.pdb"
+			"path" : "Debug/Programma.pdb"
 		}
 	],
 	"backtrace" : 1,
@@ -79,7 +79,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-D_WINDOWS -Xcompiler=\"/W3 /GR /EHsc\" -Xcompiler=\"-MD -O1 -Ob1\" -DNDEBUG -arch=native"
+					"fragment" : "-D_WINDOWS -Xcompiler=\"/W3 /GR /EHsc\" -Xcompiler=\"-MDd -Zi -Ob0 -Od /RTC1\" -arch=native"
 				},
 				{
 					"backtrace" : 3,
@@ -137,18 +137,18 @@
 				0,
 				3,
 				4,
-				5,
-				7,
+				6,
 				8,
 				9,
-				11
+				10,
+				12
 			]
 		},
 		{
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /O1 /Ob1 /DNDEBUG"
+					"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MDd /Zi /Ob0 /Od /RTC1"
 				},
 				{
 					"fragment" : "-std:c++20"
@@ -189,8 +189,9 @@
 			[
 				1,
 				2,
-				6,
-				10
+				5,
+				7,
+				11
 			]
 		}
 	],
@@ -206,11 +207,11 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /O1 /Ob1 /DNDEBUG",
+				"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MDd /Zi /Ob0 /Od /RTC1",
 				"role" : "flags"
 			},
 			{
-				"fragment" : "/machine:x64 /NODEFAULTLIB:LIBCMT /INCREMENTAL:NO /subsystem:windows",
+				"fragment" : "/machine:x64 /NODEFAULTLIB:LIBCMT /debug /INCREMENTAL /subsystem:windows",
 				"role" : "flags"
 			},
 			{
@@ -262,7 +263,8 @@
 				8,
 				9,
 				10,
-				11
+				11,
+				12
 			]
 		}
 	],
@@ -296,6 +298,12 @@
 			"backtrace" : 1,
 			"compileGroupIndex" : 0,
 			"path" : "src/CuTex.cu",
+			"sourceGroupIndex" : 0
+		},
+		{
+			"backtrace" : 1,
+			"compileGroupIndex" : 1,
+			"path" : "src/FSR1.cpp",
 			"sourceGroupIndex" : 0
 		},
 		{

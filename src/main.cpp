@@ -69,23 +69,18 @@ void MoveToNextFrame()
 
 // This is the complete, corrected renderLoop function.
 
-void renderLoop() 
+void renderLoop()
 {
     using clock = std::chrono::steady_clock;
     auto lastTime = clock::now();
     double frameTimeMs = 16.6f;
-    while (running) 
+    while (running)
     {
-        // Get the command allocator for the current frame.
         ID3D12CommandAllocator* currentCommandAllocator = State::state.commandAllocators[State::state.frameIndex].Get();
-        
-        // Reset the allocator and the command list.
         currentCommandAllocator->Reset();
         State::state.commandList->Reset(currentCommandAllocator, nullptr);
 
-        // --- Perform CUDA Rendering ---
-        // This section remains unchanged.
-        //State::state.render->GIdata.UpdateGIData(State::state.render->cArray, State::state.render->csdf, State::state.render->texturepack);
+        // --- Perform CUDA Rendering at Low Resolution ---
         State::state.character.Update();
         State::state.deltaTime = frameTimeMs / 1000;
         State::state.render->drawCUDA(
@@ -95,66 +90,40 @@ void renderLoop()
             State::state.character.camera.right
         );
 
+        // --- D3D12 Upscaling and Presentation ---
         ID3D12Resource* cudaTexture = State::state.render->framebuffer.getD3DTexture();
+        ID3D12Resource* fsrOutputTexture = State::state.fsr1.GetOutputTexture();
+        ID3D12Resource* backBuffer = State::state.renderTargets[State::state.frameIndex].Get();
 
-        // --- Record D3D12 Commands ---
-        
-        // 1. Transition the CUDA texture to be a copy source
-        D3D12_RESOURCE_BARRIER barrier_common_to_copy_src = {};
-        barrier_common_to_copy_src.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier_common_to_copy_src.Transition.pResource = cudaTexture;
-        barrier_common_to_copy_src.Transition.StateBefore = D3D12_RESOURCE_STATE_COMMON;
-        barrier_common_to_copy_src.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
-        barrier_common_to_copy_src.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        State::state.commandList->ResourceBarrier(1, &barrier_common_to_copy_src);
+        // 1. PRE-UPSCALE BARRIERS: Prepare textures for the compute shader
+        D3D12_RESOURCE_BARRIER preFsrBarriers[2];
+        preFsrBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(cudaTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE);
+        preFsrBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(fsrOutputTexture, D3D12_RESOURCE_STATE_COMMON, D3D12_RESOURCE_STATE_UNORDERED_ACCESS);
+        State::state.commandList->ResourceBarrier(2, preFsrBarriers);
 
-        // 2. Transition the back buffer to be a copy destination
-        D3D12_RESOURCE_BARRIER barrier_pres_to_copy_dest = {};
-        barrier_pres_to_copy_dest.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier_pres_to_copy_dest.Transition.pResource = State::state.renderTargets[State::state.frameIndex].Get();
-        barrier_pres_to_copy_dest.Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
-        barrier_pres_to_copy_dest.Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
-        barrier_pres_to_copy_dest.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        State::state.commandList->ResourceBarrier(1, &barrier_pres_to_copy_dest);
+        // 2. DISPATCH FSR 1.0 UPSCALE
+        State::state.fsr1.Dispatch(State::state.commandList.Get(), cudaTexture);
 
-        // 3. Perform the robust texture-to-texture copy
-        // THIS IS THE CORRECTED SECTION
-        {
-            // Describe the destination (the back buffer)
-            D3D12_TEXTURE_COPY_LOCATION dest = {};
-            dest.pResource = State::state.renderTargets[State::state.frameIndex].Get();
-            dest.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            dest.SubresourceIndex = 0;
+        // 3. UAV BARRIER: Ensure the compute shader finishes writing before we read from its output
+        D3D12_RESOURCE_BARRIER uavBarrier = CD3DX12_RESOURCE_BARRIER::UAV(fsrOutputTexture);
+        State::state.commandList->ResourceBarrier(1, &uavBarrier);
 
-            // Describe the source (your row-major CUDA texture)
-            D3D12_TEXTURE_COPY_LOCATION src = {};
-            src.pResource = cudaTexture;
-            src.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
-            src.SubresourceIndex = 0;
+        // 4. PRE-COPY BARRIERS: Prepare FSR output for copying and back buffer for receiving the copy
+        D3D12_RESOURCE_BARRIER postFsrBarriers[2];
+        postFsrBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(fsrOutputTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE);
+        postFsrBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST);
+        State::state.commandList->ResourceBarrier(2, postFsrBarriers);
 
-            // Perform the copy. The driver will correctly handle the conversion
-            // from the row-major layout to the back buffer's optimized layout.
-            State::state.commandList->CopyTextureRegion(&dest, 0, 0, 0, &src, nullptr);
-        }
+        // 5. COPY TO SWAP CHAIN
+        State::state.commandList->CopyResource(backBuffer, fsrOutputTexture);
 
-        // 4. Transition the back buffer back to the present state
-        D3D12_RESOURCE_BARRIER barrier_copy_dest_to_pres = {};
-        barrier_copy_dest_to_pres.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier_copy_dest_to_pres.Transition.pResource = State::state.renderTargets[State::state.frameIndex].Get();
-        barrier_copy_dest_to_pres.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
-        barrier_copy_dest_to_pres.Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
-        barrier_copy_dest_to_pres.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        State::state.commandList->ResourceBarrier(1, &barrier_copy_dest_to_pres);
-        
-        // 5. Transition the CUDA texture back to its common state
-        D3D12_RESOURCE_BARRIER barrier_copy_src_to_common = {};
-        barrier_copy_src_to_common.Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
-        barrier_copy_src_to_common.Transition.pResource = cudaTexture;
-        barrier_copy_src_to_common.Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
-        barrier_copy_src_to_common.Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
-        barrier_copy_src_to_common.Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
-        State::state.commandList->ResourceBarrier(1, &barrier_copy_src_to_common);
-        
+        // 6. FINAL BARRIERS: Transition all resources back to their default states for the next frame
+        D3D12_RESOURCE_BARRIER finalBarriers[3];
+        finalBarriers[0] = CD3DX12_RESOURCE_BARRIER::Transition(backBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT);
+        finalBarriers[1] = CD3DX12_RESOURCE_BARRIER::Transition(cudaTexture, D3D12_RESOURCE_STATE_NON_PIXEL_SHADER_RESOURCE, D3D12_RESOURCE_STATE_COMMON);
+        finalBarriers[2] = CD3DX12_RESOURCE_BARRIER::Transition(fsrOutputTexture, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON);
+        State::state.commandList->ResourceBarrier(3, finalBarriers);
+
         // --- Finish and Execute ---
         State::state.commandList->Close();
         ID3D12CommandList* ppCommandLists[] = { State::state.commandList.Get() };
@@ -169,14 +138,15 @@ void renderLoop()
         State::state.frameTimeAverager.addFrameTime(frameTimeMs);
         lastTime = clock::now();
 
-        // Update window title
         char title[200];
         snprintf(title, sizeof(title),
-                 "Ruben leip programma: %.1f ms - average: %.1f ms",
-                 frameTimeMs, State::state.frameTimeAverager.getAverage());
+                 "FSR 1.0 Demo: %.1f ms - avg: %.1f ms (Render: %dx%d -> Display: %dx%d)",
+                 frameTimeMs, State::state.frameTimeAverager.getAverage(),
+                 State::screenWIDTH, State::screenHEIGHT, State::dispWIDTH, State::dispHEIGHT);
         SetWindowTextA(State::state.hwnd, title);
     }
 }
+
 // This is the new, complete WndCreate function for main.cpp
 
 void WndCreate(HWND hwnd)
@@ -264,10 +234,10 @@ void WndCreate(HWND hwnd)
 
     DXGI_SWAP_CHAIN_DESC1 swapChainDesc = {};
     swapChainDesc.BufferCount = g_frameCount;
-    swapChainDesc.Width = State::dispWIDTH;
-    swapChainDesc.Height = State::dispHEIGHT;
+    swapChainDesc.Width = State::screenWIDTH;
+    swapChainDesc.Height = State::screenHEIGHT;
     swapChainDesc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
-    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT;
+    swapChainDesc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT | DXGI_USAGE_SHADER_INPUT; // Needs to be shader input for copy
     swapChainDesc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     swapChainDesc.SampleDesc.Count = 1;
 
@@ -319,7 +289,13 @@ void WndCreate(HWND hwnd)
     printf("Initializing CUDA-D3D12 Interop Framebuffer...\n");
     State::state.render->framebuffer.InitializeInterop(State::state.d3dDevice.Get(), State::dispWIDTH, State::dispHEIGHT);
 
-    // --- 8. Initialize Rest of Application State ---
+
+    // --- 8. Initialize CUDA-D3D Interop (This should now work) ---
+    printf("Initializing FSR 1.0 to upscale to %dx%d...\n", State::dispWIDTH, State::dispHEIGHT);
+    State::state.fsr1.Initialize(State::state.d3dDevice.Get(), State::dispWIDTH, State::dispHEIGHT, State::screenWIDTH, State::screenHEIGHT);
+    printf("FSR 1.0 Initialized.\n");
+
+    // --- 9. Initialize Rest of Application State ---
     printf("Initializing application state...\n");
     State::state.Create();
     printf("Initialization Complete.\n");
@@ -410,7 +386,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     State::state.hwnd = CreateWindowEx(
         WS_EX_CLIENTEDGE, g_szClassName, "Ruben leip programma",
         WS_OVERLAPPEDWINDOW,
-        CW_USEDEFAULT, CW_USEDEFAULT, State::dispWIDTH, State::dispHEIGHT,
+        CW_USEDEFAULT, CW_USEDEFAULT, State::screenWIDTH, State::screenHEIGHT,
         NULL, NULL, hInstance, NULL
     );
 #endif
