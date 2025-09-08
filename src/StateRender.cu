@@ -152,9 +152,12 @@ __device__ __forceinline__ half approximateDistance(int x, int y,
     return __hmin(__hmin(distBuffer[idx00], distBuffer[idx10]), __hmin(distBuffer[idx01], distBuffer[idx11]));
 }
 
-__global__ void renderKernel(uchar4* framebuffer, 
+__global__ void renderKernel(
+                            uchar4* framebuffer, 
                              int width, 
                              int height, 
+                            size_t pitchInBytes,
+
                              const uint32_t* __restrict__ bits,
                              const unsigned char* __restrict__ csdf,
                              const half* __restrict__ distBuffer,
@@ -165,6 +168,7 @@ __global__ void renderKernel(uchar4* framebuffer,
     int ix = blockIdx.x * blockDim.x + threadIdx.x;
     int iy = blockIdx.y * blockDim.y + threadIdx.y;
     if (ix >= width || iy >= height) return;
+
 
     float x = (float)ix / (float)width;
     float y = (float)iy / (float)height;
@@ -179,7 +183,12 @@ __global__ void renderKernel(uchar4* framebuffer,
     unsigned char g = (unsigned char)(col.y * 255.0f);
     unsigned char b = (unsigned char)(col.z * 255.0f);
 
+#ifdef D3D12
+    uchar4 pixel = make_uchar4(r, g, b, 255);
+    framebuffer[ix + iy * (pitchInBytes / 4) ] = pixel; 
+#else
     framebuffer[ix + iy * width] = make_uchar4(r, g, b, 255);
+#endif
 }
 
 __global__ void distApproximationKernel(half* distBuffer,
@@ -251,9 +260,10 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                 (framebuffer.getHeight() + block.y - 1) / block.y);
 
     renderKernel<<<grid, block>>>(
-    reinterpret_cast<uchar4*>(framebuffer.devicePtr()),
+                              framebuffer.getDevicePtr(),
                               framebuffer.getWidth(),
                               framebuffer.getHeight(),
+                            framebuffer.getPitchInBytes(),
                               cArray.getPtr(), 
                               csdf.getPtr(),
                               (half*)distBuffer.getPtr(),
@@ -261,6 +271,9 @@ void StateRender::drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
                               texturepack.texObject(),
                               shadowTex.getTexObj()
     );
+
+    CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaGetLastError());
 }
 
 

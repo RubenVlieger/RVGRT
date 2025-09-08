@@ -4,10 +4,8 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\basetsd.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\bcrypt.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\cderr.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\driverspecs.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\dxgi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\dxgicommon.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\dxgiformat.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\dxgitype.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\guiddef.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\inaddr.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\kernelspecs.h
@@ -34,7 +32,6 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\stralign.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\tvout.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\winapifamily.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\windef.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\windowsx.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\winerror.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\winpackagefamily.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\shared\winsmcrd.h
@@ -83,15 +80,8 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\commdlg.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\consoleapi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\consoleapi2.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\consoleapi3.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d10.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d10effect.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d10misc.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d10sdklayers.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d10shader.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d10_1.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d10_1shader.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d11.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d11sdklayers.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d12.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3d12sdklayers.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\d3dcommon.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\datetimeapi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\dde.h
@@ -104,6 +94,7 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\errhandlingapi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\fibersapi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\fileapi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\fileapifromapp.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\GL\gl.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\handleapi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\heapapi.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\ime_cmodes.h
@@ -133,7 +124,7 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\oaidl.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\objbase.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\objidl.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\objidlbase.h
-C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\ocidl.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\OCIdl.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\ole2.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\oleauto.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\oleidl.h
@@ -186,6 +177,14 @@ C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\winsvc.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\winuser.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\winver.h
 C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\um\wow64apiset.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\activation.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\hstring.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\inspectable.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\roapi.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\weakreference.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\wrl\client.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\wrl\def.h
+C:\Program Files (x86)\Windows Kits\10\Include\10.0.22621.0\winrt\wrl\internal.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\atomic
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cctype
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\cerrno
@@ -273,8 +272,8 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\crt\math_functi
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\crt\sm_70_rt.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\crt\sm_80_rt.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\crt\sm_90_rt.h
-C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_d3d11_interop.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_device_runtime_api.h
+C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_gl_interop.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_runtime.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_runtime_api.h
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\device_atomic_functions.h

@@ -4,8 +4,8 @@ AdditionalCompilerOptions=
 AdditionalDependencies=
 AdditionalDeps=
 AdditionalLibraryDirectories=
-AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Zi -Ob0" -arch=native
-AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Zi -Ob0" -arch=native
+AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr --ptxas-options=-allow-expensive-optimizations=true -std=c++17 -Xcompiler="/EHsc -Zi -Ob0" -arch=native
+AdditionalOptions= -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr --ptxas-options=-allow-expensive-optimizations=true -std=c++17 -Xcompiler="/EHsc -Zi -Ob0" -arch=native
 CodeGeneration=
 CodeGeneration=
 CompileOut=Programma.dir\Debug\Texturepack.obj
@@ -13,7 +13,7 @@ CudaRuntime=Static
 CudaToolkitCustomDir=
 DebugInformationFormat=ProgramDatabase
 DebugInformationFormat=ProgramDatabase
-Defines=;_WINDOWS;NN_FULL_FLOAT;CMAKE_INTDIR="Debug";_MBCS;;WIN32;_WINDOWS;NN_FULL_FLOAT;CMAKE_INTDIR="Debug"
+Defines=;_WINDOWS;NN_FULL_FLOAT;D3D12;CMAKE_INTDIR="Debug";_MBCS;;WIN32;_WINDOWS;NN_FULL_FLOAT;D3D12;CMAKE_INTDIR="Debug"
 Emulation=false
 EnableVirtualArchInFatbin=true
 ExtensibleWholeProgramCompilation=false

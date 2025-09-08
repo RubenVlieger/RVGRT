@@ -2,10 +2,10 @@
 	"artifacts" : 
 	[
 		{
-			"path" : "Debug/Programma.exe"
+			"path" : "Release/Programma.exe"
 		},
 		{
-			"path" : "Debug/Programma.pdb"
+			"path" : "Release/Programma.pdb"
 		}
 	],
 	"backtrace" : 1,
@@ -16,6 +16,7 @@
 			"add_executable",
 			"target_link_libraries",
 			"target_compile_options",
+			"add_compile_definitions",
 			"target_compile_definitions",
 			"include_directories"
 		],
@@ -31,37 +32,43 @@
 			{
 				"command" : 0,
 				"file" : 0,
-				"line" : 43,
+				"line" : 46,
 				"parent" : 0
 			},
 			{
 				"command" : 1,
 				"file" : 0,
-				"line" : 63,
+				"line" : 69,
 				"parent" : 0
 			},
 			{
 				"command" : 2,
 				"file" : 0,
-				"line" : 49,
+				"line" : 52,
 				"parent" : 0
 			},
 			{
 				"command" : 3,
 				"file" : 0,
-				"line" : 83,
+				"line" : 70,
 				"parent" : 0
 			},
 			{
 				"command" : 4,
 				"file" : 0,
-				"line" : 36,
+				"line" : 92,
 				"parent" : 0
 			},
 			{
-				"command" : 4,
+				"command" : 5,
 				"file" : 0,
-				"line" : 38,
+				"line" : 39,
+				"parent" : 0
+			},
+			{
+				"command" : 5,
+				"file" : 0,
+				"line" : 41,
 				"parent" : 0
 			}
 		]
@@ -72,7 +79,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "-D_WINDOWS -Xcompiler=\"/W3 /GR /EHsc\" -Xcompiler=\"-MDd -Zi -Ob0 -Od /RTC1\" -arch=native"
+					"fragment" : "-D_WINDOWS -Xcompiler=\"/W3 /GR /EHsc\" -Xcompiler=\"-MD -O2 -Ob2\" -DNDEBUG -arch=native"
 				},
 				{
 					"backtrace" : 3,
@@ -98,17 +105,21 @@
 			[
 				{
 					"backtrace" : 4,
+					"define" : "D3D12"
+				},
+				{
+					"backtrace" : 5,
 					"define" : "NN_FULL_FLOAT"
 				}
 			],
 			"includes" : 
 			[
 				{
-					"backtrace" : 5,
+					"backtrace" : 6,
 					"path" : "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/include"
 				},
 				{
-					"backtrace" : 6,
+					"backtrace" : 7,
 					"path" : "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3/include"
 				}
 			],
@@ -137,7 +148,7 @@
 			"compileCommandFragments" : 
 			[
 				{
-					"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MDd /Zi /Ob0 /Od /RTC1"
+					"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /O2 /Ob2 /DNDEBUG"
 				},
 				{
 					"fragment" : "-std:c++20"
@@ -147,17 +158,21 @@
 			[
 				{
 					"backtrace" : 4,
+					"define" : "D3D12"
+				},
+				{
+					"backtrace" : 5,
 					"define" : "NN_FULL_FLOAT"
 				}
 			],
 			"includes" : 
 			[
 				{
-					"backtrace" : 5,
+					"backtrace" : 6,
 					"path" : "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA/include"
 				},
 				{
-					"backtrace" : 6,
+					"backtrace" : 7,
 					"path" : "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3/include"
 				}
 			],
@@ -191,16 +206,16 @@
 		"commandFragments" : 
 		[
 			{
-				"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MDd /Zi /Ob0 /Od /RTC1",
+				"fragment" : "/DWIN32 /D_WINDOWS /W3 /GR /EHsc /MD /O2 /Ob2 /DNDEBUG",
 				"role" : "flags"
 			},
 			{
-				"fragment" : "/machine:x64 /NODEFAULTLIB:LIBCMT /debug /INCREMENTAL /subsystem:windows",
+				"fragment" : "/machine:x64 /NODEFAULTLIB:LIBCMT /INCREMENTAL:NO /subsystem:windows",
 				"role" : "flags"
 			},
 			{
 				"backtrace" : 2,
-				"fragment" : "d3d11.lib",
+				"fragment" : "d3d12.lib",
 				"role" : "libraries"
 			},
 			{

@@ -15,9 +15,9 @@
 
 #define c_sunColor make_float3(1.0f * 10.0f, 0.9f * 10.0f, 0.2f * 10.0f) ;
 
-const uint64_t SHIX = 12;
+const uint64_t SHIX = 10;
 const uint64_t SHIY = 9;
-const uint64_t SHIZ = 12;
+const uint64_t SHIZ = 10;
 
 const uint64_t MODX = (1<<SHIX) - 1;
 const uint64_t MODY = (1<<SHIY) - 1;

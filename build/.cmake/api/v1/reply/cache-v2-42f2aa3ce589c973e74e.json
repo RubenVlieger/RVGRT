@@ -1148,6 +1148,18 @@
 			],
 			"type" : "STATIC",
 			"value" : "C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA"
+		},
+		{
+			"name" : "USE_D3D12",
+			"properties" : 
+			[
+				{
+					"name" : "HELPSTRING",
+					"value" : "Use Direct3D 12 instead of Direct3D 11"
+				}
+			],
+			"type" : "BOOL",
+			"value" : "ON"
 		}
 	],
 	"kind" : "cache",

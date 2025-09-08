@@ -215,6 +215,9 @@ Programma_IS_TOP_LEVEL:STATIC=ON
 //Value Computed by CMake
 Programma_SOURCE_DIR:STATIC=C:/Users/RC1ki/OneDrive - Radboud Universiteit/Documents/Handel/Begin/W32/Test5 0825 CUDA
 
+//Use Direct3D 12 instead of Direct3D 11
+USE_D3D12:BOOL=ON
+
 
 ########################
 # INTERNAL cache entries

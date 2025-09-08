@@ -2,6 +2,9 @@ cmake_minimum_required(VERSION 3.2 FATAL_ERROR)
 SET(APP_NAME Programma)
 project (Programma C CXX CUDA)
 
+option(USE_D3D12 "Use Direct3D 12 instead of Direct3D 11" ON)
+
+
 if (MSVC)
   set(CMAKE_CUDA_COMPILER "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3/bin/nvcc.exe")
   set(CMAKE_CXX_COMPILER "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.38.33130/bin/Hostx64/x64/cl.exe")
@@ -60,8 +63,14 @@ if("${CMAKE_BUILD_TYPE}" STREQUAL "Debug")
     target_compile_options(${CMAKE_PROJECT_NAME} PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-G>)
 endif()
 
-target_link_libraries(${APP_NAME} PRIVATE d3d11 dxgi)
 
+if(USE_D3D12)
+
+target_link_libraries(${APP_NAME} PRIVATE d3d12 dxgi)
+add_compile_definitions(D3D12)
+else()
+target_link_libraries(${APP_NAME} PRIVATE d3d11 dxgi)
+endif()
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "Building in Release mode")
