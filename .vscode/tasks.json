@@ -8,10 +8,12 @@
         "-G",
         "-ccbin", "g++",
         "-m64",
+        "-lineinfo",
         "-gencode", "arch=compute_86,code=sm_86",
         "${file}",
         "-I${workspaceFolder}/Common",
-        "-o", "${fileDirname}/debug/${fileBasenameNoExtension}"
+        "-o", "${fileDirname}/debug/${fileBasenameNoExtension}",
+        "-j4"
     ],
     "group": { "kind": "build", "isDefault": true }
 },
@@ -27,7 +29,8 @@
         "-gencode", "arch=compute_86,code=sm_86",
         "${file}",
         "-I${workspaceFolder}/Common",
-        "-o", "${fileDirname}/release/${fileBasenameNoExtension}"
+        "-o", "${fileDirname}/release/${fileBasenameNoExtension}",
+        "-j4"
     ],
     "group": { "kind": "build" }
 }

@@ -4,7 +4,6 @@ project (Programma C CXX CUDA)
 
 option(USE_D3D12 "Use Direct3D 12 instead of Direct3D 11" ON)
 
-
 if (MSVC)
   set(CMAKE_CUDA_COMPILER "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v12.3/bin/nvcc.exe")
   set(CMAKE_CXX_COMPILER "C:/Program Files/Microsoft Visual Studio/2022/Community/VC/Tools/MSVC/14.38.33130/bin/Hostx64/x64/cl.exe")
@@ -40,6 +39,13 @@ include_directories(include)
 
 include_directories(${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES})
 
+set(STREAMLINE_SDK_PATH "${CMAKE_SOURCE_DIR}/vendor/streamline-sdk-v2.9.0")
+set(STREAMLINE_INCLUDE_DIR "${STREAMLINE_SDK_PATH}/include")
+set(STREAMLINE_LIB_DIR "${STREAMLINE_SDK_PATH}/lib/x64")
+set(STREAMLINE_BIN_DIR "${STREAMLINE_SDK_PATH}/bin/x64")
+
+include_directories(${STREAMLINE_INCLUDE_DIR})
+
 file(GLOB SOURCES CONFIGURE_DEPENDS "src/*.cpp" "src/*.c" "src/*.cu") 
 
 if(WIN32)
@@ -48,6 +54,7 @@ else()
     add_executable(${APP_NAME} ${SOURCES})
 endif()
 
+target_sources(${APP_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/exports.def)
 
 target_compile_options(${CMAKE_PROJECT_NAME}
     PRIVATE $<$<COMPILE_LANGUAGE:CXX>: >
@@ -65,12 +72,40 @@ endif()
 
 
 if(USE_D3D12)
-
-target_link_libraries(${APP_NAME} PRIVATE d3d12 dxgi)
-add_compile_definitions(D3D12)
+    link_directories(${})
+    target_link_libraries(${APP_NAME} PRIVATE d3d12 dxgi dxguid)
+    add_compile_definitions(D3D12)
 else()
-target_link_libraries(${APP_NAME} PRIVATE d3d11 dxgi)
+    target_link_libraries(${APP_NAME} PRIVATE d3d11 dxgi dxguid)
 endif()
+
+target_include_directories(${APP_NAME} PRIVATE "${STREAMLINE_INCLUDE_DIR}")
+target_link_directories(${APP_NAME} PRIVATE "${STREAMLINE_LIB_DIR}")
+# Note: CMake automatically finds 'sl.interposer.lib' from 'sl.interposer'
+target_link_libraries(${APP_NAME} PRIVATE sl.interposer)
+
+# 2. Link DirectX
+
+#target_link_libraries(${APP_NAME} PRIVATE CUDA::cudart)
+
+message(STATUS "Setting up post-build command to copy Streamline DLLs")
+add_custom_command(
+    TARGET ${APP_NAME} POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${STREAMLINE_BIN_DIR}/sl.interposer.dll"
+    $<TARGET_FILE_DIR:${APP_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${STREAMLINE_BIN_DIR}/sl.dlss.dll"
+    $<TARGET_FILE_DIR:${APP_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${STREAMLINE_BIN_DIR}/nvngx_dlss.dll"
+
+    $<TARGET_FILE_DIR:${APP_NAME}>
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    "${STREAMLINE_BIN_DIR}/sl.dlss_g.dll" # Optional: for debugging
+    $<TARGET_FILE_DIR:${APP_NAME}>
+    COMMENT "Copying Streamline DLLs to output directory..."
+)
 
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     message(STATUS "Building in Release mode")
@@ -81,8 +116,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
         target_compile_options(${APP_NAME} PRIVATE $<$<CONFIG:Release>:-O3 -DNDEBUG>)
     endif()
 endif()
-
-
 
 if(NN_HALF_FLOAT)
     message(STATUS "Using half precision floating for neural network")
@@ -99,6 +132,10 @@ elseif(ACTIVATION_MICK_RELU)
     message(STATUS "Using the Mick ReLU activation function")
     target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE ACTIVATION_MICK_RELU)
 endif()
+# add_custom_command(TARGET ${APP_NAME} POST_BUILD
+#     COMMAND ${CMAKE_COMMAND} -E copy_if_different
+#     ${D3D12_SDK_DLLS} $<TARGET_FILE_DIR:${APP_NAME}>
+# )
 
 # SET(APP_NAME Programma)
 # project (Programma)

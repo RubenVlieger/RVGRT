@@ -87,7 +87,17 @@
         "queue": "cpp",
         "set": "cpp",
         "xtree": "cpp",
-        "__bit_reference": "cpp"
+        "__bit_reference": "cpp",
+        "cassert": "cpp",
+        "any": "cpp",
+        "cinttypes": "cpp",
+        "codecvt": "cpp",
+        "condition_variable": "cpp",
+        "future": "cpp",
+        "shared_mutex": "cpp",
+        "unordered_set": "cpp",
+        "valarray": "cpp",
+        "__locale": "cpp"
     },
 
     "cmake.generator": "Visual Studio 17 2022",

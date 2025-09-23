@@ -7,9 +7,6 @@
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\Character.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\FSR1.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\src\State.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -24,10 +21,7 @@
     <CudaCompile Include="..\src\CoarseArray.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
-    <CudaCompile Include="..\src\CuTex.cu">
-      <Filter>Source Files</Filter>
-    </CudaCompile>
-    <CudaCompile Include="..\src\Framebuffer.cu">
+    <CudaCompile Include="..\src\CudaD3D12Texture.cu">
       <Filter>Source Files</Filter>
     </CudaCompile>
     <CudaCompile Include="..\src\StateRender.cu">
@@ -45,6 +39,11 @@
   </ItemGroup>
   <ItemGroup>
     <CustomBuild Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\exports.def">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="Source Files">

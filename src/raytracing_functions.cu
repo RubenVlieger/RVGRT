@@ -90,6 +90,7 @@ __device__ hitInfo trace(float3 camPos, float3 camDir,
     float3 currentPos = camPos + distance * camDir; // unchanged march origin
     hitInfo HI; HI.hit = false;
     HI.its = 0.0f;
+    HI.pos = make_float3(-500.0f, -500.0f, -500.0f);
 
     float3 deltaDist = make_float3(
         (camDir.x != 0) ? fabsf(1.0f / camDir.x) : 1e10f,

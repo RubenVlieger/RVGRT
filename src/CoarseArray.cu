@@ -295,7 +295,7 @@ __global__ void GlobalIlluminate(uchar4* GIdata_curr,
     // If this GI cell is inside a solid block, it should be black.
     int3 voxel_ipos = make_int3(floorf(worldPos.x), floorf(worldPos.y), floorf(worldPos.z));
     if (IsSolid(voxel_ipos, bits)) {
-        GIdata_curr[idx] = make_uchar4(0, 0, 0, 255);
+        //GIdata_curr[idx] = make_uchar4(0, 0, 0, 255);
         return;
     }
 
@@ -369,7 +369,7 @@ void CoarseArray::InitializeGIData(CArray& fineArray, CoarseArray csdf, Texturep
 
 
 
-#define RAYPS (64*64*64*2)
+#define RAYPS (64*64*64*1)
 static int frameNumber = 0;
 static uint64_t offsetCounter = 0;
 
