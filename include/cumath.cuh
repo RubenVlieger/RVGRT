@@ -5,6 +5,7 @@
 #include <cmath>
 #include "cuda_fp16.h"
 #include <algorithm>
+#include "glm/glm.hpp"
 
 #define CUDA_CHECK(err) \
     if(err != cudaSuccess) { \
@@ -15,9 +16,9 @@
 
 #define c_sunColor make_float3(1.0f * 10.0f, 0.9f * 10.0f, 0.2f * 10.0f) ;
 
-const uint64_t SHIX = 10;
+const uint64_t SHIX = 12;
 const uint64_t SHIY = 9;
-const uint64_t SHIZ = 10;
+const uint64_t SHIZ = 12;
 
 const uint64_t MODX = (1<<SHIX) - 1;
 const uint64_t MODY = (1<<SHIY) - 1;
@@ -41,6 +42,15 @@ __device__ __forceinline__ uint64_t toIndex(uint64_t x, uint64_t y, uint64_t z )
     return  (x & MODX) | 
            ((y & MODY) << SHIX) | 
            ((z & MODZ) << (SHIX + SHIY));
+}
+
+__device__ inline float4 mat_mul_vec(const glm::mat4& M, const float4& v) {
+    float4 res;
+    res.x = M[0][0] * v.x + M[1][0] * v.y + M[2][0] * v.z + M[3][0] * v.w;
+    res.y = M[0][1] * v.x + M[1][1] * v.y + M[2][1] * v.z + M[3][1] * v.w;
+    res.z = M[0][2] * v.x + M[1][2] * v.y + M[2][2] * v.z + M[3][2] * v.w;
+    res.w = M[0][3] * v.x + M[1][3] * v.y + M[2][3] * v.z + M[3][3] * v.w;
+    return res;
 }
 
 // __device__ __forceinline__ uint64_t splitBy3(uint64_t a) {
@@ -285,12 +295,12 @@ __host__ __device__ inline float3 min3(const float3 &a, const float3 &b) { retur
 __host__ __device__ inline float3 max3(const float3 &a, const float3 &b) { return make_float3(fmaxf(a.x,b.x), fmaxf(a.y,b.y), fmaxf(a.z,b.z)); }
 __host__ __device__ inline float3 clamp(const float3 &v, const float3 &mn, const float3 &mx) { return min3(max3(v,mn), mx); }
 __host__ __device__ inline float3 lerp(const float3 &a, const float3 &b, float t) { return a + t*(b-a); }
-__host__ __device__ inline int3 min3(const int3 &a, const int3 &b) { return make_int3(std::min(a.x,b.x), std::min(a.y,b.y), std::min(a.z,b.z)); }
-__host__ __device__ inline int3 max3(const int3 &a, const int3 &b) { return make_int3(std::max(a.x,b.x), std::max(a.y,b.y), std::max(a.z,b.z)); }
+__host__ __device__ inline int3 min3(const int3 &a, const int3 &b) { return make_int3(min(a.x,b.x), min(a.y,b.y), min(a.z,b.z)); }
+__host__ __device__ inline int3 max3(const int3 &a, const int3 &b) { return make_int3(max(a.x,b.x), max(a.y,b.y), max(a.z,b.z)); }
 __host__ __device__ inline int3 clamp3(const int3 &v, int minVal, int maxVal) { return max3(min3(v,int3i(maxVal)), int3i(minVal)); }
 
-__host__ __device__ inline uint3 min3(const uint3 &a, const uint3 &b) { return make_uint3(std::min(a.x,b.x), std::min(a.y,b.y), std::min(a.z,b.z)); }
-__host__ __device__ inline uint3 max3(const uint3 &a, const uint3 &b) { return make_uint3(std::max(a.x,b.x), std::max(a.y,b.y), std::max(a.z,b.z)); }
+__host__ __device__ inline uint3 min3(const uint3 &a, const uint3 &b) { return make_uint3(min(a.x,b.x), min(a.y,b.y), min(a.z,b.z)); }
+__host__ __device__ inline uint3 max3(const uint3 &a, const uint3 &b) { return make_uint3(max(a.x,b.x), max(a.y,b.y), max(a.z,b.z)); }
 
 
 __host__ __device__ inline float3 sqrtf3(const float3 &v) { return make_float3(sqrtf(v.x), sqrtf(v.y), sqrtf(v.z)); }

@@ -4,7 +4,6 @@
 #include "util.hpp"
 #include "Character.hpp"
 #include "hitInfo.hpp"
-#include "Framebuffer.cuh"
 #include <bitset>
 #include "Timer.hpp"
 #include <atomic>
@@ -13,7 +12,6 @@
 #include <d3d12.h>
 #include <dxgi1_6.h>
 #include <wrl.h> // For Microsoft::WRL::ComPtr
-#include "FSR1.hpp"
 
 #include "Texturepack.cuh"
 
@@ -27,11 +25,12 @@ public:
 
     // --- Resolution Control ---
     // Render the ray tracer at 1080p
-    static constexpr int dispHEIGHT = 1800;
-    static constexpr int dispWIDTH = 2880;
+    static constexpr int dispHEIGHT = 800;
+    static constexpr int dispWIDTH = 1280;
     // Upscale and display at 4K
     static constexpr int screenHEIGHT = 2400;
     static constexpr int screenWIDTH = 3840;
+
 
     // --- Input & Timing ---
     glm::vec2 mouseDelta;
@@ -61,6 +60,7 @@ public:
     Microsoft::WRL::ComPtr<ID3D12CommandAllocator> commandAllocators[g_frameCount]; 
     Microsoft::WRL::ComPtr<ID3D12GraphicsCommandList> commandList;
     Microsoft::WRL::ComPtr<ID3D12DescriptorHeap> rtvHeap;
+    cudaExternalSemaphore_t cudaSyncSemaphore;
     
     // --- D3D12 Synchronization ---
     UINT frameIndex;
@@ -71,8 +71,6 @@ public:
     UINT64 fenceValues[g_frameCount]; 
 
 
-    // --- Upscaling ---
-    FSR1 fsr1; // <-- ADDED THIS
 
     // --- Lifecycle ---
     void Create();

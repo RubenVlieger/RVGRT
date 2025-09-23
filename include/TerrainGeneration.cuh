@@ -352,7 +352,6 @@ __device__ __forceinline__ float Evaluate( float x, float y, float z) {
             density -= CAVE_CARVE_VALUE;
         }
     }
-
     return density;
 }
 // // Basic FBM: returns approx in [-1, 1]

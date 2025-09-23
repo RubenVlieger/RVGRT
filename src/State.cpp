@@ -8,7 +8,6 @@
 #include "Timer.hpp"
 #include "Texturepack.cuh"
 #include "CoarseArray.cuh"
-#include "CuTex.cuh"
 
 State::State() 
 {
@@ -26,9 +25,6 @@ void State::Create()
 {
     Timer t1("allocating");
     
-    render->distBuffer = CArray();
-    render->distBuffer.Allocate((dispWIDTH/2) * (dispHEIGHT/2) * 2);
-
     render->cArray = CArray();
     render->cArray.Allocate(BYTESIZE);
 
@@ -40,7 +36,7 @@ void State::Create()
     render->GIdata = CoarseArray();
     render->GIdata.AllocateGI();
 
-    render->shadowTex = CuTex(dispWIDTH/2, dispHEIGHT/2, cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat),cudaAddressModeWrap ,cudaFilterModeLinear);
+//CuTex(dispWIDTH/2, dispHEIGHT/2, cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat),cudaAddressModeWrap ,cudaFilterModeLinear);
 
     t1.s();
 

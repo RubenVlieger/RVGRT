@@ -9,7 +9,7 @@
         "program": "${fileDirname}/${fileBasenameNoExtension}",
         "args": [],
         "stopAtEntry": false,
-        "cwd": "${workspaceFolder}",
+        "cwd": "${workspaceFolder}/build/Debug",
         "environment": [],
         "externalConsole": false,
         "setupCommands": [

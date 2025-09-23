@@ -248,7 +248,6 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.3313
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\vcruntime_new_debug.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\vcruntime_string.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\vcruntime_typeinfo.h
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\vector
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\wmmintrin.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\xatomic.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\xcall_once.h
@@ -269,7 +268,6 @@ C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.3313
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\yvals.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\yvals_core.h
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\zmmintrin.h
-C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_bit_utils.hpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_chrono.hpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_iter_core.hpp
 C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\include\__msvc_sanitizer_annotate_container.hpp
@@ -324,9 +322,8 @@ C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\vector_function
 C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\vector_types.h
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\CArray.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\CoarseArray.cuh
+C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\CudaD3D12Texture.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\cumath.cuh
-C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\CuTex.cuh
-C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\Framebuffer.cuh
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\common.hpp
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\detail\compute_common.hpp
 C:\Users\RC1ki\OneDrive - Radboud Universiteit\Documents\Handel\Begin\W32\Test5 0825 CUDA\include\glm\detail\compute_vector_relational.hpp
