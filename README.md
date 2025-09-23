@@ -1,25 +1,24 @@
 # 🟩 Voxel World Engine (WIP)
 
-This is yet another attempt at creating a **Minecraft-like voxel world engine**, built with CUDA for efficient rendering, a platform which allows me to try certain algorithms and datastructures and optimization techniques for realtime rendering.  
+This is an attempt at creating a **Minecraft-like voxel world engine**, built mostly with CUDA for accelerated rendering. This is a platform which allows me to try certain algorithms and datastructures and optimization techniques for realtime rendering.  
 
 ---
 
 ## Features (so far)
-- Procedural voxel world generation (Minecraft-like).
-- CUDA + DirectX 11 interop for GPU-accelerated rendering.
+- Procedural voxel world generation.
+- CUDA + DirectX 12 interop for GPU-accelerated rendering.
 - GPU accelerated world generation
-- GPU accelerated coarse signed distance field creation
-- Lower resolution estimation of z-buffer (as optimization technique)
-- Dual based voxel raytracing algorithm consisting of distance estimation and final DDA for precise hits.
+- GPU accelerated coarse signed distance field creation and usage
+- Lower resolution estimation of primary ray distance and shadows.
+- Hybrid based voxel raytracing algorithm consisting of distance estimation and DDA for analytical normals.
+- Implemenation of global illumination, with voxel cone tracing for smooth shadows
 - Usage of a texturepack, shadows and reflections
-- Currently a 600kb executable of which half is the texturepack.
-- Experimental engine
-
+- Usage of DLSS image upscaling
 ---
 
 ## Requirements
 - **OS**: Windows only currently (uses the Win32 API)  
-- **Graphics**: Direct3D 11 + CUDA-capable GPU (e.g., NVIDIA)  
+- **Graphics**: Direct3D 12 + CUDA-capable GPU (e.g., NVIDIA)  
 
 
 ##  Build Instructions
