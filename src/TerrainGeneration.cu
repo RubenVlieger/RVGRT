@@ -1,28 +1,26 @@
 #pragma once
-#include <cuda_runtime.h>
 #include <iostream>
-#include <math_constants.h> // for CUDA constants like CUDART_PI_F
 
-#include "cumath.cuh"
+#include "cumath.h"
 
 
-__device__ inline float fractf_dev(float x) { return x - floorf(x); }
-__device__ inline float dot3(float ax, float ay, float az, float bx, float by, float bz) {
+GPU_FUNC GPU_INLINE float fractf_dev(float x) { return x - floorf(x); }
+GPU_FUNC GPU_INLINE float dot3(float ax, float ay, float az, float bx, float by, float bz) {
     return ax*bx + ay*by + az*bz;
 }
-__device__ inline float dot2(float ax, float ay, float bx, float by) {
+GPU_FUNC GPU_INLINE float dot2(float ax, float ay, float bx, float by) {
     return ax*bx + ay*by;
 }
-__device__ inline float length3(float x, float y, float z) {
+GPU_FUNC GPU_INLINE float length3(float x, float y, float z) {
     return sqrtf(x*x + y*y + z*z);
 }
-__device__ inline void normalize3(float &x, float &y, float &z) {
+GPU_FUNC GPU_INLINE void normalize3(float &x, float &y, float &z) {
     float L = length3(x,y,z);
     if (L > 0.0f) { x /= L; y /= L; z /= L; }
 }
 
 
-__device__ __forceinline__ unsigned int hash3(int xi, int yi, int zi) {
+GPU_FUNC GPU_INLINE unsigned int hash3(int xi, int yi, int zi) {
     // fold coordinates into a single 32-bit key (use unsigned arithmetic)
     unsigned int x = (unsigned int)xi;
     unsigned int y = (unsigned int)yi;
@@ -42,7 +40,7 @@ __device__ __forceinline__ unsigned int hash3(int xi, int yi, int zi) {
 
     return key;
 }
-__device__ __forceinline__ unsigned int hash2(int xi, int yi) {
+GPU_FUNC GPU_INLINE unsigned int hash2(int xi, int yi) {
     // fold coordinates into a single 32-bit key (use unsigned arithmetic)
     unsigned int x = (unsigned int)xi;
     unsigned int y = (unsigned int)yi;
@@ -62,7 +60,7 @@ __device__ __forceinline__ unsigned int hash2(int xi, int yi) {
 }
 
 // inline "gradient generator" for 2D.
-__device__ __forceinline__ float2 grad_from_hash2D(unsigned int hash) {
+GPU_FUNC GPU_INLINE float2 grad_from_hash2D(unsigned int hash) {
     hash &= 7u; // Restrict hash to a value between 0 and 7.
 
     float x = (hash & 1u) ? 1.0f : -1.0f;
@@ -78,7 +76,7 @@ __device__ __forceinline__ float2 grad_from_hash2D(unsigned int hash) {
     return make_float2(x, y);
 }
 // A performant simplex2D implementation.
-__device__ float simplex2D(float px, float py) {
+GPU_FUNC GPU_INLINE float simplex2D(float px, float py) {
     // Standard skewing and un-skewing constants for 2D Simplex noise.
     const float F2 = (sqrtf(3.0f) - 1.0f) * 0.5f;
     const float G2 = (3.0f - sqrtf(3.0f)) * 0.5f;
@@ -140,25 +138,12 @@ __device__ float simplex2D(float px, float py) {
     // Sum the contributions and scale to a usable range.
     return 70.0f * (n0 + n1 + n2);
 }
-//possibly faster hash function, but at unknown visual impact. 3% faster world generation on my system.
-// __device__ __forceinline__ unsigned int hash3(int xi, int yi, int zi) {
-//     unsigned int key = (unsigned int)xi * 0x9e3779b9u;
-//     key ^= (unsigned int)yi * 0x85ebca6bu;
-//     key ^= (unsigned int)zi * 0xc2b2ae35u;
-//     // xorshift
-//     key ^= key << 13;
-//     key ^= key >> 17;
-//     key ^= key << 5;
-//     // scramble multiply (xorshift*)
-//     return key * 0x9E3779B1u;
-// }
-
-__device__ __forceinline__ float dot3(const float3 &g, float x, float y, float z) {
+GPU_FUNC GPU_INLINE float dot3(const float3 &g, float x, float y, float z) {
     return g.x * x + g.y * y + g.z * z;
 }
 
 // inline "gradient generator" instead of table lookup, benchmarking proofs this is incredibly faster on my system with a 2.5x speedup.
-__device__ __forceinline__ float3 grad_from_hash(unsigned int h) 
+GPU_FUNC GPU_INLINE float3 grad_from_hash(unsigned int h) 
 {
     h &= 15u;
 
@@ -175,7 +160,7 @@ __device__ __forceinline__ float3 grad_from_hash(unsigned int h)
 }
 
 // A very optimized simplex3D implementation. Benchmarking along side optimization features 4.0x speedup on my system versus naive simplex3D algorithm.
-__device__ float simplex3D(float px, float py, float pz) 
+GPU_FUNC float simplex3D(float px, float py, float pz) 
 {
     const float F3 = 1.0f / 3.0f;
     float s = (px + py + pz) * F3;
@@ -256,7 +241,7 @@ __device__ float simplex3D(float px, float py, float pz)
 
 // Calculates 3D Fractional Brownian Motion (fBm) by summing multiple layers (octaves) of Simplex noise.
 // This is the core of creating natural-looking, detailed procedural shapes.
-__device__ float fbm3D(float x, float y, float z, int octaves, float frequency, float lacunarity, float persistence) {
+GPU_FUNC GPU_INLINE float fbm3D(float x, float y, float z, int octaves, float frequency, float lacunarity, float persistence) {
     float total = 0.0f;
     float amplitude = 1.0f;
     for (int i = 0; i < octaves; i++) {
@@ -268,7 +253,7 @@ __device__ float fbm3D(float x, float y, float z, int octaves, float frequency, 
 }
 
 // 2D version of fBm, used for the biome map.
-__device__ float fbm2D(float x, float z, int octaves, float frequency, float lacunarity, float persistence) {
+GPU_FUNC GPU_INLINE float fbm2D(float x, float z, int octaves, float frequency, float lacunarity, float persistence) {
     float total = 0.0f;
     float amplitude = 1.0f;
     for (int i = 0; i < octaves; i++) {
@@ -280,7 +265,7 @@ __device__ float fbm2D(float x, float z, int octaves, float frequency, float lac
 }
 
 
-__device__ float Evaluate( float x, float y, float z) {
+GPU_FUNC GPU_INLINE float Evaluate( float x, float y, float z) {
 
     const float GROUND_LEVEL = 140.0f;              // Base height of the terrain surface before noise is added. (World height is 512).
     const float PLAINS_AMPLITUDE = 25.0f;           // Max height variation in 'plains' biomes.
@@ -353,160 +338,3 @@ __device__ float Evaluate( float x, float y, float z) {
 
     return density;
 }
-// // Basic FBM: returns approx in [-1, 1]
-// __device__ float fbm3(float x, float y, float z, int octaves, float lacunarity, float persistence, float baseFreq) {
-//     float sum = 0.0f;
-//     float amp = 1.0f;
-//     float ampSum = 0.0f;
-//     float freq = baseFreq;
-//     for (int i = 0; i < octaves; ++i) {
-//         sum += simplex3D(x * freq, y * freq, z * freq) * amp;
-//         ampSum += amp;
-//         freq *= lacunarity;
-//         amp *= persistence;
-//     }
-//     if (ampSum == 0.0f) return 0.0f;
-//     return sum / ampSum; // approx in [-1,1]
-// }
-
-// // Ridged multifractal-ish 2D on (x,z) using simplex3D(x,0,z).
-// // Returns in [0,1] (higher = sharper ridge)
-// __device__ float ridged2D(float x, float z, int octaves, float lacunarity, float persistence, float baseFreq) {
-//     float sum = 0.0f;
-//     float amp = 1.0f;
-//     float ampSum = 0.0f;
-//     float freq = baseFreq;
-//     for (int i = 0; i < octaves; ++i) {
-//         float n = simplex3D(x * freq, 0.0f, z * freq); // [-1,1]
-//         float signal = 1.0f - fabsf(n);                // [0,1]
-//         signal = signal * signal;                      // sharpen ridge
-//         sum += signal * amp;
-//         ampSum += amp;
-//         freq *= lacunarity;
-//         amp *= persistence;
-//     }
-//     if (ampSum == 0.0f) return 0.0f;
-//     return clampf(sum / ampSum, 0.0f, 1.0f);
-// }
-
-// // Domain warp helper: returns warped (x,z) pair via cheap FBM
-// __device__ void domainWarp2D(float x, float z, float warpFreq, int warpOctaves, float warpAmp, float lacunarity, float persistence, float &outX, float &outZ) 
-// {
-//     float wx = fbm3(x, 0.0f, z, warpOctaves, lacunarity, persistence, warpFreq);
-//     float wz = fbm3(x + 37.0f, 0.0f, z - 17.0f, warpOctaves, lacunarity, persistence, warpFreq);
-//     outX = x + wx * warpAmp;
-//     outZ = z + wz * warpAmp;
-// }
-
-// // Main Evaluate: returns density (higher -> solid). Use `density > 0.0f` for block.
-// __device__ float Evaluate(
-//     float x, float _y, float z,
-
-//     // global scale (map coord -> noise)
-//     float baseFrequency = 0.003f,    // base coordinate scale for most FBM
-
-//     // mountain (ridged) parameters (2D)
-//     int mountainOctaves = 6,
-//     float mountainLacunarity = 2.0f,
-//     float mountainPersistence = 0.5f,
-//     float mountainFreq = 0.0008f,    // lower -> bigger mountains
-//     float mountainHeight = 160.0f,   // maximum mountain height above base
-//     float mountainBase = 32.0f,      // base height offset (sea level / ground baseline)
-
-//     // domain warp for interesting mountain shapes
-//     float warpFreq = 0.0012f,
-//     int warpOctaves = 3,
-//     float warpAmp = 200.0f,
-
-//     // vertical terracing (Minecraft-like steps)
-//     float terraceHeight = 1.0f,      // quantize mountain height into steps (1.0 = blocky)
-//     float terraceBlend = 0.25f,      // how soft the terracing edges are (0..1)
-
-//     // 3D detail / overhangs (adds/subtracts from mountain height)
-//     int detailOctaves = 4,
-//     float detailLacunarity = 2.0f,
-//     float detailPersistence = 0.5f,
-//     float detailFreq = 0.008f,
-//     float detailAmp = 18.0f,         // amplitude of 3D detail (positive -> overhangs)
-
-//     // caves (subtractive): carve away where caveNoise > caveThreshold
-//     int caveOctaves = 3,
-//     float caveFreq = 0.04f,
-//     float caveThreshold = 0.45f,     // higher => fewer caves
-//     float caveSmooth = 0.12f,        // width of transition
-//     float caveCarveStrength = 1.1f,  // how strongly caves carve density
-
-//     // floor / bedrock
-//     float floorHeight = 8.0f,
-//     float floorThickness = 6.0f,
-//     float floorStrength = 6.0f,
-//     bool useHardFloor = true,
-
-//     // top falloff (less blocks up top)
-//     float topBiasScale = 1.6f,
-//     float topBiasPower = 1.8f,
-
-//     // small ground-layer low frequency to make plains look nicer
-//     float groundLayerStrength = 0.35f,
-//     float groundNoiseFreq = 0.01f,
-
-//     // expected Y range for normalization (set to your map ceiling)
-//     float Y_MAX = 512.0f
-// ) {
-//     // Hard floor
-//     if (useHardFloor && _y <= floorHeight) return 999.0f;
-//     //if(_y <=340) return 999.0f;
-
-//     // --- Domain warp mountains on (x,z) ---
-//     float wx, wz;
-//     domainWarp2D(x, z, warpFreq, warpOctaves, warpAmp, mountainLacunarity, mountainPersistence, wx, wz);
-
-//     // compute ridged mountain factor [0..1]
-//     float ridged = ridged2D(wx, wz, mountainOctaves, mountainLacunarity, mountainPersistence, mountainFreq);
-
-//     // mountain height (quantize for terraces)
-//     float rawMountainH = mountainBase + ridged * mountainHeight; // base + ridge * scaled
-//     // terracing: quantize to terraceHeight but blend edges by terraceBlend
-//     if (terraceHeight > 0.0f) {
-//         float q = floorf(rawMountainH / terraceHeight) * terraceHeight;
-//         // soft blend between q and rawMountainH
-//         float t = clampf((rawMountainH - q) / (terraceBlend * terraceHeight + 1e-6f), 0.0f, 1.0f);
-//         rawMountainH = q * (1.0f - t) + rawMountainH * t;
-//     }
-
-//     // --- 3D detail to create overhangs + local bumps (can push some voxels above H to solid) ---
-//     float detail = fbm3(x * detailFreq, _y * detailFreq, z * detailFreq, detailOctaves, detailLacunarity, detailPersistence, 1.0f);
-//     // detail in [-1,1], scale by detailAmp
-//     float mountainH_withDetail = rawMountainH + detail * detailAmp;
-
-//     // --- low-frequency ground boost for lower plains ---
-//     float yn = clampf(_y / Y_MAX, 0.0f, 1.0f);
-//     float s = smoothstepf(0.0f, 1.0f, yn);
-//     float groundNoise = fbm3(x * groundNoiseFreq, 0.0f, z * groundNoiseFreq, 4, 2.0f, 0.5f, 1.0f);
-//     float groundBoost = groundNoise * groundLayerStrength * (1.0f - s);
-
-//     // --- density from mountain surface: positive when solid
-//     // if voxel y is below the (mountain height + detail), it becomes solid.
-//     // We compute density = mountainH_withDetail - y + small smoothing noise
-//     float density = mountainH_withDetail - _y;
-//     density += groundBoost * 8.0f; // strengthen ground boost contribution
-
-//     // --- caves: subtract density where cave field is strong -->
-//     // caveNoise in [-1,1]. Map to [0,1], then smoothstep around threshold to create hollow regions.
-//     float caveNoise = fbm3(x * caveFreq, _y * caveFreq, z * caveFreq, caveOctaves, 2.0f, 0.5f, 1.0f); // [-1,1]
-//     float caveN01 = caveNoise * 0.5f + 0.5f;
-//     float caveMask = smoothstepf(caveThreshold - caveSmooth, caveThreshold + caveSmooth, caveN01); // 0..1 where 1 = cave
-//     density -= caveMask * caveCarveStrength * (10.0f); // carve; multiply to make caves deep
-
-//     // --- top bias: make ceiling sparse (optional) ---
-//     float topFalloff = powf(s, topBiasPower) * topBiasScale;
-//     density -= topFalloff;
-
-//     // --- floor contribution (soft) ---
-//     float floorBlend = smoothstepf(floorHeight, floorHeight + floorThickness, _y);
-//     float floorContribution = (1.0f - floorBlend) * floorStrength;
-//     density += floorContribution;
-
-    
-//     return density;
-// }

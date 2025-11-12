@@ -99,7 +99,4 @@
         "valarray": "cpp",
         "__locale": "cpp"
     },
-
-    "cmake.generator": "Visual Studio 17 2022",
-    "cmake.platform": "x64"
 }

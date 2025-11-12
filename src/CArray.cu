@@ -2,8 +2,8 @@
 #include <cuda_runtime.h>
 #include <iostream>
 
-#include "cumath.cuh"
-#include "TerrainGeneration.cuh"
+#include "cumath.h"
+#include "TerrainGeneration.h"
 
 extern "C" __global__
 void fillKernel(uint32_t* __restrict__ data, uint64_t numWords)
@@ -28,38 +28,6 @@ void fillKernel(uint32_t* __restrict__ data, uint64_t numWords)
     }
     data[wordIdx] = w;
 }
-
-// Kernel to fill every value inside the CArray, the for loop is made such that it does not need atomics to write. 
-// extern "C" __global__
-// void fillKernel(uint32_t* __restrict__ data, uint64_t numWords, uint64_t totalBits)
-// {
-//     // 64-bit idx to support very large worlds
-//     uint64_t wordIdx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
-//     if (wordIdx >= numWords) return;
-
-//     uint64_t baseBit = wordIdx * 32ull;
-
-//     uint32_t w = 0u;
-//     for (uint64_t bit = 0; bit < 32; ++bit) 
-//     {
-//         uint64_t bitIndex = baseBit + (uint64_t)bit;
-
-//         uint64_t z = bitIndex >> (SHIX + SHIY);
-//         uint64_t y = (bitIndex >> SHIX) & (uint64_t)MODY;
-//         uint64_t x = bitIndex & (uint64_t)MODX;
-
-//         // call Evaluate (adapted to accept float/double as you have)
-    
-//         float v = Evaluate((float)x, (float)y, (float)z);
-//         bool solid = v > 0.7f;
-//         if (solid) {
-//             w |= (1u << bit);
-//         }
-//     }
-
-//     // store with a single write
-//     data[wordIdx] = w;
-// }
 
 uint32_t* CArray::getPtr() 
 {

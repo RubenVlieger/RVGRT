@@ -1,7 +1,8 @@
 #include "util.hpp"
 #include "Camera.hpp"
 #include "Character.hpp"
-#include "State.hpp"
+#include "State.hpp" 
+#include "platform/Platform.hpp"
 #include <numbers>
 
 #include <glm/gtc/matrix_transform.hpp>
@@ -14,53 +15,58 @@ static const float g_JitterSequence[8][2] =
     {  7.0f/8.0f, -7.0f/8.0f }, { -5.0f/8.0f,  1.0f/8.0f }
 };
 
+Character::Character()
+    : viewMatrix(1.0f),
+      projectionMatrix(1.0f),
+      viewProjectionMatrix(1.0f),
+      unjitteredViewProjectionMatrix(1.0f),
+      prevUnjitteredViewProjectionMatrix(1.0f),
+      inverseViewProjectionMatrix(1.0f),
+      prevViewProjectionMatrix(1.0f),
+      nearPlane(0.1f),
+      farPlane(1000.0f),
+      FOV(70.0f),
+      jitterX(0.0f),
+      jitterY(0.0f),
+      lockMouse(false),
+      position(2048.0f, 256.0f, 2048.0f), // Start in the middle of the world
+      velocity(0.0f),
+      direction(0.0f, 0.0f, -1.0f),
+      yaw(std::numbers::pi_v<float>),
+      pitch(-std::numbers::pi_v<float> * 0.5f),
+      speed(0.1f),
+      speedDropoff(0.95f),
+      jumpSpeed(0.1f),
+      sensitivity(0.0001f),
+      gravityAmount(-0.005f)
+{
+    // Constructor body can be empty if all initialization is done above
+}
+
+
 
 glm::dvec3 calcDirfromSphere(double pitch, double yaw) 
 {
     const float pih = std::numbers::pi_v<float> * 0.5f;
-    glm::vec4 sins = sin(glm::vec4(yaw, yaw + pih, pitch, pitch+pih));
+    glm::vec4 sins = (glm::vec4(sin(yaw), sin(yaw + pih), sin(pitch), sin(pitch+pih)));
     return normalize(glm::vec3(-sins[0] * -sins[3], 
                           -sins[2],
                           -sins[1] *  sins[3]));
 }
 
-Character::Character() 
-{
-    velocity = glm::vec3(0.0f, 0.0f, 0.0f);
-    position = glm::vec3(128.0f, 350.0f, 128.0f);
-
-    viewMatrix = glm::mat4(1.0f);
-    projectionMatrix = glm::mat4(1.0f);
-    viewProjectionMatrix = glm::mat4(1.0f);
-    unjitteredViewProjectionMatrix = glm::mat4(1.0f);
-    prevViewProjectionMatrix = glm::mat4(1.0f);
-    prevUnjitteredViewProjectionMatrix = glm::mat4(1.0f);
-
-    nearPlane = 0.1f;
-    farPlane = 50000.0f;    
-
-
-    FOV = 60.0f;
-
-    yaw = -0.7f;
-    pitch = -std::numbers::pi - 0.3f;
-    direction = calcDirfromSphere(pitch, yaw);
-
-    speed = 30.0f;
-    speedDropoff = 0.95f;
-    jumpSpeed = -30.0f;
-    sensitivity = 0.015f;
-    gravityAmount = 0.0f;
-    lockMouse = false;
-}
 void Character::Update(unsigned int frameCount) 
 {
+    // Get the platform pointer from the global state
+    Platform* platform = State::state.platform.get();
+    if (!platform) return; // Guard against calls before platform is initialized
+
     prevViewProjectionMatrix = viewProjectionMatrix;
     prevUnjitteredViewProjectionMatrix = unjitteredViewProjectionMatrix;
     if (!lockMouse) 
     {
-        yaw += State::state.deltaXMouse.exchange(0) * sensitivity * State::state.deltaTime * FOV;
-        pitch += State::state.deltaYMouse.exchange(0) * sensitivity * State::state.deltaTime * FOV;
+        // Access members through the platform pointer
+        yaw += platform->deltaXMouse.exchange(0) * sensitivity * platform->deltaTime * FOV;
+        pitch += platform->deltaYMouse.exchange(0) * sensitivity * platform->deltaTime * FOV;
 
         yaw = fmod(yaw, std::numbers::pi * 2.0f);
         pitch = clamp(pitch, -4.5f, -1.65f);  
@@ -76,32 +82,30 @@ void Character::Update(unsigned int frameCount)
     vec3 jump = vec3(0.0f, 1.0f, 0.0f) * -inputs.y * jumpSpeed;
     vec3 gravity = vec3(0.0f, 1.0f, 0.0f) * gravityAmount;
 
-    vec3 addVector = (velocity + jump + gravity) * State::state.deltaTime;
+    vec3 addVector = (velocity + jump + gravity) * platform->deltaTime;
 
     position = glm::mix(position, position + addVector, 0.5f);
-    vec3 dirright = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f))); //direction.z, 0, direction.x
+    vec3 dirright = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f)));
     vec3 dirup = normalize(cross((vec3)direction, dirright));
-
-    const float FOVFACTOR = (1.0f) / tanf((70.0f * 3.1415f / 180.0f) / 2.0f);
-
+    
     viewMatrix = glm::lookAt(
-        position,                 // Camera position
-        position + (vec3)direction,     // Target position
-        glm::vec3(0.0f, 1.0f, 0.0f) // Up vector
+        position,                 
+        position + (vec3)direction,     
+        glm::vec3(0.0f, 1.0f, 0.0f) 
     );
 
     projectionMatrix = glm::perspective(
-        glm::radians(FOV), // FOV in radians
-        (float)State::state.dispWIDTH / (float)State::state.dispHEIGHT,
+        glm::radians(FOV),
+        (float)State::dispWIDTH / (float)State::dispHEIGHT,
         nearPlane,
         farPlane
     );
     unjitteredViewProjectionMatrix = projectionMatrix * viewMatrix;
 
-    jitterX = g_JitterSequence[frameCount % 8][0] * 0.5;
-    jitterY =  g_JitterSequence[frameCount % 8][1] * 0.5;
-    float clipSpaceJitterX = jitterX / (0.5f * State::state.dispWIDTH);
-    float clipSpaceJitterY = jitterY / (0.5f * State::state.dispHEIGHT);
+    jitterX = g_JitterSequence[frameCount % 8][0] * 0.5f;
+    jitterY = g_JitterSequence[frameCount % 8][1] * 0.5f;
+    float clipSpaceJitterX = jitterX / (0.5f * State::dispWIDTH);
+    float clipSpaceJitterY = jitterY / (0.5f * State::dispHEIGHT);
     projectionMatrix[2][0] += clipSpaceJitterX;
     projectionMatrix[2][1] += clipSpaceJitterY;
 
@@ -114,19 +118,16 @@ void Character::Update(unsigned int frameCount)
     camera.right = dirright;
     camera.up = dirup;
 
-    float fovFactor = (float)tan(FOV * std::numbers::pi / 180.0);
-    vec2 rcpAspectRatio = vec2((float)State::state.dispWIDTH / (float)State::state.dispHEIGHT, 1.0f);
-    vec2 rcpTwoImageSizes = 2.0f / vec2((float)State::state.dispWIDTH, (float)State::state.dispHEIGHT);
-
-    camera.cameraAddFactor = rcpAspectRatio * -fovFactor;
-    camera.cameraMultiplyFactor = fovFactor * rcpAspectRatio * rcpTwoImageSizes;
-
-    State::state.deltaXMouse.store(0);
-    State::state.deltaYMouse.store(0);
+    platform->deltaXMouse.store(0);
+    platform->deltaYMouse.store(0);
 }
 
 
 bool Character::IsKeyDown(char keycode)
 {
-    return State::state.IsKeyDown(keycode);
+    // Access IsKeyDown via the platform pointer
+    if(State::state.platform) {
+        return State::state.platform->IsKeyDown(keycode);
+    }
+    return false;
 }

@@ -1,56 +1,16 @@
 #include "State.hpp"
-#define NOMINMAX
-#include <thread>
-#include <vector>
-#include <iostream>
-#include <StateRender.cuh>
-#include <CArray.cuh>
-#include "Timer.hpp"
-#include "Texturepack.cuh"
-#include "CoarseArray.cuh"
+#include "platform/Platform.hpp"
+#include "renderer/GraphicsDevice.hpp"
+#include "renderer/Renderer.hpp"
 
-State::State() 
-{
-	render = new StateRender();
-}
-
+// The global singleton instance
 State State::state = State();
 
-bool State::IsKeyDown(char keycode) 
+State::State()
 {
-    return keysPressed.test(keycode);
+    // The constructor can be empty if initialization is done in the main function.
 }
 
-void State::Create() 
-{
-    Timer t1("allocating");
-    
-    render->cArray = CArray();
-    render->cArray.Allocate(BYTESIZE);
-
-    render->bitsArray = new uint32_t[BYTESIZE / 4];
-
-    render->csdf = CoarseArray();
-    render->csdf.AllocateSDF();
-
-    render->GIdata = CoarseArray();
-    render->GIdata.AllocateGI();
-
-//CuTex(dispWIDTH/2, dispHEIGHT/2, cudaCreateChannelDesc(32,0,0,0,cudaChannelFormatKindFloat),cudaAddressModeWrap ,cudaFilterModeLinear);
-
-    t1.s();
-
-    Timer t2("BUILDING FINE ARRAY");
-    render->cArray.fill();
-    render->cArray.readback(render->bitsArray);
-    t2.s();
-
-    Timer t3("BUILDING CSDF");
-    render->csdf.GenerateSDF(render->cArray);
-    t3.s();
-
-
-    Timer t4("Building GI");
-    render->GIdata.InitializeGIData(render->cArray, render->csdf, render->texturepack);
-    t4.s();
-}
+// DEFINE the destructor here. 
+// Now, the compiler has the full definitions of the interfaces and can correctly destroy the unique_ptrs.
+State::~State() = default;

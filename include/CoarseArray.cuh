@@ -3,6 +3,7 @@
 
 #include "CArray.cuh"
 #include "TexturePack.cuh"
+#include "glm/glm.hpp"
 
 // Define the dimensions of the coarse grid relative to the fine grid.
 // A coarseness of 2 means each CSDF cell represents a 2x2x2 block of voxels.
@@ -29,12 +30,13 @@ public:
     // Allocates memory for the Coarse Signed Distance Field.
     void AllocateSDF();
     void AllocateGI();
-    //void Allocate(const int byteSize);
 
+    // Generates the SDF from the high-resolution voxel data.
     void GenerateSDF(CArray& fineArray);
 
-    void InitializeGIData(CArray& fineArray, CoarseArray csdf, Texturepack& texture);
-    void UpdateGIData(CArray& fineArray, CoarseArray csdf, Texturepack& texture);
+    // Initializes and updates the Global Illumination data grid.
+    void InitializeGIData(CArray& fineArray, CoarseArray& csdf, Texturepack& texture);
+    void UpdateGIData(CArray& fineArray, CoarseArray& csdf, Texturepack& texture);
 
     // Provides access to the device pointer of the generated data.
     unsigned char* getPtr();
@@ -44,4 +46,4 @@ private:
     CArray m_csdfArray;
 };
 
-#endif 
+#endif
