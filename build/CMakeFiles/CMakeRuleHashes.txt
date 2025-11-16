@@ -1,4 +1,0 @@
-# Hashes of file build rules.
-0eae390eac2bf453e69be7cd172fe9fc CMakeFiles/Shaders
-e1df03082fd6fd0ce801ef6730969fd7 default.metallib
-828cc2d731ed4a71eb8021e3c211dadd raytrace.air

@@ -27,12 +27,6 @@ MetalRenderer::MetalRenderer(id device_id)
         NSLog(@"Failed to create compute pipeline state, error: %@", error);
     }
 
-    id<MTLFunction> generationFunction = [defaultLibrary newFunctionWithName:@"generate_world_kernel"];
-    _generationPSO = [_device newComputePipelineStateWithFunction:generationFunction error:&error];
-    if (!_generationPSO) {
-        NSLog(@"Failed to create compute pipeline state, error: %@", error);
-    }
-
     GenerateWorld();
 
 
@@ -41,34 +35,12 @@ MetalRenderer::MetalRenderer(id device_id)
 
 void MetalRenderer::GenerateWorld()
 {
-    NSLog(@"Allocating and generating voxel world on GPU...");
-    _voxelBuffer->Allocate(BYTESIZE);
+    NSLog(@"Allocating and generating voxel world on GPU via CArray...");
+    _voxelBuffer.Allocate(BYTESIZE);
     
-    id<MTLCommandQueue> commandQueue = [_device newCommandQueue];
-    id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
-    id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
-    
-    [encoder setComputePipelineState:_generationPSO];
-    
-    // Get the native handle and cast it to the correct Metal type
-    id<MTLBuffer> nativeBuffer = (id<MTLBuffer>)_voxelBuffer->GetNativeHandle();
-    [encoder setBuffer:nativeBuffer offset:0 atIndex:0];
-
-    // Dispatch enough threads to fill the buffer
-    MTLSize gridSize = MTLSizeMake(BYTESIZE / sizeof(uint32_t), 1, 1);
-    NSUInteger threadGroupSize = [_generationPSO maxTotalThreadsPerThreadgroup];
-    if (threadGroupSize > (BYTESIZE / sizeof(uint32_t))) {
-        threadGroupSize = (BYTESIZE / sizeof(uint32_t));
-    }
-    MTLSize threadgroupSize = MTLSizeMake(threadGroupSize, 1, 1);
-    
-    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-    [encoder endEncoding];
-    
-    [commandBuffer commit];
-    [commandBuffer waitUntilCompleted]; // Wait for generation to finish
-    
+    _voxelBuffer.fill();    
     NSLog(@"World generation complete.");
+
 }
 
 MetalRenderer::~MetalRenderer() {}
@@ -100,7 +72,6 @@ void MetalRenderer::Draw(const Character& character, unsigned int frameCount)
     id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
     encoder.label = @"RayTraceEncoder";
     
-    // FIX 5: Used the correct variable name `encoder` consistently.
     [encoder setComputePipelineState:_computePSO];
     [encoder setTexture:_renderTargetTexture atIndex:0];
 
@@ -112,8 +83,9 @@ void MetalRenderer::Draw(const Character& character, unsigned int frameCount)
 
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
 
-    id<MTLBuffer> nativeBuffer = (id<MTLBuffer>)_voxelBuffer->GetNativeHandle();
-    [encoder setBuffer:nativeBuffer offset:0 atIndex:1]; // Use index 1
+    
+    id<MTLBuffer> nativeBuffer = (id<MTLBuffer>)_voxelBuffer.getPtr();
+    [encoder setBuffer:nativeBuffer offset:0 atIndex:1];
     
     MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
     

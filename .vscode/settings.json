@@ -99,4 +99,5 @@
         "valarray": "cpp",
         "__locale": "cpp"
     },
+    "C_Cpp.errorSquiggles": "disabled",
 }

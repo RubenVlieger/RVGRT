@@ -88,30 +88,40 @@ elseif(APPLE)
         src/renderer/MetalDevice.mm
         src/renderer/MetalRenderer.mm
         src/renderer/MetalBuffer.mm
+        src/renderer/CArray_impl.mm
+        src/renderer/CoarseArray_impl.mm
+        src/renderer/TexturePack_impl.mm
     )
     
-    set(MAC_METAL_SOURCE "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/raytrace.metal")
+    file(GLOB MAC_METAL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal")
+    set(MAC_METAL_AIR_FILES "")
     set(MAC_METAL_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/default.metallib")
 
-    # --- THE FIX (PART 1): Find the xcrun wrapper program itself ---
     find_program(XCRUN_TOOL xcrun REQUIRED)
 
-    # --- THE FIX (PART 2): Use xcrun to call 'metal' and 'metallib' as sub-commands ---
-    add_custom_command(
-        OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/raytrace.air"
-        COMMAND ${XCRUN_TOOL} metal -c 
-                -I "${CMAKE_SOURCE_DIR}/include"  # <-- ADD THIS LINE
-                "${MAC_METAL_SOURCE}" 
-                -o "${CMAKE_CURRENT_BINARY_DIR}/raytrace.air"
-        DEPENDS "${MAC_METAL_SOURCE}"
-        COMMENT "Compiling Metal shader ${MAC_METAL_SOURCE}"
-    )
+    # --- FIX: Loop over each .metal file and create a compile command for it ---
+    foreach(METAL_FILE ${MAC_METAL_SOURCES})
+        get_filename_component(METAL_FILENAME ${METAL_FILE} NAME_WE)
+        set(AIR_FILE "${CMAKE_CURRENT_BINARY_DIR}/${METAL_FILENAME}.air")
+        list(APPEND MAC_METAL_AIR_FILES ${AIR_FILE})
 
+        add_custom_command(
+            OUTPUT "${AIR_FILE}"
+            COMMAND ${XCRUN_TOOL} metal -c
+                    -I "${CMAKE_SOURCE_DIR}/include"
+                    "${METAL_FILE}"
+                    -o "${AIR_FILE}"
+            DEPENDS "${METAL_FILE}"
+            COMMENT "Compiling Metal shader ${METAL_FILE}"
+        )
+    endforeach()
+
+    # --- FIX: Create the final library using ALL the compiled .air files ---
     add_custom_command(
         OUTPUT "${MAC_METAL_LIBRARY}"
-        COMMAND ${XCRUN_TOOL} metallib -o "${MAC_METAL_LIBRARY}" "${CMAKE_CURRENT_BINARY_DIR}/raytrace.air"
-        DEPENDS "${CMAKE_CURRENT_BINARY_DIR}/raytrace.air"
-        COMMENT "Creating Metal library ${MAC_METAL_LIBRARY}"
+        COMMAND ${XCRUN_TOOL} metallib -o "${MAC_METAL_LIBRARY}" ${MAC_METAL_AIR_FILES}
+        DEPENDS ${MAC_METAL_AIR_FILES}
+        COMMENT "Creating Metal library from ${MAC_METAL_AIR_FILES}"
     )
     
     add_custom_target(Shaders ALL DEPENDS "${MAC_METAL_LIBRARY}")

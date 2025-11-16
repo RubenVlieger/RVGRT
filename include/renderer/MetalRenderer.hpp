@@ -2,6 +2,7 @@
 
 #include "renderer/Renderer.hpp"
 #include "renderer/Buffer.hpp" 
+#include "CArray.h"
 
 #include <cstdint> // For uint32_t
 #include <memory> 
@@ -48,6 +49,8 @@ private:
     id _device;
     id _computePSO;
     id _renderTargetTexture; // Our writable texture
-    std::unique_ptr<Buffer> _voxelBuffer;
+
+    CArray _voxelBuffer;
+    
     id _generationPSO; 
 };
