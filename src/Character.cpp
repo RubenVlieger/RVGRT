@@ -59,7 +59,7 @@ void Character::Update(unsigned int frameCount)
     // Get the platform pointer from the global state
     Platform* platform = State::state.platform.get();
     if (!platform) return; // Guard against calls before platform is initialized
-
+    
     prevViewProjectionMatrix = viewProjectionMatrix;
     prevUnjitteredViewProjectionMatrix = unjitteredViewProjectionMatrix;
     if (!lockMouse) 
@@ -72,9 +72,9 @@ void Character::Update(unsigned int frameCount)
         pitch = clamp(pitch, -4.5f, -1.65f);  
         direction = calcDirfromSphere(pitch, yaw);
     }
-    vec3 inputs = vec3((IsKeyDown(0x44) ? 1.0f : 0.0f) + (IsKeyDown(0x41) ? -1.0f : 0.0f), //D - A
-                       (IsKeyDown(0x20) ? 1.0f : 0.0f) + (IsKeyDown(0x5A) ? -1.0f : 0.0f), // space - z
-                       (IsKeyDown(0x57) ? 1.0f : 0.0f) + (IsKeyDown(0x53) ? -1.0f : 0.0f)) * speed; // W  - S
+    vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) + (platform->IsKeyDown('A') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown(' ') ? 1.0f : 0.0f) + (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown('W') ? 1.0f : 0.0f) + (platform->IsKeyDown('S') ? -1.0f : 0.0f)) * speed;
 
     velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) + inputs.z * (vec3)direction;
     velocity *= speedDropoff;

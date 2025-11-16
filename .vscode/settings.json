@@ -97,7 +97,10 @@
         "shared_mutex": "cpp",
         "unordered_set": "cpp",
         "valarray": "cpp",
-        "__locale": "cpp"
+        "__locale": "cpp",
+        "__verbose_abort": "cpp",
+        "execution": "cpp",
+        "variant": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled",
 }

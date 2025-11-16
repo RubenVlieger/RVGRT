@@ -4,11 +4,13 @@
 #import <MetalKit/MetalKit.h>
 #include <memory>
 
+#import "platform/GameView.h"
 #include "State.hpp"
 #include "platform/MacOSPlatform.hpp"
 #include "renderer/MetalDevice.hpp"
 #include "renderer/MetalRenderer.hpp"
 #include "Character.hpp"
+
 
 /**
  * @file macos_main.mm
@@ -36,14 +38,14 @@
 @interface AppDelegate : NSObject <NSApplicationDelegate, MTKViewDelegate>
 {
     NSWindow* _window;
-    MTKView*  _view;
+    GameView*  _view;
 }
 @end
 
 @implementation AppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
-    NSRect frame = NSMakeRect(0, 0, State::dispWIDTH, State::dispHEIGHT);
+    NSRect frame = NSMakeRect(0, 0, State::screenWIDTH, State::screenHEIGHT);
     NSUInteger style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable;
 
     _window = [[NSWindow alloc]
@@ -54,24 +56,22 @@
     [_window setTitle:@"RVGRT on Metal (Compute)"];
     [_window center];
 
-    // --- Core Engine Initialization ---
+    [_window setAcceptsMouseMovedEvents:YES];
+
     // 1. Create the Metal graphics device.
     State::state.graphicsDevice = std::make_unique<MetalDevice>();
     MetalDevice* metalDevice = static_cast<MetalDevice*>(State::state.graphicsDevice.get());
 
-    // --- THE FIX IS HERE ---
-    // We are calling a C++ method on a C++ object, so we must use C++ -> syntax.
     id<MTLDevice> device = metalDevice->GetMetalDevice();
     // -----------------------
 
     // 2. Create the MetalKit View using the device.
-    _view = [[MTKView alloc] initWithFrame:frame device:device];
+    _view = [[GameView alloc] initWithFrame:frame device:device];   
     _view.delegate = self;
     _view.paused = YES;
     _view.enableSetNeedsDisplay = YES;
 
     // 3. Initialize the graphics device with the view handle.
-    // This is also a C++ method call on a C++ object.
     State::state.graphicsDevice->Initialize((__bridge void*)_view);
 
     // 4. Create the macOS platform abstraction.
@@ -95,6 +95,22 @@
                                    userInfo:nil
                                     repeats:YES];
 }
+
+
+- (void)gameLoop:(NSTimer *)timer {
+    // Get the current time for calculating delta time
+    static auto lastTime = std::chrono::steady_clock::now();
+    auto currentTime = std::chrono::steady_clock::now();
+    double frameTimeMs = std::chrono::duration<double, std::milli>(currentTime - lastTime).count();
+    lastTime = currentTime;
+
+    State::state.platform->deltaTime = frameTimeMs;
+
+    State::state.character.Update(0); 
+
+    [_view setNeedsDisplay:YES];
+}
+
 
 
 // This is the main rendering callback. It only runs when the view is marked as "dirty".

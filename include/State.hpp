@@ -19,10 +19,10 @@ public:
     std::unique_ptr<Renderer> renderer;
 
     // --- Resolution Control ---
-    static constexpr int dispHEIGHT = 800;
-    static constexpr int dispWIDTH = 1280;
-    static constexpr int screenHEIGHT = 2400;
-    static constexpr int screenWIDTH = 3840;
+    static constexpr int dispHEIGHT = 1920 * 0.6f; //800; //3072 x 1920
+    static constexpr int dispWIDTH = 3072 * 0.6f; //1280;
+    static constexpr int screenHEIGHT = 1920 * 0.6f;
+    static constexpr int screenWIDTH = 3072 * 0.6f;
 
     // --- 3D World ---
     Character character = Character();
@@ -32,6 +32,6 @@ public:
 
     // --- Constructor and Destructor ---
     State();
-    ~State(); // <-- DECLARE the destructor here
+    ~State(); 
 
 };

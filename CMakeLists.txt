@@ -91,15 +91,15 @@ elseif(APPLE)
         src/renderer/CArray_impl.mm
         src/renderer/CoarseArray_impl.mm
         src/renderer/TexturePack_impl.mm
+        src/platform/GameView.mm
     )
     
     file(GLOB MAC_METAL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal")
     set(MAC_METAL_AIR_FILES "")
-    set(MAC_METAL_LIBRARY "${CMAKE_CURRENT_BINARY_DIR}/default.metallib")
+    set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") # Source library
 
     find_program(XCRUN_TOOL xcrun REQUIRED)
 
-    # --- FIX: Loop over each .metal file and create a compile command for it ---
     foreach(METAL_FILE ${MAC_METAL_SOURCES})
         get_filename_component(METAL_FILENAME ${METAL_FILE} NAME_WE)
         set(AIR_FILE "${CMAKE_CURRENT_BINARY_DIR}/${METAL_FILENAME}.air")
@@ -116,17 +116,13 @@ elseif(APPLE)
         )
     endforeach()
 
-    # --- FIX: Create the final library using ALL the compiled .air files ---
     add_custom_command(
-        OUTPUT "${MAC_METAL_LIBRARY}"
-        COMMAND ${XCRUN_TOOL} metallib -o "${MAC_METAL_LIBRARY}" ${MAC_METAL_AIR_FILES}
+        OUTPUT "${MAC_METAL_LIBRARY_SRC}"
+        COMMAND ${XCRUN_TOOL} metallib -o "${MAC_METAL_LIBRARY_SRC}" ${MAC_METAL_AIR_FILES}
         DEPENDS ${MAC_METAL_AIR_FILES}
         COMMENT "Creating Metal library from ${MAC_METAL_AIR_FILES}"
     )
     
-    add_custom_target(Shaders ALL DEPENDS "${MAC_METAL_LIBRARY}")
-
-    # --- Dummy Implementation for CudaRenderer (contents unchanged) ---
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
         "
         #include \"renderer/Renderer.hpp\"
@@ -142,23 +138,24 @@ elseif(APPLE)
         "
     )
 
-    # --- Create the macOS Executable ---
+    set(MAC_METAL_LIBRARY_DEST "${CMAKE_CURRENT_BINARY_DIR}/RVGRT.app/Contents/Resources/default.metallib")
+
+    add_custom_command(
+        OUTPUT "${MAC_METAL_LIBRARY_DEST}"
+        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/RVGRT.app/Contents/Resources"
+        COMMAND ${CMAKE_COMMAND} -E copy
+                "${MAC_METAL_LIBRARY_SRC}"
+                "${MAC_METAL_LIBRARY_DEST}"
+        DEPENDS "${MAC_METAL_LIBRARY_SRC}"
+        COMMENT "Copying Metal library to app bundle..."
+    )
+
     add_executable(${APP_NAME} MACOSX_BUNDLE
         ${MAC_SOURCES}
         "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
+        "${MAC_METAL_LIBRARY_DEST}"
     )
-
-    add_dependencies(${APP_NAME} Shaders)
-
-        add_custom_command(
-        TARGET ${APP_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy
-                "${MAC_METAL_LIBRARY}"
-                "$<TARGET_FILE_DIR:${APP_NAME}>/../Resources/default.metallib"
-        COMMENT "Copying default.metallib to app bundle..."
-    )
-
-    # --- Link against macOS Frameworks ---
+    
     target_link_libraries(${APP_NAME} PRIVATE
         "-framework Cocoa"
         "-framework Metal"

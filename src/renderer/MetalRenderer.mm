@@ -67,8 +67,8 @@ void MetalRenderer::Draw(const Character& character, unsigned int frameCount)
     id<MTLCommandQueue> commandQueue = metalDevice->GetMetalCommandQueue();
 
     id<MTLCommandBuffer> commandBuffer = [commandQueue commandBuffer];
-    commandBuffer.label = @"MyComputeFrame";
-    
+    commandBuffer.label = @"Main Frame Command Buffer";
+
     id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
     encoder.label = @"RayTraceEncoder";
     
@@ -89,7 +89,6 @@ void MetalRenderer::Draw(const Character& character, unsigned int frameCount)
     
     MTLSize threadgroupSize = MTLSizeMake(16, 16, 1);
     
-    // FIX 2 (again): Use Objective-C syntax for accessing texture properties.
     MTLSize threadgridSize = MTLSizeMake([(id<MTLTexture>)_renderTargetTexture width], [(id<MTLTexture>)_renderTargetTexture height], 1);
     
     [encoder dispatchThreads:threadgridSize threadsPerThreadgroup:threadgroupSize];
@@ -101,7 +100,6 @@ void MetalRenderer::Draw(const Character& character, unsigned int frameCount)
     [commandBuffer waitUntilCompleted];
 }
 
-// FIX 6: The return type `id` must exactly match the declaration in the header.
 id MetalRenderer::GetOutputTexture()
 {
     return _renderTargetTexture;

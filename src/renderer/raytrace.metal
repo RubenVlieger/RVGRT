@@ -25,18 +25,12 @@ kernel void generate_world_kernel(
         
         uint64_t bitIndex = baseBit + bit_offset;
 
-        // "Decode" the 1D linear bit index back into 3D world coordinates (x, y, z).
-        // This logic uses the world dimension constants from `cumath.cuh`.
         uint64_t z = bitIndex >> (SHIX + SHIY);
         uint64_t y = (bitIndex >> SHIX) & (uint64_t)MODY;
         uint64_t x = bitIndex & (uint64_t)MODX;
         
-        // --- THE MAGIC ---
-        // Call the shared `Evaluate` function from `TerrainGeneration.shared.hpp`.
-        // This is the exact same C++ code that the CUDA version calls.
         float density = Evaluate((float)x, (float)y, (float)z);
         
-        // If the voxel is solid, set the corresponding bit in our 32-bit word.
         if (density > 0.7f) {
             w |= (1u << bit_offset);
         }
@@ -63,9 +57,9 @@ kernel void raytrace_kernel(
     float2 uv = float2(gid) / float2(width, height);
     float2 ndc = uv * 2.0 - 1.0;
     
-    //float3 ray_direction = normalize(cameraData.forward + ndc.x * cameraData.right + ndc.y * cameraData.up);
+    float3 ray_direction = normalize(cameraData.forward + ndc.x * cameraData.right + ndc.y * cameraData.up);
 
-    float3 final_color = float3(uv, 0.0f);//ray_direction * 0.5 + 0.5;
+    float3 final_color = ray_direction;
 
     outputTexture.write(float4(final_color, 1.0), gid);
 }

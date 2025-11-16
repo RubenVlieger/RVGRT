@@ -39,7 +39,6 @@ float3 sampleTexture(half2 uv, const float3 pos, TEXTURE_OBJECT texObj)
     uv.x = ((uv.x * ((half)1.0f/16.0))) + whichBlock.x;
     uv.y = ((uv.y * ((half)1.0f/16.0))) + whichBlock.y;
     
-    // METAL-SPECIFIC TEXTURE SAMPLING
     half4 t = texObj.sample(s, float2(uv)); // Metal sample takes float2 UVs
     return make_float3(t.x, t.y, t.z);
 }
