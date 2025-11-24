@@ -13,4 +13,11 @@ struct CameraData {
     simd_float3 right;
     simd_float3 up;
 };
+
+struct FrameData {
+    simd_float3 sunDirection;
+    float time;
+    // We can add jitter values here later if needed
+};
+
 #endif

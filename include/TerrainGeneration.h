@@ -158,6 +158,128 @@ GPU_FUNC GPU_INLINE float3 grad_from_hash(unsigned int h)
     return g;
 }
 
+GPU_FUNC GPU_INLINE half3 grad_from_hash_h(unsigned int h) 
+{
+    h &= 15u;
+    // Convert to half immediately
+    half u = (h < 8u) ? (half)1.0h : (half)0.0h;
+    half v = (h < 4u) ? (half)1.0h : ((h == 12u || h == 14u) ? (half)1.0h : (half)0.0h);
+    
+    half3 g;
+    g.x = (h & 1u) ? 1.0h : -1.0h;
+    g.y = (h & 2u) ? 1.0h : -1.0h;
+    g.z = (h & 4u) ? 1.0h : -1.0h;
+
+    if (h < 8u) g.z = 0.0h;
+    else if (h < 12u) g.x = 0.0h;
+    else g.y = 0.0h;
+    
+    return g;
+}
+
+GPU_FUNC GPU_INLINE half dot3_h(half3 g, half x, half y, half z) {
+    return g.x * x + g.y * y + g.z * z;
+}
+
+
+GPU_FUNC half simplex3D_h(float px, float py, float pz) 
+{
+    const float F3 = 1.0f / 3.0f;
+    const half G3 = 1.0h / 6.0h;
+
+    // Skew (Keep in float for precision)
+    float s = (px + py + pz) * F3;
+    int i = int(floor(px + s));
+    int j = int(floor(py + s));
+    int k = int(floor(pz + s));
+
+    float t = float(i + j + k) * (1.0f / 6.0f); // G3 as float
+    float x0_f = px - (float(i) - t);
+    float y0_f = py - (float(j) - t);
+    float z0_f = pz - (float(k) - t);
+
+    // Convert deltas to half (safe because they are small)
+    half x0 = (half)x0_f;
+    half y0 = (half)y0_f;
+    half z0 = (half)z0_f;
+
+    int i1, j1, k1;
+    int i2, j2, k2;
+
+    // Comparisons can be done on halfs or floats, float is safer for edge cases
+    int c_xy = (x0_f >= y0_f);
+    int c_xz = (x0_f >= z0_f);
+    int c_yz = (y0_f >= z0_f);
+
+    i1 = c_xy & c_xz;
+    j1 = (1 - c_xy) & c_yz;
+    k1 = (1 - c_xz) & (1 - c_yz);
+
+    int x0_is_smallest = (1 - c_xy) & (1 - c_xz);
+    int y0_is_smallest = c_xy & (1 - c_yz);
+    int z0_is_smallest = c_xz & c_yz;
+    i2 = 1 - x0_is_smallest;
+    j2 = 1 - y0_is_smallest;
+    k2 = 1 - z0_is_smallest;
+
+    half x1 = x0 - (half)i1 + G3;
+    half y1 = y0 - (half)j1 + G3;
+    half z1 = z0 - (half)k1 + G3;
+
+    half x2 = x0 - (half)i2 + 2.0h * G3;
+    half y2 = y0 - (half)j2 + 2.0h * G3;
+    half z2 = z0 - (half)k2 + 2.0h * G3;
+
+    half x3 = x0 - 1.0h + 3.0h * G3;
+    half y3 = y0 - 1.0h + 3.0h * G3;
+    half z3 = z0 - 1.0h + 3.0h * G3;
+
+    int i_1 = i + i1, j_1 = j + j1, k_1 = k + k1;
+    int i_2 = i + i2, j_2 = j + j2, k_2 = k + k2;
+    int i_3 = i + 1,  j_3 = j + 1,  k_3 = k + 1;
+
+    half3 g0 = grad_from_hash_h(hash3(i,   j,   k));
+    half3 g1 = grad_from_hash_h(hash3(i_1, j_1, k_1));
+    half3 g2 = grad_from_hash_h(hash3(i_2, j_2, k_2));
+    half3 g3 = grad_from_hash_h(hash3(i_3, j_3, k_3));
+
+    half n0, n1, n2, n3;
+
+    half t0 = 0.5h - x0*x0 - y0*y0 - z0*z0;
+    t0 = max(0.0h, t0);
+    t0 *= t0;
+    n0 = t0 * t0 * dot3_h(g0, x0, y0, z0);
+
+    half t1 = 0.5h - x1*x1 - y1*y1 - z1*z1;
+    t1 = max(0.0h, t1);
+    t1 *= t1;
+    n1 = t1 * t1 * dot3_h(g1, x1, y1, z1);
+
+    half t2 = 0.5h - x2*x2 - y2*y2 - z2*z2;
+    t2 = max(0.0h, t2);
+    t2 *= t2;
+    n2 = t2 * t2 * dot3_h(g2, x2, y2, z2);
+
+    half t3 = 0.5h - x3*x3 - y3*y3 - z3*z3;
+    t3 = max(0.0h, t3);
+    t3 *= t3;
+    n3 = t3 * t3 * dot3_h(g3, x3, y3, z3);
+
+    return 96.0h * (n0 + n1 + n2 + n3);
+}
+
+GPU_FUNC GPU_INLINE half fbm3D_h(float x, float y, float z, int octaves, float frequency, float lacunarity, float persistence) {
+    half total = 0.0h;
+    half amplitude = 1.0h;
+    half hp = (half)persistence;
+    for (int i = 0; i < octaves; i++) {
+        total += simplex3D_h(x * frequency, y * frequency, z * frequency) * amplitude;
+        frequency *= lacunarity;
+        amplitude *= hp;
+    }
+    return total;
+}
+
 // A very optimized simplex3D implementation. Benchmarking along side optimization features 4.0x speedup on my system versus naive simplex3D algorithm.
 GPU_FUNC GPU_INLINE float simplex3D(float px, float py, float pz) 
 {

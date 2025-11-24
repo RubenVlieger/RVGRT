@@ -80,6 +80,8 @@
     // 5. Create the compute-based Metal renderer.
     State::state.renderer = std::make_unique<MetalRenderer>(device);
 
+    _view.clearColor = MTLClearColorMake(0, 0, 0, 1);
+
     // --- Final Window and App Setup ---
     [_window setContentView:_view];
     [_window makeFirstResponder:_view];
@@ -102,6 +104,7 @@
     static auto lastTime = std::chrono::steady_clock::now();
     auto currentTime = std::chrono::steady_clock::now();
     double frameTimeMs = std::chrono::duration<double, std::milli>(currentTime - lastTime).count();
+    std::cout << frameTimeMs << std::endl;
     lastTime = currentTime;
 
     State::state.platform->deltaTime = frameTimeMs;
@@ -113,52 +116,42 @@
 
 
 
-// This is the main rendering callback. It only runs when the view is marked as "dirty".
-- (void)drawInMTKView:(nonnull MTKView *)view {
+- (void)drawInMTKView:(nonnull MTKView *)view 
+{
     MetalRenderer* renderer = static_cast<MetalRenderer*>(State::state.renderer.get());
     MetalDevice* device = static_cast<MetalDevice*>(State::state.graphicsDevice.get());
+    if (!renderer || !device) return;
 
-    if (!renderer || !device) {
-        return;
-    }
-    
-    // STEP 1: Execute the compute shader to render the scene to an off-screen texture.
-    renderer->Draw(State::state.character, 0); // Frame count can be passed in later
-
-    // STEP 2: Copy the result to the screen.
-    id<MTLTexture> sourceTexture = renderer->GetOutputTexture();
-    
-    // Get the texture provided by the system that will be displayed on the screen.
     id<CAMetalDrawable> drawable = [view currentDrawable];
     if (!drawable) { return; }
+
+    id<MTLCommandBuffer> commandBuffer = [device->GetMetalCommandQueue() commandBuffer];
+    commandBuffer.label = @"FrameCommandBuffer";
+
+    id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
+    encoder.label = @"MainComputeEncoder";
+    renderer->Draw(encoder, State::state.character, 0);
+
+    [encoder endEncoding];
+
+    id<MTLTexture> sourceTexture = renderer->GetOutputTexture();
     id<MTLTexture> destinationTexture = drawable.texture;
 
-    // Create a new command buffer specifically for our fast copy operation.
-    id<MTLCommandBuffer> commandBuffer = [device->GetMetalCommandQueue() commandBuffer];
-    commandBuffer.label = @"BlitToScreenBuffer";
-
-    // Create a Blit Command Encoder, which is optimized for texture-to-texture copies.
     id<MTLBlitCommandEncoder> blitEncoder = [commandBuffer blitCommandEncoder];
-    blitEncoder.label = @"TextureBlit";
-    
-    // Schedule the copy from our rendered texture to the screen's texture.
+    blitEncoder.label = @"BlitToScreen";
+
     [blitEncoder copyFromTexture:sourceTexture
-                      sourceSlice:0
-                      sourceLevel:0
-                     sourceOrigin:MTLOriginMake(0, 0, 0)
-                       sourceSize:MTLSizeMake(sourceTexture.width, sourceTexture.height, 1)
+                        sourceSlice:0 sourceLevel:0
+                        sourceOrigin:MTLOriginMake(0, 0, 0)
+                        sourceSize:MTLSizeMake(sourceTexture.width, sourceTexture.height, 1)
                         toTexture:destinationTexture
-                 destinationSlice:0
-                 destinationLevel:0
+                    destinationSlice:0 destinationLevel:0
                 destinationOrigin:MTLOriginMake(0, 0, 0)];
+    
+    [blitEncoder endEncoding]; 
 
-    // We are done encoding copy commands.
-    [blitEncoder endEncoding];
-
-    // Schedule the presentation of the drawable after the copy command buffer has completed.
     [commandBuffer presentDrawable:drawable];
 
-    // Commit the command buffer to the GPU to begin the copy and presentation.
     [commandBuffer commit];
 }
 

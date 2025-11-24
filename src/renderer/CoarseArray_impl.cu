@@ -1,12 +1,10 @@
-// src/renderer/CoarseArray_impl.cu
-
 #include "CoarseArray.h"
 #include "cumath.h"
 #include "raytracing_functions.h"
+#include <iostream>
 
-// --- SDF Generation Kernels (Unchanged Logic, using cumath.h types) ---
 
-KERNEL_FUNC void computeDistX(const uint32_t* fineData, unsigned char* distX)
+KERNEL_FUNC void computeDistX(TEX3D_U32_R fineData, TEX3D_U8_W distX)
 {
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= SDF_BYTESIZE) return;
@@ -45,7 +43,7 @@ KERNEL_FUNC void computeDistX(const uint32_t* fineData, unsigned char* distX)
 }
 
 
-KERNEL_FUNC void computeDistY(const unsigned char* distX, unsigned char* distY)
+KERNEL_FUNC void computeDistY(TEX3D_U8_R distX, TEX3D_U8_W distY)
 {
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= SDF_BYTESIZE) return;
@@ -56,7 +54,6 @@ KERNEL_FUNC void computeDistY(const unsigned char* distX, unsigned char* distY)
         return;
     }
 
-    uint64_t cz = idx / (SDF_SIZEX * SDF_SIZEY);
     uint64_t temp = idx % (SDF_SIZEX * SDF_SIZEY);
     uint64_t cy = temp / SDF_SIZEX;
 
@@ -79,7 +76,7 @@ KERNEL_FUNC void computeDistY(const unsigned char* distX, unsigned char* distY)
     distY[idx] = (unsigned char)fminf((float)SDF_MAX_DIST, sqrtf(min_dist_sq));
 }
 
-KERNEL_FUNC void computeDistZ(const unsigned char* distXY, unsigned char* finalCSDF)
+KERNEL_FUNC void computeDistZ(TEX3D_U8_R distXY, TEX3D_U8_W finalCSDF)
 {
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= SDF_BYTESIZE) return;
@@ -112,13 +109,10 @@ KERNEL_FUNC void computeDistZ(const unsigned char* distXY, unsigned char* finalC
 }
 
 
-// --- GI Generation Kernels (Refactored to use cumath.h types) ---
-
 CONST_MEM float3 c_sunDir2;
 
-KERNEL_FUNC void InitialGlobalIlluminate(uint32_t* GIdata, const uint32_t* RESTRICT bits, const unsigned char* RESTRICT csdf)
+KERNEL_FUNC void InitialGlobalIlluminate(TEX3D_U32_W GIdata, TEX3D_U32_R bits, TEX3D_U8_R csdf)
 {
-    // This kernel does not use random numbers, so it is unchanged.
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x;
     if (idx >= GI_SIZE) return;
     uint64_t cz = idx / (GI_SIZEX * GI_SIZEY);
@@ -134,7 +128,7 @@ KERNEL_FUNC void InitialGlobalIlluminate(uint32_t* GIdata, const uint32_t* RESTR
     GIdata[idx] = ((uint32_t)(accumulatedColor.x * 255.f) << 0) | ((uint32_t)(accumulatedColor.y * 255.f) << 8) | ((uint32_t)(accumulatedColor.z * 255.f) << 16) | (255u << 24);
 }
 
-KERNEL_FUNC void GlobalIlluminate(uint32_t* GIdata_curr, const uint32_t* RESTRICT bits, const unsigned char* RESTRICT csdf,
+KERNEL_FUNC void GlobalIlluminate(TEX3D_U32_RW GIdata_curr, TEX3D_U32_R bits, TEX3D_U8_R csdf,
                                  TEXTURE_OBJECT texturepack, unsigned int frameNumber, uint64_t offset)
 {
     uint64_t idx = (uint64_t)blockIdx.x * (uint64_t)blockDim.x + (uint64_t)threadIdx.x + offset;
@@ -148,7 +142,7 @@ KERNEL_FUNC void GlobalIlluminate(uint32_t* GIdata_curr, const uint32_t* RESTRIC
     uint64_t cx = temp % GI_SIZEX;
     float3 worldPos = make_float3((cx + 0.5f) * COARSENESSGI, (cy + 0.5f) * COARSENESSGI, (cz + 0.5f) * COARSENESSGI);
 
-    if (IsSolid(floor(worldPos), bits)) { return; }
+    if (IsSolid(make_int3(floor(worldPos)), bits)) { return; }
 
     float3 newSample = make_float3(0.0f);
     hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.001f, bits, csdf);
@@ -160,7 +154,7 @@ KERNEL_FUNC void GlobalIlluminate(uint32_t* GIdata_curr, const uint32_t* RESTRIC
     hitInfo bounceHit = trace(worldPos, randomDir, 0.001f, bits, csdf);
 
     if (bounceHit.hit) {
-        int3 g = floor(bounceHit.pos / (float)COARSENESSGI);
+        int3 g = make_int3(floor(bounceHit.pos / (float)COARSENESSGI));
         if (g.x >= 0 && g.y >= 0 && g.z >=0 && g.x < GI_SIZEX && g.y < GI_SIZEY && g.z < GI_SIZEZ) {
             uint64_t hit_idx = (uint64_t)g.z * GI_SIZEX * GI_SIZEY + (uint64_t)g.y * GI_SIZEX + g.x;
             uint32_t prevSample = GIdata_curr[hit_idx];
@@ -181,8 +175,6 @@ KERNEL_FUNC void GlobalIlluminate(uint32_t* GIdata_curr, const uint32_t* RESTRIC
 
 
 
-// --- Host-side C++ Class Implementation ---
-
 CoarseArray::CoarseArray() {}
 CoarseArray::~CoarseArray() {}
 
@@ -201,26 +193,30 @@ unsigned char* CoarseArray::getPtr()
     return reinterpret_cast<unsigned char*>(m_csdfArray.getPtr());
 }
 
-void CoarseArray::GenerateSDF(CArray& fineArray)
+void CoarseArray::GenerateSDF(void* packedVoxelTexture)
 {
     if (m_csdfArray.getSize() != SDF_BYTESIZE)
     {
         std::cerr << "CSDF not allocated or wrong size. Call AllocateSDF() first." << std::endl;
         return;
     }
+    
+    TEX3D_U32_R fineData = static_cast<TEX3D_U32_R>(packedVoxelTexture);
+
     CArray tempArray;
     tempArray.Allocate(SDF_BYTESIZE);
 
     const unsigned long threads = 256;
     unsigned int blocks = (unsigned int)((SDF_BYTESIZE + (uint64_t)threads - 1ull) / (uint64_t)threads);
     
-    computeDistX<<<blocks, threads>>>(fineArray.getPtr(), reinterpret_cast<unsigned char*>(tempArray.getPtr()));
+    // Pointers cast to TEX3D types
+    computeDistX<<<blocks, threads>>>(fineData, reinterpret_cast<TEX3D_U8_W>(tempArray.getPtr()));
     CUDA_CHECK(cudaGetLastError());
     
-    computeDistY<<<blocks, threads>>>(reinterpret_cast<unsigned char*>(tempArray.getPtr()), getPtr());
+    computeDistY<<<blocks, threads>>>(reinterpret_cast<TEX3D_U8_R>(tempArray.getPtr()), reinterpret_cast<TEX3D_U8_W>(getPtr()));
     CUDA_CHECK(cudaGetLastError());
     
-    computeDistZ<<<blocks, threads>>>(getPtr(), reinterpret_cast<unsigned char*>(tempArray.getPtr()));
+    computeDistZ<<<blocks, threads>>>(reinterpret_cast<TEX3D_U8_R>(getPtr()), reinterpret_cast<TEX3D_U8_W>(tempArray.getPtr()));
     CUDA_CHECK(cudaGetLastError());
 
     CUDA_CHECK(cudaMemcpy(m_csdfArray.getPtr(), tempArray.getPtr(), SDF_BYTESIZE, cudaMemcpyDeviceToDevice));
@@ -231,15 +227,17 @@ void CoarseArray::GenerateSDF(CArray& fineArray)
     std::cout << "CSDF Generation Complete." << std::endl;
 }
 
-void CoarseArray::InitializeGIData(CArray& fineArray, CoarseArray& csdf, Texturepack& texturepack)
+void CoarseArray::InitializeGIData(void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack)
 {
+    TEX3D_U32_R fineData = static_cast<TEX3D_U32_R>(packedVoxelTexture);
+
     float3 sunDir = normalize(make_float3(10.f, 5.f, -4.f));
     cudaMemcpyToSymbol(c_sunDir2, &sunDir, sizeof(float3));
 
     const unsigned long threads = 128;
     unsigned int blocks = (unsigned int)((GI_SIZE + (uint64_t)threads - 1ull) / (uint64_t)threads);
     
-    InitialGlobalIlluminate<<<blocks, threads>>>((uint32_t*)m_csdfArray.getPtr(), fineArray.getPtr(), csdf.getPtr());
+    InitialGlobalIlluminate<<<blocks, threads>>>((TEX3D_U32_W)m_csdfArray.getPtr(), fineData, (TEX3D_U8_R)csdf.getPtr());
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
 }
@@ -249,15 +247,17 @@ void CoarseArray::InitializeGIData(CArray& fineArray, CoarseArray& csdf, Texture
 static int frameNumber = 0;
 static uint64_t offsetCounter = 0;
 
-void CoarseArray::UpdateGIData(CArray& fineArray, CoarseArray& csdf, Texturepack& texturepack)
+void CoarseArray::UpdateGIData(void* encoder, void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack)
 {
+    TEX3D_U32_R fineData = static_cast<TEX3D_U32_R>(packedVoxelTexture);
+
     float3 sunDir = normalize(make_float3(10.f, 5.f, -4.f));
     cudaMemcpyToSymbol(c_sunDir2, &sunDir, sizeof(float3));
 
     const unsigned long threads = 128;
     unsigned int blocks = (unsigned int)((RAYPS + (uint64_t)threads - 1ull) / (uint64_t)threads);
     
-    GlobalIlluminate<<<blocks, threads>>>((uint32_t*)m_csdfArray.getPtr(), fineArray.getPtr(), csdf.getPtr(), texturepack.texObject(), frameNumber, offsetCounter) ;
+    GlobalIlluminate<<<blocks, threads>>>((TEX3D_U32_RW)m_csdfArray.getPtr(), fineData, (TEX3D_U8_R)csdf.getPtr(), texturepack.texObject(), frameNumber, offsetCounter) ;
     CUDA_CHECK(cudaGetLastError());    
     frameNumber++;
     

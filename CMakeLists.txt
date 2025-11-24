@@ -94,9 +94,10 @@ elseif(APPLE)
         src/platform/GameView.mm
     )
     
+    # 1. Compile Metal Shaders to .air files
     file(GLOB MAC_METAL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal")
     set(MAC_METAL_AIR_FILES "")
-    set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") # Source library
+    set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") # The compiled library
 
     find_program(XCRUN_TOOL xcrun REQUIRED)
 
@@ -124,36 +125,31 @@ elseif(APPLE)
     )
     
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
-        "
-        #include \"renderer/Renderer.hpp\"
+        "#include \"renderer/Renderer.hpp\"
         class CudaRenderer : public Renderer {
         public:
             CudaRenderer() {}
             ~CudaRenderer() {}
             void Draw(const Character&, unsigned int) override {}
-        };
-        // This is necessary to satisfy the `new CudaRenderer()` in the Windows code path
-        // which, although guarded, might still be seen by some analysis tools.
-        // A better approach is a factory function, but this works for now.
-        "
+        };"
     )
 
-    set(MAC_METAL_LIBRARY_DEST "${CMAKE_CURRENT_BINARY_DIR}/RVGRT.app/Contents/Resources/default.metallib")
-
-    add_custom_command(
-        OUTPUT "${MAC_METAL_LIBRARY_DEST}"
-        COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_BINARY_DIR}/RVGRT.app/Contents/Resources"
-        COMMAND ${CMAKE_COMMAND} -E copy
-                "${MAC_METAL_LIBRARY_SRC}"
-                "${MAC_METAL_LIBRARY_DEST}"
-        DEPENDS "${MAC_METAL_LIBRARY_SRC}"
-        COMMENT "Copying Metal library to app bundle..."
+    set_source_files_properties("${MAC_METAL_LIBRARY_SRC}" PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources
     )
 
     add_executable(${APP_NAME} MACOSX_BUNDLE
         ${MAC_SOURCES}
         "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
-        "${MAC_METAL_LIBRARY_DEST}"
+        "${MAC_METAL_LIBRARY_SRC}" 
+    )
+    
+    set_target_properties(${APP_NAME} PROPERTIES
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.rvgrt.voxelengine"
+        MACOSX_BUNDLE_BUNDLE_NAME "RVGRT"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1"
+        RESOURCE "${MAC_METAL_LIBRARY_SRC}"
     )
     
     target_link_libraries(${APP_NAME} PRIVATE

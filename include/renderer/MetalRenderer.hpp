@@ -3,6 +3,8 @@
 #include "renderer/Renderer.hpp"
 #include "renderer/Buffer.hpp" 
 #include "CArray.h"
+#include "Texturepack.h"
+#include "CoarseArray.h"
 
 #include <cstdint> // For uint32_t
 #include <memory> 
@@ -34,6 +36,8 @@ public:
     ~MetalRenderer() override;
 
     // The main entry point to kick off a frame's compute work.
+    void Draw(id<MTLComputeCommandEncoder> encoder, const Character& character, unsigned int frameCount);
+
     void Draw(const Character& character, unsigned int frameCount) override;
 
     // Called by the main view when it needs a texture to display.
@@ -45,12 +49,21 @@ public:
 
 private:
     void createRenderTarget(uint32_t width, uint32_t height);
+    Texturepack _texturepack;
 
     id _device;
+    id _worldGenerationPSO;
     id _computePSO;
-    id _renderTargetTexture; // Our writable texture
+    id _distApproxPSO;
 
-    CArray _voxelBuffer;
+    id _renderTargetTexture; 
+    id _halfDistTexture;
+    id _halfShadowTexture;
+
+    id _voxelTexture; 
+
+    CoarseArray _csdf;
+    CoarseArray _giData;
     
     id _generationPSO; 
 };

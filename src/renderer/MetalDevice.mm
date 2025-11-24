@@ -12,8 +12,8 @@ MetalDevice::MetalDevice() {
 
 void MetalDevice::Initialize(void* viewHandle) {
     _view = (__bridge MTKView*)viewHandle;
-    _view.colorPixelFormat = MTLPixelFormatBGRA8Unorm;
-    // Set other view properties if needed
+    _view.framebufferOnly = NO;
+    _view.colorPixelFormat = MTLPixelFormatRGBA8Unorm;
 }
 
 void MetalDevice::BeginFrame() {

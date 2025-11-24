@@ -1,5 +1,3 @@
-// src/renderer/CoarseArray_impl.metal
-
 #include <metal_stdlib>
 #include "cumath.h"
 #include "CoarseArray.h"
@@ -7,179 +5,204 @@
 #include "TerrainGeneration.h"
 using namespace metal;
 
-// --- SDF Kernels ---
+inline uint3 indexTo3D(uint index, uint width, uint height) {
+    uint z = index / (width * height);
+    uint temp = index % (width * height);
+    uint y = temp / width;
+    uint x = temp % width;
+    return uint3(x, y, z);
+}
 
-kernel void CoarseArray_computeDistX(device const uint* fineData [[buffer(0)]],
-                                     device uchar* distX [[buffer(1)]],
-                                     uint idx [[thread_position_in_grid]])
+
+
+kernel void CoarseArray_computeDistX(texture3d<uint, access::read> packedTex [[texture(0)]], 
+                                     texture3d<float, access::write> outDistX [[texture(1)]],
+                                     uint3 gid [[thread_position_in_grid]])
 {
-    if (idx >= SDF_BYTESIZE) return;
+    if (gid.x >= SDF_SIZEX || gid.y >= SDF_SIZEY || gid.z >= SDF_SIZEZ) return;
 
-    uint64_t cz = idx / (SDF_SIZEX * SDF_SIZEY);
-    uint64_t temp = idx % (SDF_SIZEX * SDF_SIZEY);
-    uint64_t cy = temp / SDF_SIZEX;
-    uint64_t cx = temp % SDF_SIZEX;
-
-    if (isCoarseBlockSolid(cx, cy, cz, fineData)) {
-        distX[idx] = 0;
+    if (isCoarseBlockSolid(gid.x, gid.y, gid.z, packedTex)) {
+        outDistX.write(float4(0.0f), gid);
         return;
     }
     
-    uchar min_d = SDF_MAX_DIST;
-    for (uint i = 1; i <= SDF_MAX_DIST; ++i) {
-        if (i <= cx && isCoarseBlockSolid(cx - i, cy, cz, fineData)) {
+    int min_d = SDF_MAX_DIST;
+    
+    for (int i = 1; i <= SDF_MAX_DIST; ++i) {
+        bool left  = ((int)gid.x - i >= 0)           &&   isCoarseBlockSolid(gid.x - i, gid.y, gid.z, packedTex);
+        bool right = ((int)gid.x + i < (int)SDF_SIZEX) && isCoarseBlockSolid(gid.x + i, gid.y, gid.z, packedTex);
+        
+        if (left || right) {
             min_d = i;
             break;
         }
     }
-    for (uint i = 1; i < min_d; ++i) {
-        if (cx + i < SDF_SIZEX && isCoarseBlockSolid(cx + i, cy, cz, fineData)) {
-            min_d = i;
-            break;
-        }
-    }
-    distX[idx] = min_d;
+    outDistX.write(float4((float)min_d), gid);
 }
 
-kernel void CoarseArray_computeDistY(device const uchar* distX [[buffer(0)]],
-                                     device uchar* distY [[buffer(1)]],
-                                     uint idx [[thread_position_in_grid]])
-{
-    if (idx >= SDF_BYTESIZE) return;
 
-    uchar current_dx = distX[idx];
+
+kernel void CoarseArray_computeDistY(texture3d<float, access::sample> inDistX [[texture(0)]],
+                                     texture3d<float, access::write> outDistY [[texture(1)]],
+                                     uint3 gid [[thread_position_in_grid]])
+{
+    if (gid.x >= SDF_SIZEX || gid.y >= SDF_SIZEY || gid.z >= SDF_SIZEZ) return;
+
+    float current_dx = inDistX.read(gid).r;
+    
     if (current_dx == 0) {
-        distY[idx] = 0;
+        outDistY.write(float4(0.0f), gid);
         return;
     }
 
-    uint64_t cz = idx / (SDF_SIZEX * SDF_SIZEY);
-    uint64_t temp = idx % (SDF_SIZEX * SDF_SIZEY);
-    uint64_t cy = temp / SDF_SIZEX;
+    float min_dist_sq = current_dx * current_dx;
 
-    float min_dist_sq = (float)current_dx * (float)current_dx;
-    for (uint y_offset = 1; y_offset <= SDF_MAX_DIST; ++y_offset) {
-        if (y_offset * y_offset >= min_dist_sq) break;
-        if (cy >= y_offset) {
-            uint64_t neighbor_idx = idx - y_offset * SDF_SIZEX;
-            float dist_sq = (float)distX[neighbor_idx] * (float)distX[neighbor_idx] + (float)(y_offset * y_offset);
-            min_dist_sq = fmin(min_dist_sq, dist_sq);
+    for (int y_offset = 1; y_offset <= SDF_MAX_DIST; ++y_offset) {
+        if ((float)(y_offset * y_offset) >= min_dist_sq) break;
+        
+        if ((int)gid.y >= y_offset) {
+            float d = inDistX.read(uint3(gid.x, gid.y - y_offset, gid.z)).r;
+            min_dist_sq = fmin(min_dist_sq, d*d + (float)(y_offset * y_offset));
         }
-        if (cy + y_offset < SDF_SIZEY) {
-            uint64_t neighbor_idx = idx + y_offset * SDF_SIZEX;
-            float dist_sq = (float)distX[neighbor_idx] * (float)distX[neighbor_idx] + (float)(y_offset * y_offset);
-            min_dist_sq = fmin(min_dist_sq, dist_sq);
+        if ((int)gid.y + y_offset < (int)SDF_SIZEY) {
+            float d = inDistX.read(uint3(gid.x, gid.y + y_offset, gid.z)).r;
+            min_dist_sq = fmin(min_dist_sq, d*d + (float)(y_offset * y_offset));
         }
     }
-    distY[idx] = (uchar)fmin((float)SDF_MAX_DIST, sqrt(min_dist_sq));
+    float result = fmin(sqrt(min_dist_sq), (float)SDF_MAX_DIST);
+    outDistY.write(float4(result), gid);
 }
 
-kernel void CoarseArray_computeDistZ(device const uchar* distXY [[buffer(0)]],
-                                     device uchar* finalCSDF [[buffer(1)]],
-                                     uint idx [[thread_position_in_grid]])
-{
-    if (idx >= SDF_BYTESIZE) return;
 
-    uchar current_dxy = distXY[idx];
+kernel void CoarseArray_computeDistZ(texture3d<float, access::sample> inDistXY [[texture(0)]],
+                                     texture3d<float, access::write> outDistZ [[texture(1)]],
+                                     uint3 gid [[thread_position_in_grid]])
+{
+    if (gid.x >= SDF_SIZEX || gid.y >= SDF_SIZEY || gid.z >= SDF_SIZEZ) return;
+
+    float current_dxy = inDistXY.read(gid).r;
     if (current_dxy == 0) {
-        finalCSDF[idx] = 0;
+        outDistZ.write(float4(0.0f), gid);
         return;
     }
-    
-    uint64_t cz = idx / (SDF_SIZEX * SDF_SIZEY);
+
     float min_dist_sq = (float)current_dxy * (float)current_dxy;
-    for (uint z_offset = 1; z_offset <= SDF_MAX_DIST; ++z_offset) {
-        if (z_offset * z_offset >= min_dist_sq) break;
-        if (cz >= z_offset) {
-            uint64_t neighbor_idx = idx - z_offset * (SDF_SIZEX * SDF_SIZEY);
-            float dist_sq = (float)distXY[neighbor_idx] * (float)distXY[neighbor_idx] + (float)(z_offset * z_offset);
-            min_dist_sq = fmin(min_dist_sq, dist_sq);
+    
+    for (int z_offset = 1; z_offset <= SDF_MAX_DIST; ++z_offset) {
+        if ((float)(z_offset * z_offset) >= min_dist_sq) break;
+
+        if ((int)gid.z >= z_offset) {
+            float d = inDistXY.read(uint3(gid.x, gid.y, gid.z - z_offset)).r;
+            min_dist_sq = fmin(min_dist_sq, d*d + (float)(z_offset * z_offset));
         }
-        if (cz + z_offset < SDF_SIZEZ) {
-            uint64_t neighbor_idx = idx + z_offset * (SDF_SIZEX * SDF_SIZEY);
-            float dist_sq = (float)distXY[neighbor_idx] * (float)distXY[neighbor_idx] + (float)(z_offset * z_offset);
-            min_dist_sq = fmin(min_dist_sq, dist_sq);
+        if ((int)gid.z + z_offset < (int)SDF_SIZEZ) {
+            float d = inDistXY.read(uint3(gid.x, gid.y, gid.z + z_offset)).r;
+            min_dist_sq = fmin(min_dist_sq, d*d + (float)(z_offset * z_offset));
         }
     }
-    finalCSDF[idx] = (uchar)fmin((float)SDF_MAX_DIST, sqrt(min_dist_sq));
+    float result = fmin(sqrt(min_dist_sq), (float)SDF_MAX_DIST);
+    outDistZ.write(float4(result), gid);
 }
 
 
-// --- GI Kernels ---
-kernel void CoarseArray_InitialGlobalIlluminate(device uint* GIdata [[buffer(0)]],
-                                                device const uint* bits [[buffer(1)]],
-                                                device const uchar* csdf [[buffer(2)]],
-                                                constant float3& c_sunDir2 [[buffer(3)]],
-                                                uint idx [[thread_position_in_grid]])
+
+kernel void CoarseArray_InitialGlobalIlluminate(
+    texture3d<uint, access::write> GIdata [[texture(0)]],
+    texture3d<uint, access::read> packedTex [[texture(1)]],
+    texture3d<float, access::sample> csdf [[texture(2)]], 
+    constant float3& c_sunDir2 [[buffer(3)]],
+    uint3 gid [[thread_position_in_grid]])
 {
-    // This kernel does not use random numbers, so it is unchanged.
-    if (idx >= GI_SIZE) return;
-    uint64_t cz = idx / (GI_SIZEX * GI_SIZEY);
-    uint64_t temp = idx % (GI_SIZEX * GI_SIZEY);
-    uint64_t cy = temp / GI_SIZEX;
-    uint64_t cx = temp % GI_SIZEX;
-    float3 worldPos = make_float3((cx + 0.5f) * COARSENESSGI, (cy + 0.5f) * COARSENESSGI, (cz + 0.5f) * COARSENESSGI);
-    float3 accumulatedColor = make_float3(0.0f);
-    hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.0001f, bits, csdf);
+    if (gid.x >= GI_SIZEX || gid.y >= GI_SIZEY || gid.z >= GI_SIZEZ) return;
+    
+    float3 worldPos = make_float3((gid.x + 0.5f) * COARSENESSGI, 
+                                  (gid.y + 0.5f) * COARSENESSGI, 
+                                  (gid.z + 0.5f) * COARSENESSGI);
+    
+    half3 accumulatedColor = make_half3(0.h);
+
+    hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.0001f, packedTex, csdf);
     if (!shadowHit.hit) {
         accumulatedColor = c_sunColor;
     }
-    GIdata[idx] = ((uint)(accumulatedColor.x * 255.f) << 0) | ((uint)(accumulatedColor.y * 255.f) << 8) | ((uint)(accumulatedColor.z * 255.f) << 16) | (255u << 24);
+    
+    uint packedColor = ((uint)(accumulatedColor.x * 255.h) << 0) | 
+                       ((uint)(accumulatedColor.y * 255.h) << 8) | 
+                       ((uint)(accumulatedColor.z * 255.h) << 16) | 
+                       (255u << 24);
+                       
+    GIdata.write(uint4(packedColor, 0, 0, 0), gid);
 }
 
-
-
-kernel void CoarseArray_GlobalIlluminate(device uint* GIdata_curr [[buffer(0)]],
-                                         device const uint* bits [[buffer(1)]],
-                                         device const uchar* csdf [[buffer(2)]],
-                                         texture2d<half, access::sample> texturepack [[texture(3)]],
-                                         constant float3& c_sunDir2 [[buffer(4)]],
-                                         constant uint& frameNumber [[buffer(5)]],
-                                         constant uint64_t& offset [[buffer(6)]],
-                                         uint idx_local [[thread_position_in_grid]])
+kernel void CoarseArray_GlobalIlluminate(
+    texture3d<uint, access::read_write> GIdata_curr [[texture(0)]],
+    texture3d<uint, access::read> packedTex [[texture(1)]],
+    texture3d<float, access::sample> csdf [[texture(2)]], 
+    texture2d<float, access::sample> texturepack [[texture(3)]],
+    constant float3& c_sunDir2 [[buffer(4)]],
+    constant uint& frameNumber [[buffer(5)]],
+    constant uint64_t& offset [[buffer(6)]],
+    uint idx_local [[thread_position_in_grid]])
 {
     uint64_t idx = idx_local + offset;
     if (idx >= GI_SIZE) return;
 
+    uint z = idx / (GI_SIZEX * GI_SIZEY);
+    uint temp = idx % (GI_SIZEX * GI_SIZEY);
+    uint y = temp / GI_SIZEX;
+    uint x = temp % GI_SIZEX;
+    uint3 gid = uint3(x, y, z);
+
+    float3 worldPos = make_float3((x + 0.5f) * COARSENESSGI, 
+                                  (y + 0.5f) * COARSENESSGI, 
+                                  (z + 0.5f) * COARSENESSGI);
+
+    if (isCoarseBlockSolid(x, y, z, packedTex)) { 
+        GIdata_curr.write(uint4(0), gid);
+        return; 
+    }
+
     uint random_state = init_random_state(idx, frameNumber);
+    half3 newSample = make_half3(0.0h);
 
-    uint64_t cz = idx / (GI_SIZEX * GI_SIZEY);
-    uint64_t temp = idx % (GI_SIZEX * GI_SIZEY);
-    uint64_t cy = temp / GI_SIZEX;
-    uint64_t cx = temp % GI_SIZEX;
-    float3 worldPos = make_float3((cx + 0.5f) * COARSENESSGI, (cy + 0.5f) * COARSENESSGI, (cz + 0.5f) * COARSENESSGI);
-
-    if (IsSolid(int3(floor(worldPos)), bits)) { return; }
-
-    float3 newSample = make_float3(0.0f);
-
-    hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.001f, bits, csdf);
+    hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.001f, packedTex, csdf);
     if (!shadowHit.hit) {
         newSample += c_sunColor;
     }
 
     float3 randomDir = random_direction_in_sphere(random_state);
-    hitInfo bounceHit = trace(worldPos, randomDir, 0.001f, bits, csdf);
+    hitInfo bounceHit = trace(worldPos, randomDir, 0.001f, packedTex, csdf);
 
-    // (rest of kernel logic is unchanged but will now work correctly)
     if (bounceHit.hit) {
         int3 g = int3(floor(bounceHit.pos / (float)COARSENESSGI));
-        if (g.x >= 0 && g.y >= 0 && g.z >= 0 && g.x < GI_SIZEX && g.y < GI_SIZEY && g.z < GI_SIZEZ) {
-            uint64_t hit_idx = (uint64_t)g.z * GI_SIZEX * GI_SIZEY + (uint64_t)g.y * GI_SIZEX + g.x;
-            uint prevSample = GIdata_curr[hit_idx];
-            float3 bouncedColor = make_float3((prevSample & 255) / 255.0f, ((prevSample >> 8) & 255) / 255.0f, ((prevSample >> 16) & 255) / 255.0f);
-            float3 surfaceAlbedo = sampleTexture(bounceHit.uv, bounceHit.pos, texturepack);
+        if (g.x >= 0 && g.y >= 0 && g.z >= 0 && g.x < (int)GI_SIZEX && g.y < (int)GI_SIZEY && g.z < (int)GI_SIZEZ) {
+            
+            uint prevSample = GIdata_curr.read(uint3(g)).r;
+            
+            half3 bouncedColor = make_half3((half)(prevSample & 255) / 255.0h, 
+                                            (half)((prevSample >> 8) & 255) / 255.0h, 
+                                            (half)((prevSample >> 16) & 255) / 255.0h);
+            
+            half3 surfaceAlbedo = sampleTexture(bounceHit.uv, bounceHit.pos, texturepack);
             newSample += (bouncedColor * surfaceAlbedo);
         }
     } else {
         newSample += sampleSky(randomDir, c_sunDir2);
     }
 
-    const float LEARNING_RATE = 0.04f;
-    uint prevData = GIdata_curr[idx];
-    float3 previousColor = make_float3((prevData & 255) / 255.0f, ((prevData >> 8) & 255) / 255.0f, ((prevData >> 16) & 255) / 255.0f);
-    float3 finalColor = lerp(previousColor, newSample, LEARNING_RATE);
-    finalColor = fmin(finalColor, make_float3(2.0f));
+    const half LEARNING_RATE = 0.04h;
+    uint prevData = GIdata_curr.read(gid).r;
+    half3 previousColor = make_half3((half)(prevData & 255) / 255.h, 
+                                     (half)((prevData >> 8) & 255) / 255.h, 
+                                     (half)((prevData >> 16) & 255) / 255.h);
+    
+    half3 finalColor = lerp(previousColor, newSample, LEARNING_RATE);
+    finalColor = fmin(finalColor, make_half3(2.0h));
 
-    GIdata_curr[idx] = ((uint)(fmin(finalColor.x, 1.0f) * 255.f) << 0) | ((uint)(fmin(finalColor.y, 1.0f) * 255.f) << 8) | ((uint)(fmin(finalColor.z, 1.0f) * 255.f) << 16) | (255u << 24);
+    uint packedFinal = ((uint)(fmin(finalColor.x, 1.0h) * 255.h) << 0) | 
+                       ((uint)(fmin(finalColor.y, 1.0h) * 255.h) << 8) | 
+                       ((uint)(fmin(finalColor.z, 1.0h) * 255.h) << 16) | 
+                       (255u << 24);
+
+    GIdata_curr.write(uint4(packedFinal, 0, 0, 0), gid);
 }

@@ -27,7 +27,7 @@ Texturepack::Texturepack()
     }
 
     // Upload to CUDA array as float4 normalized [0,1]
-    uploadRGBAFloat(image, width_, height_);
+    uploadRGBAData(image, width_, height_);
 
     stbi_image_free(image);
 }
@@ -43,9 +43,26 @@ Texturepack::Texturepack(const unsigned char* pngData, size_t pngSize)
         throw std::runtime_error(std::string("stbi_load_from_memory failed: ") + stbi_failure_reason());
     }
 
-    uploadRGBAFloat(image, width_, height_);
+    uploadRGBAData(image, width_, height_);
 
     stbi_image_free(image);
+}
+
+Texturepack::Texturepack(Texturepack&& other) noexcept
+    : texObj_(std::exchange(other.texObj_, nullptr)),
+      cuArray_(std::exchange(other.cuArray_, nullptr)), // cuArray is unused on Metal but we move it for consistency
+      width_(std::exchange(other.width_, 0)),
+      height_(std::exchange(other.height_, 0)) {}
+
+Texturepack& Texturepack::operator=(Texturepack&& other) noexcept {
+    if (this != &other) {
+        releaseResources();
+        texObj_ = std::exchange(other.texObj_, nullptr);
+        cuArray_ = std::exchange(other.cuArray_, nullptr);
+        width_ = std::exchange(other.width_, 0);
+        height_ = std::exchange(other.height_, 0);
+    }
+    return *this;
 }
 
 Texturepack::~Texturepack()
@@ -60,7 +77,7 @@ Texturepack::~Texturepack()
     }
 }
 
-void Texturepack::uploadRGBAFloat(const unsigned char* rgba8, int w, int h)
+void Texturepack::uploadRGBAData(const unsigned char* rgba8, int w, int h)
 {
     // Convert 8-bit RGBA -> float4 (normalized 0..1)
     std::vector<float> tmp; // layout: pixel0.r,pixel0.g,pixel0.b,pixel0.a, pixel1...

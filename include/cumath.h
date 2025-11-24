@@ -29,8 +29,15 @@ using namespace metal;
 #define THREAD_PTR(type)   threadgroup type
 
 #define RESTRICT         
-#define TEXTURE_OBJECT    texture2d<half, access::sample>
+#define TEXTURE_OBJECT    texture2d<float, access::sample>
 #define ARRAY_OBJECT      MTLTexture
+
+#define TEX3D_U8_R   texture3d<float, access::sample> 
+#define TEX3D_U8_W   texture3d<float, access::write>
+#define TEX3D_U32_R  texture3d<uint, access::read>
+#define TEX3D_U32_W  texture3d<uint, access::write>
+#define TEX3D_U32_RW texture3d<uint, access::read_write>
+
 // MSL uses these types natively
 using int2 = metal::int2;
 using int3 = metal::int3;
@@ -77,7 +84,11 @@ using half = __half;
 #define CONSTANT_PTR(type) const type
 #define THREAD_PTR(type)   __shared__ type
 
-
+#define TEX3D_U8_R   const unsigned char* RESTRICT
+#define TEX3D_U8_W   unsigned char* RESTRICT
+#define TEX3D_U32_R  const uint32_t* RESTRICT
+#define TEX3D_U32_W  uint32_t* RESTRICT
+#define TEX3D_U32_RW uint32_t* RESTRICT
 
 #else
 /*******************************************************************************
@@ -114,6 +125,12 @@ using half = __half;
 #define TEXTURE_OBJECT    void*
 #define ARRAY_OBJECT     void* 
 
+
+#define TEX3D_U8_R   const unsigned char*
+#define TEX3D_U8_W   unsigned char*
+#define TEX3D_U32_R  const unsigned int*
+#define TEX3D_U32_W  unsigned int*
+#define TEX3D_U32_RW unsigned int*
 
 using uint = unsigned int;
 #define F32(x) static_cast<float>(x)
@@ -222,6 +239,30 @@ struct alignas(8)  mat2 { float2 cols[2]; };
 struct alignas(16) mat3 { float3 cols[3]; }; // Use float3 to avoid padding issues
 struct alignas(16) mat4 { float4 cols[4]; };
 
+
+GPU_FUNC GPU_INLINE half3 make_half3(float s) { half3 v = {half(s), half(s), half(s)}; return v; }
+GPU_FUNC GPU_INLINE half3 make_half3(float x, float y, float z) { half3 v = {half(x), half(y), half(z)}; return v; }
+// Helper to convert float3 -> half3
+GPU_FUNC GPU_INLINE half3 make_half3(float3 v) { half3 r = {half(v.x), half(v.y), half(v.z)}; return r; }
+
+// 2. Arithmetic Operators for half3
+// Note: We convert to float for the math, then cast back to half
+inline half3 operator+(half3 a, half3 b) { 
+    return make_half3((float)a.x + (float)b.x, (float)a.y + (float)b.y, (float)a.z + (float)b.z); 
+}
+inline half3 operator-(half3 a, half3 b) { 
+    return make_half3((float)a.x - (float)b.x, (float)a.y - (float)b.y, (float)a.z - (float)b.z); 
+}
+inline half3 operator*(half3 a, half3 b) { 
+    return make_half3((float)a.x * (float)b.x, (float)a.y * (float)b.y, (float)a.z * (float)b.z); 
+}
+inline half3 operator*(half3 v, half s) { 
+    float sf = (float)s;
+    return make_half3((float)v.x * sf, (float)v.y * sf, (float)v.z * sf); 
+}
+inline half3 operator*(half s, half3 v) { return v * s; } // Commutative
+
+
 #endif // !PLATFORM_METAL
 
 //-------------------------------------------------------------------------------------------------
@@ -247,7 +288,13 @@ GPU_FUNC GPU_INLINE uint2 make_uint2(uint x, uint y) { return uint2(x, y); }
 GPU_FUNC GPU_INLINE half2 make_half2(float s) { return half2(s); }
 GPU_FUNC GPU_INLINE half2 make_half2(float x, float y) { return half2(x, y); }
 
+
+GPU_FUNC GPU_INLINE half3 make_half3(half s) { return half3(s); }
+GPU_FUNC GPU_INLINE half3 make_half3(half x, half y, half z) { return half3(x, y, z); }
+
+
 GPU_FUNC GPU_INLINE float3 make_float3(int3 v) { return float3(v); }
+GPU_FUNC GPU_INLINE float3 make_float3(half3 v) { return float3(v); }
 
 #else
 
@@ -350,11 +397,12 @@ inline mat4 operator*(mat4 a, mat4 b) {
 
 GPU_FUNC GPU_INLINE float lerp(float a, float b, float t) { return a + t * (b - a); }
 GPU_FUNC GPU_INLINE float3 lerp(float3 a, float3 b, float t) { return a + (b - a) * t; }
+GPU_FUNC GPU_INLINE half3 lerp(half3 a, half3 b, half t) { return a + (b - a) * t; }
+
 GPU_FUNC GPU_INLINE float3 floor3(float3 v) { return make_float3(floor(v.x), floor(v.y), floor(v.z)); }
 
 GPU_FUNC GPU_INLINE float3 abs3(float3 v) { return make_float3(abs(v.x), abs(v.y), abs(v.z)); }
 
-GPU_FUNC GPU_INLINE float3 cross(float3 a, float3 b) { return make_float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
 #if defined(PLATFORM_CPU)
 #define GPU_FUNC_INLINE inline
 
@@ -363,9 +411,10 @@ GPU_FUNC_INLINE float dot(float3 a, float3 b) { return a.x * b.x + a.y * b.y + a
 GPU_FUNC_INLINE float length(float3 v) { return sqrt(dot(v, v)); }
 GPU_FUNC_INLINE float3 normalize(float3 v) { float l = length(v); return (l > 0.0f) ? v / l : v; }
 GPU_FUNC_INLINE int2 clamp(int2 v, int minVal, int maxVal) {
-    // Note: On CPU, fmin/fmax are defined by the macro above to be std::min/std::max
+
     return make_int2(fmin(fmax(v.x, minVal), maxVal), fmin(fmax(v.y, minVal), maxVal));
 }
+GPU_FUNC GPU_INLINE float3 cross(float3 a, float3 b) { return make_float3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
 
 GPU_FUNC GPU_FUNC_INLINE float3 clamp(const float3 v, float minVal, float maxVal) {
     float3 tv = make_float3(v.x < minVal ? minVal : v.x,
@@ -414,13 +463,13 @@ GPU_FUNC GPU_INLINE void atomicAdd(unsigned int* address, unsigned int val) { *a
     }
 #endif
 
-#define c_sunColor make_float3(1.0f * 10.0f, 0.9f * 10.0f, 0.2f * 10.0f) ;
+#define c_sunColor make_half3(1.0h * 10.0h, 0.9h * 10.0h, 0.2h * 10.0h)
 
 #if defined(PLATFORM_METAL)
     // For MSL, use #define to ensure these are expanded as compile-time literals
-    #define SHIX 10
+    #define SHIX 11
     #define SHIY 9
-    #define SHIZ 10
+    #define SHIZ 11
     #define MODX ((1u<<SHIX) - 1u)
     #define MODY ((1u<<SHIY) - 1u)
     #define MODZ ((1u<<SHIZ) - 1u)
@@ -430,9 +479,9 @@ GPU_FUNC GPU_INLINE void atomicAdd(unsigned int* address, unsigned int val) { *a
     #define BYTESIZE (SIZEX*SIZEY*SIZEZ/8u)
 #else
     // For C++/CUDA, constexpr is typesafe and preferred
-    constexpr uint64_t SHIX = 10;
+    constexpr uint64_t SHIX = 11;
     constexpr uint64_t SHIY = 9;
-    constexpr uint64_t SHIZ = 10;
+    constexpr uint64_t SHIZ = 11;
     constexpr uint64_t MODX = (1ULL << SHIX) - 1;
     constexpr uint64_t MODY = (1ULL << SHIY) - 1;
     constexpr uint64_t MODZ = (1ULL << SHIZ) - 1;

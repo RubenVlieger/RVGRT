@@ -6,7 +6,7 @@
 #include "raytracing_functions.h"
 
 
-GPU_FUNC GPU_FUNC_INLINE float3 sampleTexture(half2 uv, const float3 pos, TEXTURE_OBJECT texObj)
+GPU_FUNC GPU_FUNC_INLINE half3 sampleTexture(half2 uv, const float3 pos, TEXTURE_OBJECT texObj)
 {
     // Texture selection constants
     const half2 texStoneID = make_half2(0.0f / 16.0f, 1.0f / 16.0f);
@@ -21,10 +21,13 @@ GPU_FUNC GPU_FUNC_INLINE float3 sampleTexture(half2 uv, const float3 pos, TEXTUR
 
     // Voxel material selection based on 3D noise
     const float freq = 0.05f;
-    int3 ipos = floor(pos);
-    float eval = simplex3D(ipos.x * freq, ipos.y * freq, ipos.z * freq);
-    float eval2 = simplex3D((ipos.x + 121.3f) * freq * 0.3f, (ipos.y + 1321.3f) * freq * 0.3f, (ipos.z + 721.5f) * freq * 0.3f);
-    eval = eval * 0.4f + eval2 * 0.6f;
+    pos = floor3(pos);
+    half eval = simplex3D_h(pos.x * freq, pos.y * freq, pos.z * freq);
+    
+    half eval2 = simplex3D_h((pos.x + 121.3f) * freq * 0.3f, 
+                             (pos.y + 1321.3f) * freq * 0.3f, 
+                             (pos.z + 721.5f) * freq * 0.3f);
+    eval = eval * 0.4h + eval2 * 0.6h;
 
     if(eval < -1.3f) whichBlock = texStoneID;
     else if(eval < -1.2f) whichBlock = texDiamondID;
@@ -42,6 +45,6 @@ GPU_FUNC GPU_FUNC_INLINE float3 sampleTexture(half2 uv, const float3 pos, TEXTUR
 
     // Sample the texture and return as float3
     float4 t = tex2D<float4>(texObj, (float)(uv.y), (float)(uv.x));
-    return float3(t.x, t.y, t.z);
+    return make_half3((half)t.x, (half)t.y, (half)t.z);
 }
 #endif

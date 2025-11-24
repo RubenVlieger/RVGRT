@@ -12,31 +12,11 @@ public:
     Texturepack();
     ~Texturepack();
 
-    // no copy semantics for simplicity
-    Texturepack(const Texturepack&) = delete;
-    Texturepack& operator=(const Texturepack&) = delete;
+    Texturepack(const Texturepack&);
+    Texturepack& operator=(const Texturepack&);
 
-    // Move constructor
-    Texturepack(Texturepack&& other) noexcept
-        : texObj_(std::exchange(other.texObj_, nullptr)),
-          cuArray_(std::exchange(other.cuArray_, nullptr)),
-          width_(std::exchange(other.width_, 0)),
-          height_(std::exchange(other.height_, 0)) {}
-
-    // Move assignment operator
-    Texturepack& operator=(Texturepack&& other) noexcept {
-        if (this != &other) {
-            // Free current resources
-            releaseResources();
-            
-            // Transfer ownership from other
-            texObj_ = std::exchange(other.texObj_, nullptr);
-            cuArray_ = std::exchange(other.cuArray_, nullptr);
-            width_ = std::exchange(other.width_, 0);
-            height_ = std::exchange(other.height_, 0);
-        }
-        return *this;
-    }
+    Texturepack(Texturepack&& other) noexcept;
+    Texturepack& operator=(Texturepack&& other) noexcept;
 
     // Accessors
     TEXTURE_OBJECT texObject() const { return texObj_; }
@@ -59,9 +39,10 @@ public:
         std::swap(width_, other.width_);
         std::swap(height_, other.height_);
     }
+    TEXTURE_OBJECT getTextureObject() const { return texObj_; }
 
 private:
-    void uploadRGBAFloat(const unsigned char* rgba8, int w, int h);
+    void uploadRGBAData(const unsigned char* rgba8, int w, int h);
     void releaseResources(); 
     TEXTURE_OBJECT texObj_ = nullptr;
     ARRAY_OBJECT cuArray_ = nullptr;

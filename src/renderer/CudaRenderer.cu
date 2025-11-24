@@ -37,7 +37,7 @@ __constant__ float c_waterReflectivity = 0.08f;
                                 hitInfo& hit,
                                 const uint32_t* __restrict__ bits,
                                 const unsigned char* __restrict__ csdf,
-                                cudaTextureObject_t texObj,
+                                 texObj,
                                 const uchar4* __restrict__ GIdata)
     {
         // --- Primary ray direction ---
@@ -59,8 +59,7 @@ __constant__ float c_waterReflectivity = 0.08f;
 
             float3 reflDir = reflect(dir, distortedNormal);
 
-            // *** PROBLEM 1 FIX: Use a large, constant view distance for the reflection ray. ***
-            hitInfo reflHit = trace(hit.pos, reflDir, 0.001f, bits, csdf);
+            hitInfo reflHit = trace(hit.pos, reflDir, 0.001h, bits, csdf);
 
             float3 finalReflectionColor;
             if (reflHit.hit) {

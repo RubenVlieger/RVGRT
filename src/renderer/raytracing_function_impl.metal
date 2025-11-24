@@ -4,28 +4,33 @@
 // Only compile this code when using the Metal compiler
 #if defined(PLATFORM_METAL)
 
-float3 sampleTexture(half2 uv, const float3 pos, TEXTURE_OBJECT texObj)
+
+
+
+half3 sampleTexture(half2 uv, float3 pos, texture2d<float, access::sample> texObj)
 {
-    sampler s(filter::linear);
-    // Texture selection constants
+    constexpr sampler s(filter::nearest); 
+
     const half2 texStoneID = make_half2(0.0f / 16.0f, 1.0f / 16.0f);
     const half2 texDirtID = make_half2(0.0f / 16.0f, 2.0f / 16.0f);
     const half2 texCobbleID = make_half2(1.0f / 16.0f, 0.0f / 16.0f);
     const half2 texIronID = make_half2(2.0f / 16.0f, 1.0f / 16.0f);
     const half2 texDiamondID = make_half2(3.0f / 16.0f, 2.0f / 16.0f);
     const half2 texStone2ID = make_half2(0.0f / 16.0f, 0.0f / 16.0f);
-    const half2 texSandStoneID = make_half2(11.0f / 16.0f, 0.0f / 16.0f);
     const half2 texCoalID = make_half2(2.0f / 16.0f, 2.0f / 16.0f);
     half2 whichBlock = make_half2(0.0f, 8.0f / 16.0f);
 
     // Voxel material selection based on 3D noise
     const float freq = 0.05f;
-    int3 ipos = to_int3(floor3(pos));
-    float eval = simplex3D(ipos.x * freq, ipos.y * freq, ipos.z * freq);
-    float eval2 = simplex3D((ipos.x + 121.3f) * freq * 0.3f, (ipos.y + 1321.3f) * freq * 0.3f, (ipos.z + 721.5f) * freq * 0.3f);
+    pos = floor3(pos);
+    float eval = simplex3D(pos.x * freq, pos.y * freq, pos.z * freq);
+    
+    float eval2 = simplex3D((pos.x + 121.3f) * freq * 0.3f, 
+                             (pos.y + 1321.3f) * freq * 0.3f, 
+                             (pos.z + 721.5f) * freq * 0.3f);
     eval = eval * 0.4f + eval2 * 0.6f;
 
-    if(eval < -1.3f) whichBlock = texStoneID;
+    if(eval < -1.3h) whichBlock = texStoneID;
     else if(eval < -1.2f) whichBlock = texDiamondID;
     else if(eval < -0.7f) whichBlock = texIronID;
     else if(eval < 0.0f) whichBlock = texStoneID;
@@ -36,11 +41,11 @@ float3 sampleTexture(half2 uv, const float3 pos, TEXTURE_OBJECT texObj)
     else whichBlock = texStoneID;
 
     // Calculate final UV in the atlas
-    uv.x = ((uv.x * ((half)1.0f/16.0))) + whichBlock.x;
-    uv.y = ((uv.y * ((half)1.0f/16.0))) + whichBlock.y;
-    
-    half4 t = texObj.sample(s, float2(uv)); // Metal sample takes float2 UVs
-    return make_float3(t.x, t.y, t.z);
+    uv.x = ((uv.x * ((half)1.0h/16.0h))) + whichBlock.x;
+    uv.y = ((uv.y * ((half)1.0h/16.0h))) + whichBlock.y;
+
+    float4 t = texObj.sample(s, float2(uv.y, uv.x));
+    return make_half3((half)t.x, (half)t.y, (half)t.z);
 }
 
 #endif // PLATFORM_METAL

@@ -29,16 +29,16 @@ Character::Character()
       jitterX(0.0f),
       jitterY(0.0f),
       lockMouse(false),
-      position(2048.0f, 256.0f, 2048.0f), // Start in the middle of the world
+      position(508.0f, 156.0f, 408.0f), // Start in the middle of the world
       velocity(0.0f),
       direction(0.0f, 0.0f, -1.0f),
       yaw(std::numbers::pi_v<float>),
       pitch(-std::numbers::pi_v<float> * 0.5f),
       speed(0.1f),
-      speedDropoff(0.95f),
-      jumpSpeed(0.1f),
+      speedDropoff(0.92f),
+      jumpSpeed(1.0f),
       sensitivity(0.0001f),
-      gravityAmount(-0.005f)
+      gravityAmount(0.0f)
 {
     // Constructor body can be empty if all initialization is done above
 }
@@ -59,7 +59,6 @@ void Character::Update(unsigned int frameCount)
     // Get the platform pointer from the global state
     Platform* platform = State::state.platform.get();
     if (!platform) return; // Guard against calls before platform is initialized
-    
     prevViewProjectionMatrix = viewProjectionMatrix;
     prevUnjitteredViewProjectionMatrix = unjitteredViewProjectionMatrix;
     if (!lockMouse) 
@@ -72,17 +71,25 @@ void Character::Update(unsigned int frameCount)
         pitch = clamp(pitch, -4.5f, -1.65f);  
         direction = calcDirfromSphere(pitch, yaw);
     }
+
     vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) + (platform->IsKeyDown('A') ? -1.0f : 0.0f),
                        (platform->IsKeyDown(' ') ? 1.0f : 0.0f) + (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
                        (platform->IsKeyDown('W') ? 1.0f : 0.0f) + (platform->IsKeyDown('S') ? -1.0f : 0.0f)) * speed;
 
+    if(platform->IsKeyDown('0x38'))
+        inputs *= 0.2f;
+
     velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) + inputs.z * (vec3)direction;
     velocity *= speedDropoff;
 
-    vec3 jump = vec3(0.0f, 1.0f, 0.0f) * -inputs.y * jumpSpeed;
+    vec3 jump = vec3(0.0f, 1.0f, 0.0f) * inputs.y * jumpSpeed;
     vec3 gravity = vec3(0.0f, 1.0f, 0.0f) * gravityAmount;
 
+
+
     vec3 addVector = (velocity + jump + gravity) * platform->deltaTime;
+
+
 
     position = glm::mix(position, position + addVector, 0.5f);
     vec3 dirright = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f)));
