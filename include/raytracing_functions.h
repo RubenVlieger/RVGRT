@@ -10,6 +10,10 @@ struct hitInfo
     bool hit;
     int its;
 };
+GPU_FUNC GPU_INLINE bool checkBit(uint32_t block, int x, int y, int z) {
+    int bitIndex = x + (y << 2) + (z << 4);
+    return (block & (1u << bitIndex)) != 0;
+}
 
 /**
  * @brief Checks if a voxel at a given integer coordinate is solid.
@@ -17,24 +21,26 @@ struct hitInfo
  * @param bits Pointer to the packed voxel data on the GPU.
  * @return True if the voxel is solid, false otherwise.
  */
-
-
-
-
 GPU_FUNC GPU_INLINE bool is_voxel_solid(int3 p, TEX3D_U32_R voxels)
 {
     if (p.x < 0 || p.y < 0 || p.z < 0 || 
         p.x >= SIZEX || p.y >= SIZEY || p.z >= SIZEZ) return false;
 
-#if defined(PLATFORM_METAL)
-    uint packedByte = voxels.read(uint3(p.x >> 1, p.y >> 1, p.z >> 1)).r;
-    uint bitIndex = (p.x & 1) | ((p.y & 1) << 1) | ((p.z & 1) << 2);
-    return (packedByte >> bitIndex) & 1;
-#else
-    uint64_t index = toIndex(p.x, p.y, p.z);
-    return ((voxels[index >> 5] >> (index & 31)) & 1);
-#endif
+    #if defined(PLATFORM_METAL)
+        uint3 superPos = uint3(p.x >> 2, p.y >> 2, p.z >> 1);
+        uint32_t blockBits = voxels.read(superPos).r;
+    #else
+        uint64_t index = toIndex(p.x >> 2, p.y >> 2, p.z >> 1); 
+        uint32_t blockBits = voxels[index]; // Adjust for linear array access if necessary
+    #endif
+
+    int lx = p.x & 3;
+    int ly = p.y & 3;
+    int lz = p.z & 1; 
+
+    return checkBit(blockBits, lx, ly, lz);
 }
+
 
 GPU_FUNC GPU_INLINE float get_csdf_val(int3 c, TEX3D_U8_R csdf)
 {
@@ -67,26 +73,34 @@ GPU_FUNC GPU_INLINE bool IsSolid(const int3 p, TEX3D_U32_R bits)
 }
 
 
+// ------------------------------------------------------------------
+
 GPU_FUNC GPU_INLINE bool isCoarseBlockSolid(uint64_t cx, uint64_t cy, uint64_t cz, TEX3D_U32_R bits)
 {
+    uint64_t px = cx >> 1;
+    uint64_t py = cy >> 1;
+    uint64_t pz = cz;
+
 #if defined(PLATFORM_METAL)
-    if (cx >= bits.get_width() || cy >= bits.get_height() || cz >= bits.get_depth()) return false;
+    if (px >= bits.get_width() || py >= bits.get_height() || pz >= bits.get_depth()) return false;
+    uint32_t blockBits = bits.read(uint3((uint)px, (uint)py, (uint)pz)).r;
 
-    uint packedByte = bits.read(uint3(cx, cy, cz)).r;
-    return packedByte > 0;
 #else
-    int3 start = make_int3(cx * COARSENESSSDF, cy * COARSENESSSDF, cz * COARSENESSSDF);
-    int3 end = make_int3(start.x + COARSENESSSDF, start.y + COARSENESSSDF, start.z + COARSENESSSDF);
+    const uint64_t packedW = SIZEX >> 2;
+    const uint64_t packedH = SIZEY >> 2;
+    const uint64_t packedD = SIZEZ >> 1;
 
-    for (int z = start.z; z < end.z; ++z) 
-        for (int y = start.y; y < end.y; ++y) 
-            for (int x = start.x; x < end.x; ++x) 
-                if (IsSolid(make_int3(x, y, z), bits)) 
-                    return true;       
-    return false;
+    if (px >= packedW || py >= packedH || pz >= packedD) return false;
+
+    uint64_t idx = pz * (packedW * packedH) + py * packedW + px;
+    uint32_t blockBits = bits[idx]; 
 #endif
-}
 
+    uint shift = (uint)((cx & 1) << 1) + (uint)((cy & 1) << 3);
+    uint32_t mask = 0x00330033u << shift;
+
+    return (blockBits & mask) != 0;
+}
 
 GPU_FUNC GPU_INLINE float getDistance(const float3 pos, TEX3D_U8_R csdf)
 {
@@ -212,15 +226,95 @@ GPU_FUNC GPU_INLINE half3 clamp3(const half3 a, const half3 b, const half3 c)
 }
 
 
-/**
- * @brief The main hybrid ray tracing function combining CSDF marching and DDA.
- * @param camPos The starting position of the ray.
- * @param camDir The normalized direction of the ray.
- * @param distance An initial distance to advance the ray before tracing begins.
- * @param bits Pointer to the packed high-resolution voxel data.
- * @param csdf Pointer to the CSDF data.
- * @return A hitInfo struct containing the results of the trace.
- */
+
+GPU_FUNC bool traceShadowAnyHit(
+    float3 startPos, 
+    float3 lightDir, 
+    float maxDist, 
+    texture3d<uint, access::read> bits, 
+    texture3d<float, access::sample> csdf)
+{
+    float t = 0.5f;
+    
+    for(int i = 0; i < 24; ++i) 
+    {
+        if (t >= maxDist) return false;
+
+        float3 p = startPos + lightDir * t;
+        
+        if (p.x < 0 || p.y < 0 || p.z < 0 || 
+            p.x >= SIZEX || p.y >= SIZEY || p.z >= SIZEZ) return false;
+
+        constexpr sampler s(coord::normalized, address::clamp_to_edge, filter::linear);
+        float d = csdf.sample(s, p / float3(SIZEX, SIZEY, SIZEZ)).r;
+
+        float dWorld = (d - 0.5f) * (float)COARSENESSSDF;
+
+        if (dWorld < 1.0f) break; 
+        
+        t += dWorld;
+    }
+
+    float3 currentPos = startPos + lightDir * t;
+    
+    if (currentPos.x < 0 || currentPos.y < 0 || currentPos.z < 0 || 
+        currentPos.x >= SIZEX || currentPos.y >= SIZEY || currentPos.z >= SIZEZ) return false;
+
+    int3 ipos = int3(floor(currentPos));
+    
+    float3 deltaDist = float3(
+        abs(1.0f / lightDir.x),
+        abs(1.0f / lightDir.y),
+        abs(1.0f / lightDir.z)
+    );
+    
+    int3 step = int3(
+        lightDir.x > 0 ? 1 : -1,
+        lightDir.y > 0 ? 1 : -1,
+        lightDir.z > 0 ? 1 : -1
+    );
+
+    float3 fpos = float3(ipos);
+    float3 tMax;
+    tMax.x = (step.x > 0 ? (fpos.x + 1.0f - currentPos.x) : (currentPos.x - fpos.x)) * deltaDist.x;
+    tMax.y = (step.y > 0 ? (fpos.y + 1.0f - currentPos.y) : (currentPos.y - fpos.y)) * deltaDist.y;
+    tMax.z = (step.z > 0 ? (fpos.z + 1.0f - currentPos.z) : (currentPos.z - fpos.z)) * deltaDist.z;
+
+    for (int i = 0; i < 16; i++) 
+    {
+        if (ipos.x >= 0 && ipos.y >= 0 && ipos.z >= 0 && 
+            ipos.x < SIZEX && ipos.y < SIZEY && ipos.z < SIZEZ) 
+        {
+            uint3 superPos = uint3(ipos.x >> 2, ipos.y >> 2, ipos.z >> 1);
+            uint blockBits = bits.read(superPos).r;
+            int bitIndex = (ipos.x & 3) | ((ipos.y & 3) << 2) | ((ipos.z & 1) << 4);
+            
+            if ((blockBits >> bitIndex) & 1) return true; // HIT!
+        } 
+        else {
+            return false; 
+        }
+        if (tMax.x < tMax.y) {
+            if (tMax.x < tMax.z) {
+                tMax.x += deltaDist.x; ipos.x += step.x;
+            } else {
+                tMax.z += deltaDist.z; ipos.z += step.z;
+            }
+        } else {
+            if (tMax.y < tMax.z) {
+                tMax.y += deltaDist.y; ipos.y += step.y;
+            } else {
+                tMax.z += deltaDist.z; ipos.z += step.z;
+            }
+        }
+    }
+
+    return false;
+}
+GPU_FUNC GPU_INLINE int pack_chunk_coord(int3 p) {
+    return p.x + (p.y << 10) + (p.z << 20);
+}
+
 GPU_FUNC hitInfo trace(float3 camPos, 
                        const float3 camDir, 
                        float distance,
@@ -348,8 +442,6 @@ GPU_FUNC hitInfo trace(float3 camPos,
     }
     return HI;
 }
-
-
 
 
 /**

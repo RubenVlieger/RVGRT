@@ -4,13 +4,13 @@
 
 using namespace metal;
 
-
 bool is_solid_at(float x, float y, float z) {
     float density = Evaluate(x, y, z);
     return density > 0.7f;
 }
 
-
+// Packs a 4x4x2 volume into a single uint32
+// Layout: X runs fastest (0-3), then Y (0-3), then Z (0-1)
 kernel void GeneratePackedWorld(
     texture3d<uint, access::write> voxelTex [[texture(0)]],
     uint3 gid [[thread_position_in_grid]])
@@ -20,19 +20,25 @@ kernel void GeneratePackedWorld(
         gid.z >= voxelTex.get_depth()) return;
 
 
-    float3 origin = float3(gid) * 2.0f;
+    float3 basePos = float3(gid.x * 4, gid.y * 4, gid.z * 2);
 
-    uint packedByte = 0;
+    uint packedBlock = 0;
+    
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (is_solid_at(basePos.x + x, basePos.y + y, basePos.z)) {
+                packedBlock |= (1u << (x + y * 4));
+            }
+        }
+    }
 
-    if (is_solid_at(origin.x + 0, origin.y + 0, origin.z + 0)) packedByte |= (1 << 0);
-    if (is_solid_at(origin.x + 1, origin.y + 0, origin.z + 0)) packedByte |= (1 << 1);
-    if (is_solid_at(origin.x + 0, origin.y + 1, origin.z + 0)) packedByte |= (1 << 2);
-    if (is_solid_at(origin.x + 1, origin.y + 1, origin.z + 0)) packedByte |= (1 << 3);
+    for (int y = 0; y < 4; y++) {
+        for (int x = 0; x < 4; x++) {
+            if (is_solid_at(basePos.x + x, basePos.y + y, basePos.z + 1)) {
+                packedBlock |= (1u << (x + y * 4 + 16));
+            }
+        }
+    }
 
-    if (is_solid_at(origin.x + 0, origin.y + 0, origin.z + 1)) packedByte |= (1 << 4);
-    if (is_solid_at(origin.x + 1, origin.y + 0, origin.z + 1)) packedByte |= (1 << 5);
-    if (is_solid_at(origin.x + 0, origin.y + 1, origin.z + 1)) packedByte |= (1 << 6);
-    if (is_solid_at(origin.x + 1, origin.y + 1, origin.z + 1)) packedByte |= (1 << 7);
-
-    voxelTex.write(uint4(packedByte, 0, 0, 0), gid);
+    voxelTex.write(uint4(packedBlock, 0, 0, 0), gid);
 }

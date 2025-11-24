@@ -56,9 +56,20 @@ private:
     id _computePSO;
     id _distApproxPSO;
 
-    id _renderTargetTexture; 
     id _halfDistTexture;
-    id _halfShadowTexture;
+    id _gBufferPosTexture;
+    id _gBufferNormTexture;
+    id _shadowMaskTexture;
+    id _reflectionTexture;
+
+
+    id _gBufferPSO;
+    id _shadingPSO;
+    id _reflectionPSO;
+    id _shadowPSO;
+
+
+    id _renderTargetTexture; 
 
     id _voxelTexture; 
 

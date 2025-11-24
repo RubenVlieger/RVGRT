@@ -109,6 +109,8 @@ elseif(APPLE)
         add_custom_command(
             OUTPUT "${AIR_FILE}"
             COMMAND ${XCRUN_TOOL} metal -c
+                    -frecord-sources
+                    -gline-tables-only
                     -I "${CMAKE_SOURCE_DIR}/include"
                     "${METAL_FILE}"
                     -o "${AIR_FILE}"
