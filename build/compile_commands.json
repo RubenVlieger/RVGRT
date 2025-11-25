@@ -1,0 +1,86 @@
+[
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -O3 -DNDEBUG -std=gnu++20 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/main.cpp.o -c /Users/rubenvlieger/Documents/RVGRT/src/main.cpp",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/main.cpp",
+  "output": "CMakeFiles/RVGRT.dir/src/main.cpp.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -O3 -DNDEBUG -std=gnu++20 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/State.cpp.o -c /Users/rubenvlieger/Documents/RVGRT/src/State.cpp",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/State.cpp",
+  "output": "CMakeFiles/RVGRT.dir/src/State.cpp.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -O3 -DNDEBUG -std=gnu++20 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/Character.cpp.o -c /Users/rubenvlieger/Documents/RVGRT/src/Character.cpp",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/Character.cpp",
+  "output": "CMakeFiles/RVGRT.dir/src/Character.cpp.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -O3 -DNDEBUG -std=gnu++20 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/Camera.cpp.o -c /Users/rubenvlieger/Documents/RVGRT/src/Camera.cpp",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/Camera.cpp",
+  "output": "CMakeFiles/RVGRT.dir/src/Camera.cpp.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/platform/macos_main.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/platform/macos_main.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/platform/macos_main.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/platform/macos_main.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/platform/MacOSPlatform.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/platform/MacOSPlatform.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/platform/MacOSPlatform.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/platform/MacOSPlatform.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/renderer/MetalDevice.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalDevice.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalDevice.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/renderer/MetalDevice.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/renderer/MetalRenderer.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalRenderer.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalRenderer.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/renderer/MetalRenderer.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/renderer/MetalBuffer.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalBuffer.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalBuffer.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/renderer/MetalBuffer.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/renderer/CArray_impl.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/renderer/CArray_impl.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/renderer/CoarseArray_impl.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/renderer/CoarseArray_impl.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/renderer/TexturePack_impl.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/renderer/TexturePack_impl.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/renderer/TexturePack_impl.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/renderer/TexturePack_impl.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -x objective-c++ -O3 -DNDEBUG -std=gnu++17 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o -c /Users/rubenvlieger/Documents/RVGRT/src/platform/GameView.mm",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/platform/GameView.mm",
+  "output": "CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o"
+},
+{
+  "directory": "/Users/rubenvlieger/Documents/RVGRT/build",
+  "command": "/usr/bin/clang++  -I/Users/rubenvlieger/Documents/RVGRT/include -O3 -DNDEBUG -std=gnu++20 -O3 -DNDEBUG -o CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o -c /Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp",
+  "file": "/Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp",
+  "output": "CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o"
+}
+]

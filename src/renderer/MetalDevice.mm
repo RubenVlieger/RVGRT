@@ -1,12 +1,29 @@
 #include "renderer/MetalDevice.hpp"
 
-MetalDevice::MetalDevice() {
-    _device = MTLCreateSystemDefaultDevice();
+MetalDevice::MetalDevice() 
+{
+
+    NSArray<id<MTLDevice>> *devices = MTLCopyAllDevices();
+    _device = nil;
+
+    for (id<MTLDevice> device in devices) {
+        if (![device isLowPower] && ![device isHeadless]) {
+            _device = device;
+            break;
+        }
+    }
+
     if (!_device) {
-        // In a real app, you would throw an exception or display an alert
+        _device = MTLCreateSystemDefaultDevice();
+    }
+
+    if (!_device) {
         NSLog(@"Fatal: Metal is not supported on this device.");
         exit(1);
     }
+
+    NSLog(@"Selected GPU: %@", [(id<MTLDevice>)_device name]);
+
     _commandQueue = [_device newCommandQueue];
 }
 

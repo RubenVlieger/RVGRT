@@ -120,10 +120,11 @@
 {
     MetalRenderer* renderer = static_cast<MetalRenderer*>(State::state.renderer.get());
     MetalDevice* device = static_cast<MetalDevice*>(State::state.graphicsDevice.get());
+    
     if (!renderer || !device) return;
 
     id<CAMetalDrawable> drawable = [view currentDrawable];
-    if (!drawable) { return; }
+    if (!drawable) return;
 
     id<MTLCommandBuffer> commandBuffer = [device->GetMetalCommandQueue() commandBuffer];
     commandBuffer.label = @"FrameCommandBuffer";
@@ -131,8 +132,22 @@
     id<MTLComputeCommandEncoder> encoder = [commandBuffer computeCommandEncoder];
     encoder.label = @"MainComputeEncoder";
     renderer->Draw(encoder, State::state.character, 0);
-
     [encoder endEncoding];
+
+    id<MTLCounterSampleBuffer> counterBuf = (id<MTLCounterSampleBuffer>)renderer->GetCounterBuffer();
+    id<MTLBuffer> timestampBuf = (id<MTLBuffer>)renderer->GetTimestampBuffer();
+
+    if (counterBuf && timestampBuf) {
+        id<MTLBlitCommandEncoder> blit = [commandBuffer blitCommandEncoder];
+        blit.label = @"ResolveTimestamps";
+        
+        [blit resolveCounters:counterBuf 
+                      inRange:NSMakeRange(0, 4) 
+            destinationBuffer:timestampBuf 
+            destinationOffset:0];
+        
+        [blit endEncoding];
+    }
 
     id<MTLTexture> sourceTexture = renderer->GetOutputTexture();
     id<MTLTexture> destinationTexture = drawable.texture;
@@ -141,19 +156,74 @@
     blitEncoder.label = @"BlitToScreen";
 
     [blitEncoder copyFromTexture:sourceTexture
-                        sourceSlice:0 sourceLevel:0
-                        sourceOrigin:MTLOriginMake(0, 0, 0)
-                        sourceSize:MTLSizeMake(sourceTexture.width, sourceTexture.height, 1)
-                        toTexture:destinationTexture
-                    destinationSlice:0 destinationLevel:0
-                destinationOrigin:MTLOriginMake(0, 0, 0)];
+                     sourceSlice:0 sourceLevel:0
+                    sourceOrigin:MTLOriginMake(0, 0, 0)
+                      sourceSize:MTLSizeMake(sourceTexture.width, sourceTexture.height, 1)
+                       toTexture:destinationTexture
+                destinationSlice:0 destinationLevel:0
+               destinationOrigin:MTLOriginMake(0, 0, 0)];
     
     [blitEncoder endEncoding]; 
 
-    [commandBuffer presentDrawable:drawable];
+    [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {
+        if (cb.status != MTLCommandBufferStatusCompleted) return;
 
+        double msPass0 = 0.0;
+        double msPass1 = 0.0;
+
+        if (timestampBuf) {
+            uint64_t* stamps = (uint64_t*)timestampBuf.contents;
+            
+            uint64_t t0_start = stamps[0];
+            uint64_t t0_end   = stamps[1];
+            uint64_t t1_start = stamps[2];
+            uint64_t t1_end   = stamps[3];
+
+            msPass0 = (double)(t0_end - t0_start) / 1000000.0;
+            msPass1 = (double)(t1_end - t1_start) / 1000000.0;
+        }
+
+        // Dispatch to Main Thread for UI Update
+        dispatch_async(dispatch_get_main_queue(), ^{
+            static double sumP0 = 0.0;
+            static double sumP1 = 0.0;
+            static int frameCounter = 0;
+
+            sumP0 += msPass0;
+            sumP1 += msPass1;
+            frameCounter++;
+
+            // Update title every 30 frames to prevent flickering/lag
+            if (frameCounter >= 30) {
+                double avgP0 = sumP0 / 30.0;
+                double avgP1 = sumP1 / 30.0;
+                double avgTotal = avgP0 + avgP1;
+
+                double halfW = (double)State::screenWIDTH / 2.0;
+                double halfH = (double)State::screenHEIGHT / 2.0;
+                double numPixels = halfW * halfH;
+                
+                double safeTimeSeconds = (avgP0 < 0.001 ? 0.001 : avgP0) / 1000.0;
+                
+                double gigaRays = (numPixels / safeTimeSeconds) / 1000000000.0;
+
+                NSString* title = [NSString stringWithFormat:
+                    @"RVGRT | Approx: %.2fms (%.2f GRays/s) | Render: %.2fms | Kernel Total: %.2fms", 
+                    avgP0, gigaRays, avgP1, avgTotal];
+                
+                [self->_window setTitle:title];
+
+                sumP0 = 0.0;
+                sumP1 = 0.0;
+                frameCounter = 0;
+            }
+        });
+    }];
+
+    [commandBuffer presentDrawable:drawable];
     [commandBuffer commit];
 }
+
 
 
 // This delegate method is called when the user resizes the window.

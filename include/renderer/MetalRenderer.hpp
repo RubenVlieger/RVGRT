@@ -6,75 +6,58 @@
 #include "Texturepack.h"
 #include "CoarseArray.h"
 
-#include <cstdint> // For uint32_t
+#include <cstdint> 
 #include <memory> 
 
-// This preprocessor check is the key to cross-compatibility.
 #ifdef __OBJC__
-// --- Objective-C++ Context ---
-// When a .mm file includes this header, the compiler knows what these are.
 @protocol MTLComputePipelineState;
 @protocol MTLTexture;
 @protocol MTLDevice;
 @protocol MTLCommandQueue;
 #else
-// --- Pure C++ Context ---
-// When a .cpp file includes this header, we define these as opaque pointers.
-// This allows C++ code to know that the type exists without needing
-// to know its internal Objective-C details.
 typedef void* id;
 #endif
 
-class Character; // Forward declaration
+class Character; 
 
 class MetalRenderer : public Renderer
 {
 public:
-    // The constructor now correctly uses the opaque 'id' type, which
-    // is compatible with both C++ (as void*) and Objective-C++.
     MetalRenderer(id device);
     ~MetalRenderer() override;
 
-    // The main entry point to kick off a frame's compute work.
     void Draw(id<MTLComputeCommandEncoder> encoder, const Character& character, unsigned int frameCount);
-
     void Draw(const Character& character, unsigned int frameCount) override;
 
-    // Called by the main view when it needs a texture to display.
     id GetOutputTexture();
     void GenerateWorld();
-    
-    // Called if the window size changes.
     void OnResize(uint32_t newWidth, uint32_t newHeight);
+    void generateNoiseTexture();
+
+    id GetCounterBuffer() { return _counterSampleBuffer; }
+    id GetTimestampBuffer() { return _timestampBuffer; }
 
 private:
     void createRenderTarget(uint32_t width, uint32_t height);
     Texturepack _texturepack;
 
     id _device;
-    id _worldGenerationPSO;
-    id _computePSO;
-    id _distApproxPSO;
+    // --- Pipeline State Objects ---
+    id _worldGenerationPSO; // For voxel generation
+    id _distApproxPSO;      // Pre-pass (Accelerator)
+    id _tiledDeferredPSO;   // Main TBDR Pass (The big new one)
 
-    id _halfDistTexture;
-    id _gBufferPosTexture;
-    id _gBufferNormTexture;
-    id _shadowMaskTexture;
-    id _reflectionTexture;
-
-
-    id _gBufferPSO;
-    id _shadingPSO;
-    id _reflectionPSO;
-    id _shadowPSO;
-
+    id _noiseTexture;
 
     id _renderTargetTexture; 
+    id _halfDistTexture;
 
     id _voxelTexture; 
 
+    id _counterSampleBuffer; // MTLCounterSampleBuffer (Opaque GPU storage)
+    id _timestampBuffer;     // MTLBuffer (CPU readable storage)
+    bool _supportsTimestamps;
+
     CoarseArray _csdf;
     CoarseArray _giData;
-    
-    id _generationPSO; 
 };

@@ -78,6 +78,12 @@ elseif(APPLE)
     #======================================#
     message(STATUS "Configuring for macOS (Metal)")
 
+    set(MACOS_ICON "${CMAKE_CURRENT_SOURCE_DIR}/resources/AppIcon.icns")
+
+    set_source_files_properties(${MACOS_ICON} PROPERTIES
+        MACOSX_PACKAGE_LOCATION Resources
+    )
+
     set(MAC_SOURCES
         src/main.cpp
         src/State.cpp
@@ -92,6 +98,8 @@ elseif(APPLE)
         src/renderer/CoarseArray_impl.mm
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
+
+        ${MACOS_ICON} 
     )
     
     # 1. Compile Metal Shaders to .air files
@@ -150,6 +158,7 @@ elseif(APPLE)
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.rvgrt.voxelengine"
         MACOSX_BUNDLE_BUNDLE_NAME "RVGRT"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        MACOSX_BUNDLE_ICON_FILE "AppIcon.icns" 
         MACOSX_BUNDLE_BUNDLE_VERSION "1"
         RESOURCE "${MAC_METAL_LIBRARY_SRC}"
     )

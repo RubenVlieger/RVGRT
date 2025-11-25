@@ -1,0 +1,6 @@
+# Hashes of file build rules.
+55f6960a9148a285493f793e4dd7f4ac CArray_impl.air
+a65712c3ca180400874d9e060058b9e2 CoarseArray_impl.air
+d54a4960c51403b9da38e15686f3fbdf default.metallib
+5dca36a19151a6aca80771975e0f507a raytrace.air
+c925bc6ec0b0ac1daf0ff9d4d67b7b33 raytracing_function_impl.air
