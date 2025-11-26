@@ -11,13 +11,6 @@
 #define SDF_BYTESIZE (SDF_SIZEX * SDF_SIZEY * SDF_SIZEZ)
 #define SDF_MAX_DIST 64
 
-#define COARSENESSGI 4
-#define GI_SIZEX (SIZEX / COARSENESSGI)
-#define GI_SIZEY (SIZEY / COARSENESSGI)
-#define GI_SIZEZ (SIZEZ / COARSENESSGI)
-#define GI_SIZE (GI_SIZEX * GI_SIZEY * GI_SIZEZ)
-#define GI_BYTESIZE (GI_SIZEX * GI_SIZEY * GI_SIZEZ * sizeof(uint32_t))
-
 GPU_FUNC GPU_INLINE int3 to_int3(const int3 v) {
     return make_int3(v.x, v.y, v.z);
 }
@@ -74,27 +67,18 @@ public:
 
     void GenerateSDF(void* packedVoxelTexture);
     
-    void InitializeGIData(void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack);
-
-    void UpdateGIData(id<MTLComputeCommandEncoder> encoder, void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack);
-
     void* getSDFTexture();
-    void* getGITexture();
-
     unsigned char* getPtr(); 
     
 private:
     CArray m_csdfArray; 
 
     void* _sdfTexture = nullptr;
-    void* _giTexture = nullptr;
 
     #ifdef __OBJC__ 
     id _psoDistX = nullptr;
     id _psoDistY = nullptr;
     id _psoDistZ = nullptr;
-    id _psoGiInit = nullptr;
-    id _psoGiUpdate = nullptr;
     #endif
 };
 #endif

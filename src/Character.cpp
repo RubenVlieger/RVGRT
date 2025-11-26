@@ -7,14 +7,16 @@
 
 #include <glm/gtc/matrix_transform.hpp>
 
-static const float g_JitterSequence[8][2] =
-{
-    { -1.0f/8.0f, -1.0f/8.0f }, {  1.0f/8.0f,  3.0f/8.0f },
-    {  5.0f/8.0f, -3.0f/8.0f }, { -3.0f/8.0f,  5.0f/8.0f },
-    { -7.0f/8.0f, -5.0f/8.0f }, {  3.0f/8.0f,  7.0f/8.0f },
-    {  7.0f/8.0f, -7.0f/8.0f }, { -5.0f/8.0f,  1.0f/8.0f }
-};
-
+float halton(int index, int base) {
+    float f = 1.0f;
+    float r = 0.0f;
+    while (index > 0) {
+        f = f / (float)base;
+        r = r + f * (float)(index % base);
+        index = index / base;
+    }
+    return r;
+}
 Character::Character()
     : viewMatrix(1.0f),
       projectionMatrix(1.0f),
@@ -109,15 +111,16 @@ void Character::Update(unsigned int frameCount)
     );
     unjitteredViewProjectionMatrix = projectionMatrix * viewMatrix;
 
-    jitterX = g_JitterSequence[frameCount % 8][0] * 0.5f;
-    jitterY = g_JitterSequence[frameCount % 8][1] * 0.5f;
+    int jitterIndex = (frameCount % 16) + 1;
+    jitterX = halton(jitterIndex, 2) - 0.5f;
+    jitterY = halton(jitterIndex, 3) - 0.5f;
+
     float clipSpaceJitterX = jitterX / (0.5f * State::dispWIDTH);
     float clipSpaceJitterY = jitterY / (0.5f * State::dispHEIGHT);
     projectionMatrix[2][0] += clipSpaceJitterX;
     projectionMatrix[2][1] += clipSpaceJitterY;
 
     viewProjectionMatrix = projectionMatrix * viewMatrix;
-
     inverseViewProjectionMatrix = glm::inverse(unjitteredViewProjectionMatrix);
 
     camera.pos = position;

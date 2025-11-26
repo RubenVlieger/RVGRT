@@ -100,6 +100,8 @@
 
 
 - (void)gameLoop:(NSTimer *)timer {
+    static unsigned int globalFrameCount = 0;
+
     // Get the current time for calculating delta time
     static auto lastTime = std::chrono::steady_clock::now();
     auto currentTime = std::chrono::steady_clock::now();
@@ -109,7 +111,8 @@
 
     State::state.platform->deltaTime = frameTimeMs;
 
-    State::state.character.Update(0); 
+    State::state.character.Update(globalFrameCount); 
+    globalFrameCount++;
 
     [_view setNeedsDisplay:YES];
 }
@@ -142,7 +145,7 @@
         blit.label = @"ResolveTimestamps";
         
         [blit resolveCounters:counterBuf 
-                      inRange:NSMakeRange(0, 4) 
+                      inRange:NSMakeRange(0, 12) 
             destinationBuffer:timestampBuf 
             destinationOffset:0];
         
@@ -168,56 +171,47 @@
     [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {
         if (cb.status != MTLCommandBufferStatusCompleted) return;
 
-        double msPass0 = 0.0;
-        double msPass1 = 0.0;
+        double msApprox = 0.0, msGBuffer = 0.0, msIndirect = 0.0;
+        double msAccum = 0.0, msDenoise = 0.0, msComp = 0.0;
 
         if (timestampBuf) {
             uint64_t* stamps = (uint64_t*)timestampBuf.contents;
             
-            uint64_t t0_start = stamps[0];
-            uint64_t t0_end   = stamps[1];
-            uint64_t t1_start = stamps[2];
-            uint64_t t1_end   = stamps[3];
+            // Helper to safe subtract
+            auto calcMs = [&](int start, int end) {
+                if (stamps[end] < stamps[start]) return 0.0;
+                return (double)(stamps[end] - stamps[start]) / 1000000.0;
+            };
 
-            msPass0 = (double)(t0_end - t0_start) / 1000000.0;
-            msPass1 = (double)(t1_end - t1_start) / 1000000.0;
+            msApprox   = calcMs(0, 1);
+            msGBuffer  = calcMs(2, 3);
+            msIndirect = calcMs(4, 5);
+            msAccum    = calcMs(6, 7);
+            msDenoise  = calcMs(8, 9);
+            msComp     = calcMs(10, 11);
         }
 
         // Dispatch to Main Thread for UI Update
         dispatch_async(dispatch_get_main_queue(), ^{
-            static double sumP0 = 0.0;
-            static double sumP1 = 0.0;
-            static int frameCounter = 0;
+            // Calculate GigaRays for Dist Approx (Pass 0)
+            double w = State::dispWIDTH / 2.0;
+            double h = State::dispHEIGHT / 2.0;
+            double numPixels = w * h;
+            
+            // Avoid div by zero
+            double seconds = (msApprox < 0.001 ? 0.001 : msApprox) / 1000.0;
+            double gigaRays = (numPixels / seconds) / 1e9;
+            
+            double totalMs = msApprox + msGBuffer + msIndirect + msAccum + msDenoise + msComp;
 
-            sumP0 += msPass0;
-            sumP1 += msPass1;
-            frameCounter++;
-
-            // Update title every 30 frames to prevent flickering/lag
-            if (frameCounter >= 30) {
-                double avgP0 = sumP0 / 30.0;
-                double avgP1 = sumP1 / 30.0;
-                double avgTotal = avgP0 + avgP1;
-
-      
-                double numPixels = 1792 * 1057;
-                
-                double safeTimeSeconds = (avgP0 < 0.001 ? 0.001 : avgP0) / 1000.0;
-                
-                double gigaRays = (numPixels / safeTimeSeconds) / 1000000000.0;
-
-                NSString* title = [NSString stringWithFormat:
-                    @"RVGRT | Approx: %.2fms (%.2f GRays/s) | Render: %.2fms | Kernel Total: %.2fms", 
-                    avgP0, gigaRays, avgP1, avgTotal];
-                
-                [self->_window setTitle:title];
-
-                sumP0 = 0.0;
-                sumP1 = 0.0;
-                frameCounter = 0;
-            }
+            NSString* title = [NSString stringWithFormat:
+                @"RVGRT | Approx: %.2fms (%.2f Grays/s) | GBuff: %.2f | Ind: %.2f | Acc: %.2f | Den: %.2f | Cmp: %.2f | Total: %.2fms", 
+                msApprox, gigaRays, msGBuffer, msIndirect, msAccum, msDenoise, msComp, totalMs];
+            
+            [self->_window setTitle:title];
         });
     }];
+
 
     [commandBuffer presentDrawable:drawable];
     [commandBuffer commit];

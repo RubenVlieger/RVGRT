@@ -12,12 +12,17 @@ struct CameraData {
     simd_float3 forward;
     simd_float3 right;
     simd_float3 up;
+
+    simd_float4x4 unjitteredViewProjection;
+    simd_float4x4 prevUnjitteredViewProjection;
+    
+    simd_float2 jitter; 
+    simd_float2 padding; // 16-byte aligned
 };
 
 struct FrameData {
     simd_float3 sunDirection;
     float time;
-    // We can add jitter values here later if needed
 };
 
 #endif

@@ -19,10 +19,10 @@ public:
     std::unique_ptr<Renderer> renderer;
 
     // --- Resolution Control ---
-    static constexpr int dispHEIGHT = 1920 * 0.6f; //800; //3072 x 1920
-    static constexpr int dispWIDTH = 3072 * 0.6f; //1280;
-    static constexpr int screenHEIGHT = 1920 * 0.6f;
-    static constexpr int screenWIDTH = 3072 * 0.6f;
+    static int dispHEIGHT;
+    static int dispWIDTH;
+    static int screenHEIGHT;
+    static int screenWIDTH;
 
     // --- 3D World ---
     Character character = Character();

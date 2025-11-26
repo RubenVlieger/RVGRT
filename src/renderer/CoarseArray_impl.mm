@@ -38,13 +38,10 @@ CoarseArray::CoarseArray() {
     _psoDistX = create_pso(device, "CoarseArray_computeDistX");
     _psoDistY = create_pso(device, "CoarseArray_computeDistY");
     _psoDistZ = create_pso(device, "CoarseArray_computeDistZ");
-    _psoGiInit = create_pso(device, "CoarseArray_InitialGlobalIlluminate");
-    _psoGiUpdate = create_pso(device, "CoarseArray_GlobalIlluminate");
 }
 
 CoarseArray::~CoarseArray() { 
     _sdfTexture = nullptr;
-    _giTexture = nullptr;
 }
 
 // Helper to create 3D textures
@@ -66,14 +63,8 @@ void CoarseArray::AllocateSDF() {
     std::cout << "Allocated SDF 3D Texture" << std::endl;
 }
 
-void CoarseArray::AllocateGI() {
-    id<MTLDevice> device = get_metal_device();
-    _giTexture = (__bridge_retained void*)create3DTexture(device, GI_SIZEX, GI_SIZEY, GI_SIZEZ, MTLPixelFormatRGBA8Unorm);
-    std::cout << "Allocated GI 3D Texture" << std::endl;
-}
 
 void* CoarseArray::getSDFTexture() { return _sdfTexture; }
-void* CoarseArray::getGITexture() { return _giTexture; }
 
 unsigned char* CoarseArray::getPtr() { return nullptr; }
 
@@ -122,66 +113,4 @@ void CoarseArray::GenerateSDF(void* packedVoxelTexture) {
     [blit endEncoding];
     [cmdBuf commit];
     [cmdBuf waitUntilCompleted];
-}
-
-void CoarseArray::InitializeGIData(void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack) {
-    id<MTLDevice> device = get_metal_device();
-    id<MTLCommandQueue> queue = [device newCommandQueue];
-    
-    id<MTLCommandBuffer> cmdBuf = [queue commandBuffer];
-    id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
-    
-    [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoGiInit];
-    
-    [encoder setTexture:(__bridge id<MTLTexture>)_giTexture atIndex:0];
-    [encoder setTexture:(__bridge id<MTLTexture>)packedVoxelTexture atIndex:1];
-    [encoder setTexture:(__bridge id<MTLTexture>)csdf.getSDFTexture() atIndex:2];
-
-    float3 sunDir = normalize(make_float3(10.f, 5.f, -4.f));
-    [encoder setBytes:&sunDir length:sizeof(float3) atIndex:3];
-
-    MTLSize gridSize = MTLSizeMake(GI_SIZEX, GI_SIZEY, GI_SIZEZ);
-    MTLSize threadgroupSize = MTLSizeMake(8, 8, 8);
-    
-    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-    [encoder endEncoding];
-    [cmdBuf commit];
-    [cmdBuf waitUntilCompleted];
-}
-
-
-static int g_frameNumber = 0;
-static uint64_t g_offsetCounter = 0;
-
-#define METAL_GI_UPDATE_BATCH_SIZE (64*64*64) 
-
-void CoarseArray::UpdateGIData(id<MTLComputeCommandEncoder> encoder, void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack) 
-{
-    [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoGiUpdate];
-    
-    id<MTLTexture> giTex = (__bridge id<MTLTexture>)_giTexture;
-    
-    [encoder setTexture:giTex atIndex:0]; 
-    
-    [encoder setTexture:(__bridge id<MTLTexture>)packedVoxelTexture atIndex:1];
-    [encoder setTexture:(__bridge id<MTLTexture>)csdf.getSDFTexture() atIndex:2];
-    [encoder setTexture:(id<MTLTexture>)texturepack.getTextureObject() atIndex:3];
-
-    float3 sunDir = normalize(make_float3(10.f, 5.f, -4.f));
-    [encoder setBytes:&sunDir length:sizeof(float3) atIndex:4];
-    
-    uint frameNum = g_frameNumber;
-    [encoder setBytes:&frameNum length:sizeof(uint) atIndex:5];
-
-    [encoder setBytes:&g_offsetCounter length:sizeof(uint64_t) atIndex:6];
-
-    [encoder setTexture:giTex atIndex:7];
-
-    MTLSize gridSize = MTLSizeMake(METAL_GI_UPDATE_BATCH_SIZE, 1, 1);
-    MTLSize threadgroupSize = MTLSizeMake(256, 1, 1);
-
-    [encoder dispatchThreads:gridSize threadsPerThreadgroup:threadgroupSize];
-
-    g_frameNumber++;
-    g_offsetCounter = (g_offsetCounter + METAL_GI_UPDATE_BATCH_SIZE) % GI_SIZE;
 }

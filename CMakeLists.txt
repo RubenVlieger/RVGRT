@@ -153,6 +153,7 @@ elseif(APPLE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
         "${MAC_METAL_LIBRARY_SRC}" 
     )
+    target_compile_options(${APP_NAME} PRIVATE -fobjc-arc)
     
     set_target_properties(${APP_NAME} PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "com.rvgrt.voxelengine"
@@ -160,9 +161,9 @@ elseif(APPLE)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
         MACOSX_BUNDLE_ICON_FILE "AppIcon.icns" 
         MACOSX_BUNDLE_BUNDLE_VERSION "1"
+        PRODUCT_BUNDLE_IDENTIFIER "com.rvgrt.voxelengine"
         RESOURCE "${MAC_METAL_LIBRARY_SRC}"
     )
-    
     target_link_libraries(${APP_NAME} PRIVATE
         "-framework Cocoa"
         "-framework Metal"
@@ -176,6 +177,7 @@ endif()
 # ------------------------------------------------------------------
 target_compile_options(${APP_NAME} PRIVATE
     $<$<COMPILE_LANGUAGE:CUDA>:-Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr>
+    $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")

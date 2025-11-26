@@ -6,6 +6,11 @@
 // The global singleton instance
 State State::state = State();
 
+int State::dispWIDTH = 3072 * 0.6f;
+int State::dispHEIGHT = 1920 * 0.6f;
+int State::screenWIDTH = 3072 * 0.6f;
+int State::screenHEIGHT = 1920 * 0.6f;
+
 State::State()
 {
     // The constructor can be empty if initialization is done in the main function.

@@ -1,0 +1,991 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 46;
+	objects = {
+
+/* Begin PBXAggregateTarget section */
+		033B13C37613A6DCD56F0232 /* ZERO_CHECK */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = D20168BD1E50447281B3DC32 /* Build configuration list for PBXAggregateTarget "ZERO_CHECK" */;
+			buildPhases = (
+				9446A6871B6AFB0267ADB325 /* Generate CMakeFiles/ZERO_CHECK */,
+			);
+			dependencies = (
+			);
+			name = ZERO_CHECK;
+			productName = ZERO_CHECK;
+		};
+		07563E77432332CF75EAEC13 /* ALL_BUILD */ = {
+			isa = PBXAggregateTarget;
+			buildConfigurationList = C6C57D0904A14CBC801DD382 /* Build configuration list for PBXAggregateTarget "ALL_BUILD" */;
+			buildPhases = (
+				33A5BD33FC79CA6A9F511A28 /* Generate CMakeFiles/ALL_BUILD */,
+			);
+			dependencies = (
+				30879EC401414A628E5BC2E7 /* PBXTargetDependency */,
+				39A66159AE954A668B9AFE49 /* PBXTargetDependency */,
+			);
+			name = ALL_BUILD;
+			productName = ALL_BUILD;
+		};
+/* End PBXAggregateTarget section */
+
+/* Begin PBXBuildFile section */
+		09100AA2F2EB44BA87A031A9 /* /Users/rubenvlieger/Documents/RVGRT/CMakeLists.txt */ = {isa = PBXBuildFile; fileRef = 9DEA6FBB8F654204B05A5789 /* /Users/rubenvlieger/Documents/RVGRT/CMakeLists.txt */; };
+		36611D2E8FFC4365ADEBCDB8 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib.rule */ = {isa = PBXBuildFile; fileRef = 1A261F856D994265AE8B93E8 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib.rule */; };
+		3F399E5F978D4988A4D39DA4 /* /Users/rubenvlieger/Documents/RVGRT/src/platform/macos_main.mm */ = {isa = PBXBuildFile; fileRef = 23DE5224049B4F40A3D7DEB6 /* /Users/rubenvlieger/Documents/RVGRT/src/platform/macos_main.mm */; };
+		40ADA111DB6F4C17A817F34F /* /Users/rubenvlieger/Documents/RVGRT/src/platform/GameView.mm */ = {isa = PBXBuildFile; fileRef = 5A072B0777C246E1B378331A /* /Users/rubenvlieger/Documents/RVGRT/src/platform/GameView.mm */; };
+		57610B2D3BAA41C9AD07ED29 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib */ = {isa = PBXBuildFile; fileRef = CDE6BDC225F041BE9E2316D1 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib */; };
+		618801FEFE054A7E8135418A /* /Users/rubenvlieger/Documents/RVGRT/src/State.cpp */ = {isa = PBXBuildFile; fileRef = 3B66B54C9391473C8F0A85AF /* /Users/rubenvlieger/Documents/RVGRT/src/State.cpp */; };
+		66A87BE77084414BB07ADCBA /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/TexturePack_impl.mm */ = {isa = PBXBuildFile; fileRef = 1DC9DCBA36844AE290EC33E6 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/TexturePack_impl.mm */; };
+		6A1C4542B17B41C69E34E73E /* /Users/rubenvlieger/Documents/RVGRT/src/platform/MacOSPlatform.mm */ = {isa = PBXBuildFile; fileRef = 588234B6B0E2465D9634712B /* /Users/rubenvlieger/Documents/RVGRT/src/platform/MacOSPlatform.mm */; };
+		6FB687B76D064677B6AF9CA7 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalDevice.mm */ = {isa = PBXBuildFile; fileRef = 6E000732AF434AACA3E22C04 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalDevice.mm */; };
+		7161D8CCC8134B519666DB4E /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalRenderer.mm */ = {isa = PBXBuildFile; fileRef = CD40843B77824AEA906DEAD4 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalRenderer.mm */; };
+		9C141AEE6A184FAE8ED56C6E /* /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air.rule */ = {isa = PBXBuildFile; fileRef = B61609DFE6FD475F90710A83 /* /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air.rule */; };
+		9DE06ECD4E0E4581839FC6F0 /* /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air.rule */ = {isa = PBXBuildFile; fileRef = 3F516E8920FF482FAF0C8E21 /* /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air.rule */; };
+		A579807106404C9293E2C23B /* /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist */ = {isa = PBXBuildFile; fileRef = 16ECB749E1CE44249BF47791 /* /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist */; };
+		A5EE725AE85648F98019FBC3 /* /Users/rubenvlieger/Documents/RVGRT/src/main.cpp */ = {isa = PBXBuildFile; fileRef = 0AE0B9C170AB4CF986B338F6 /* /Users/rubenvlieger/Documents/RVGRT/src/main.cpp */; };
+		A609CCF29118471FBF1B5CC5 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.mm */ = {isa = PBXBuildFile; fileRef = 31A784EFD096486DBAAC38D3 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.mm */; };
+		AE5226FE24CD4064A7241E6A /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalBuffer.mm */ = {isa = PBXBuildFile; fileRef = 69235641FF8A4E58824014F6 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalBuffer.mm */; };
+		BECE1CD7D04A4B7C93C15532 /* /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air.rule */ = {isa = PBXBuildFile; fileRef = BE6EBAE2B406413F89211B49 /* /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air.rule */; };
+		C96C8960229743D69A9CC7AF /* /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air.rule */ = {isa = PBXBuildFile; fileRef = 96A5A178D3A744D6B22AD665 /* /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air.rule */; };
+		CAE7944C79D74DE6A5CF5266 /* /Users/rubenvlieger/Documents/RVGRT/resources/AppIcon.icns */ = {isa = PBXBuildFile; fileRef = CB309384A11B4844966C6362 /* /Users/rubenvlieger/Documents/RVGRT/resources/AppIcon.icns */; };
+		CCF3727C32DC4A2089EAFA7F /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.mm */ = {isa = PBXBuildFile; fileRef = 5FE8CF4E59F94C7F981F4ED5 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.mm */; };
+		D611DFF7D43E441285756C96 /* /Users/rubenvlieger/Documents/RVGRT/src/Character.cpp */ = {isa = PBXBuildFile; fileRef = 9E818E1CE90C42BAA9169E6F /* /Users/rubenvlieger/Documents/RVGRT/src/Character.cpp */; };
+		D6388A6DC02E4AD4B5107FE8 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp */ = {isa = PBXBuildFile; fileRef = C5CD7ACEAE7D4592B90FE429 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp */; };
+		E1D55C9976BD40F986FF656F /* /Users/rubenvlieger/Documents/RVGRT/src/Camera.cpp */ = {isa = PBXBuildFile; fileRef = A8926890E0B54622A9F53A2F /* /Users/rubenvlieger/Documents/RVGRT/src/Camera.cpp */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXBuildStyle section */
+		0E4A2A8E8DA24DCE8D9BE9F3 /* RelWithDebInfo */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = RelWithDebInfo;
+		};
+		34343E44317B4CF59BB93A56 /* Release */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = Release;
+		};
+		AEDB619A2D0C4E9FA0BBFB90 /* Debug */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = Debug;
+		};
+		D5D28EB721FD4E10B3682C5D /* MinSizeRel */ = {
+			isa = PBXBuildStyle;
+			buildSettings = {
+				COPY_PHASE_STRIP = NO;
+			};
+			name = MinSizeRel;
+		};
+/* End PBXBuildStyle section */
+
+/* Begin PBXContainerItemProxy section */
+		6E8B9B1A517F42A3A8577249 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C34846FC77794C608544F2A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 033B13C37613A6DCD56F0232;
+			remoteInfo = ZERO_CHECK;
+		};
+		84A5F66193F54F1086F708FC /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C34846FC77794C608544F2A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 033B13C37613A6DCD56F0232;
+			remoteInfo = ZERO_CHECK;
+		};
+		E50CC888886D431CBA04E807 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C34846FC77794C608544F2A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = FA2E6AC86ACC56FB19AD99F5;
+			remoteInfo = RVGRT;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		0AE0B9C170AB4CF986B338F6 /* /Users/rubenvlieger/Documents/RVGRT/src/main.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = main.cpp; path = src/main.cpp; sourceTree = SOURCE_ROOT; };
+		16ECB749E1CE44249BF47791 /* /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist */ = {isa = PBXFileReference; explicitFileType = sourcecode.text.plist; fileEncoding = 4; name = Info.plist; path = build/CMakeFiles/RVGRT.dir/Info.plist; sourceTree = SOURCE_ROOT; };
+		1A261F856D994265AE8B93E8 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib.rule */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = default.metallib.rule; path = build/default.metallib.rule; sourceTree = SOURCE_ROOT; };
+		1DC9DCBA36844AE290EC33E6 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/TexturePack_impl.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = TexturePack_impl.mm; path = src/renderer/TexturePack_impl.mm; sourceTree = SOURCE_ROOT; };
+		23DE5224049B4F40A3D7DEB6 /* /Users/rubenvlieger/Documents/RVGRT/src/platform/macos_main.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = macos_main.mm; path = src/platform/macos_main.mm; sourceTree = SOURCE_ROOT; };
+		2D59F92143414EB1B10E4922 /* RVGRT */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; path = RVGRT; sourceTree = BUILT_PRODUCTS_DIR; };
+		31A784EFD096486DBAAC38D3 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = CArray_impl.mm; path = src/renderer/CArray_impl.mm; sourceTree = SOURCE_ROOT; };
+		3B66B54C9391473C8F0A85AF /* /Users/rubenvlieger/Documents/RVGRT/src/State.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = State.cpp; path = src/State.cpp; sourceTree = SOURCE_ROOT; };
+		3F516E8920FF482FAF0C8E21 /* /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air.rule */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = raytracing_function_impl.air.rule; path = build/raytracing_function_impl.air.rule; sourceTree = SOURCE_ROOT; };
+		588234B6B0E2465D9634712B /* /Users/rubenvlieger/Documents/RVGRT/src/platform/MacOSPlatform.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = MacOSPlatform.mm; path = src/platform/MacOSPlatform.mm; sourceTree = SOURCE_ROOT; };
+		5A072B0777C246E1B378331A /* /Users/rubenvlieger/Documents/RVGRT/src/platform/GameView.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = GameView.mm; path = src/platform/GameView.mm; sourceTree = SOURCE_ROOT; };
+		5FE8CF4E59F94C7F981F4ED5 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = CoarseArray_impl.mm; path = src/renderer/CoarseArray_impl.mm; sourceTree = SOURCE_ROOT; };
+		69235641FF8A4E58824014F6 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalBuffer.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = MetalBuffer.mm; path = src/renderer/MetalBuffer.mm; sourceTree = SOURCE_ROOT; };
+		6E000732AF434AACA3E22C04 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalDevice.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = MetalDevice.mm; path = src/renderer/MetalDevice.mm; sourceTree = SOURCE_ROOT; };
+		96A5A178D3A744D6B22AD665 /* /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air.rule */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = CArray_impl.air.rule; path = build/CArray_impl.air.rule; sourceTree = SOURCE_ROOT; };
+		9DEA6FBB8F654204B05A5789 /* /Users/rubenvlieger/Documents/RVGRT/CMakeLists.txt */ = {isa = PBXFileReference; explicitFileType = sourcecode.text; fileEncoding = 4; name = CMakeLists.txt; path = CMakeLists.txt; sourceTree = SOURCE_ROOT; };
+		9E818E1CE90C42BAA9169E6F /* /Users/rubenvlieger/Documents/RVGRT/src/Character.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = Character.cpp; path = src/Character.cpp; sourceTree = SOURCE_ROOT; };
+		A8926890E0B54622A9F53A2F /* /Users/rubenvlieger/Documents/RVGRT/src/Camera.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = Camera.cpp; path = src/Camera.cpp; sourceTree = SOURCE_ROOT; };
+		B61609DFE6FD475F90710A83 /* /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air.rule */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = raytrace.air.rule; path = build/raytrace.air.rule; sourceTree = SOURCE_ROOT; };
+		BC4C7A4A64E545429C6FDFCD /* /Users/rubenvlieger/Documents/RVGRT/CMakeLists.txt */ = {isa = PBXFileReference; explicitFileType = sourcecode.text; fileEncoding = 4; name = CMakeLists.txt; path = CMakeLists.txt; sourceTree = SOURCE_ROOT; };
+		BE6EBAE2B406413F89211B49 /* /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air.rule */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = CoarseArray_impl.air.rule; path = build/CoarseArray_impl.air.rule; sourceTree = SOURCE_ROOT; };
+		C5CD7ACEAE7D4592B90FE429 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.cpp; fileEncoding = 4; name = CudaRenderer_mac_stub.cpp; path = src/renderer/CudaRenderer_mac_stub.cpp; sourceTree = SOURCE_ROOT; };
+		CB309384A11B4844966C6362 /* /Users/rubenvlieger/Documents/RVGRT/resources/AppIcon.icns */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = AppIcon.icns; path = resources/AppIcon.icns; sourceTree = SOURCE_ROOT; };
+		CD40843B77824AEA906DEAD4 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalRenderer.mm */ = {isa = PBXFileReference; explicitFileType = sourcecode.cpp.objcpp; fileEncoding = 4; name = MetalRenderer.mm; path = src/renderer/MetalRenderer.mm; sourceTree = SOURCE_ROOT; };
+		CDE6BDC225F041BE9E2316D1 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib */ = {isa = PBXFileReference; explicitFileType = default; fileEncoding = 4; name = default.metallib; path = build/default.metallib; sourceTree = SOURCE_ROOT; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		1FADEC24E17B4CCF8232B007 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		2F2B32218C60410096648468 /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+				16ECB749E1CE44249BF47791 /* /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist */,
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		3412BC787D6847BBA16C6F19 = {
+			isa = PBXGroup;
+			children = (
+				78E9A5B1D05749EA93F30BE5 /* RVGRT */,
+				3C8FD6BCD00742B19C5B9C90 /* ALL_BUILD */,
+				A43FD4B7326E4983BE0737CE /* Products */,
+				8AD82F37D34147F981116E8C /* Frameworks */,
+				55F17CB759FE47C78CF0B01E /* Resources */,
+			);
+			sourceTree = "<group>";
+		};
+		38C02A07D9164DF785C479E9 /* CMake Rules */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = "CMake Rules";
+			sourceTree = "<group>";
+		};
+		3C8FD6BCD00742B19C5B9C90 /* ALL_BUILD */ = {
+			isa = PBXGroup;
+			children = (
+				38C02A07D9164DF785C479E9 /* CMake Rules */,
+				BC4C7A4A64E545429C6FDFCD /* /Users/rubenvlieger/Documents/RVGRT/CMakeLists.txt */,
+			);
+			name = ALL_BUILD;
+			sourceTree = "<group>";
+		};
+		55F17CB759FE47C78CF0B01E /* Resources */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Resources;
+			sourceTree = "<group>";
+		};
+		78E9A5B1D05749EA93F30BE5 /* RVGRT */ = {
+			isa = PBXGroup;
+			children = (
+				7A4BB6FC6BE94867AB95D615 /* Source Files */,
+				DAAB03FEFBCC4D8592F7E676 /* CMake Rules */,
+				2F2B32218C60410096648468 /* Resources */,
+				9DEA6FBB8F654204B05A5789 /* /Users/rubenvlieger/Documents/RVGRT/CMakeLists.txt */,
+				CDE6BDC225F041BE9E2316D1 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib */,
+				CB309384A11B4844966C6362 /* /Users/rubenvlieger/Documents/RVGRT/resources/AppIcon.icns */,
+			);
+			name = RVGRT;
+			sourceTree = "<group>";
+		};
+		7A4BB6FC6BE94867AB95D615 /* Source Files */ = {
+			isa = PBXGroup;
+			children = (
+				A8926890E0B54622A9F53A2F /* /Users/rubenvlieger/Documents/RVGRT/src/Camera.cpp */,
+				9E818E1CE90C42BAA9169E6F /* /Users/rubenvlieger/Documents/RVGRT/src/Character.cpp */,
+				3B66B54C9391473C8F0A85AF /* /Users/rubenvlieger/Documents/RVGRT/src/State.cpp */,
+				0AE0B9C170AB4CF986B338F6 /* /Users/rubenvlieger/Documents/RVGRT/src/main.cpp */,
+				5A072B0777C246E1B378331A /* /Users/rubenvlieger/Documents/RVGRT/src/platform/GameView.mm */,
+				588234B6B0E2465D9634712B /* /Users/rubenvlieger/Documents/RVGRT/src/platform/MacOSPlatform.mm */,
+				23DE5224049B4F40A3D7DEB6 /* /Users/rubenvlieger/Documents/RVGRT/src/platform/macos_main.mm */,
+				31A784EFD096486DBAAC38D3 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.mm */,
+				5FE8CF4E59F94C7F981F4ED5 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.mm */,
+				C5CD7ACEAE7D4592B90FE429 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp */,
+				69235641FF8A4E58824014F6 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalBuffer.mm */,
+				6E000732AF434AACA3E22C04 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalDevice.mm */,
+				CD40843B77824AEA906DEAD4 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalRenderer.mm */,
+				1DC9DCBA36844AE290EC33E6 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/TexturePack_impl.mm */,
+			);
+			name = "Source Files";
+			sourceTree = "<group>";
+		};
+		8AD82F37D34147F981116E8C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		A43FD4B7326E4983BE0737CE /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				2D59F92143414EB1B10E4922 /* RVGRT */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		DAAB03FEFBCC4D8592F7E676 /* CMake Rules */ = {
+			isa = PBXGroup;
+			children = (
+				96A5A178D3A744D6B22AD665 /* /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air.rule */,
+				BE6EBAE2B406413F89211B49 /* /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air.rule */,
+				1A261F856D994265AE8B93E8 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib.rule */,
+				B61609DFE6FD475F90710A83 /* /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air.rule */,
+				3F516E8920FF482FAF0C8E21 /* /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air.rule */,
+			);
+			name = "CMake Rules";
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		FA2E6AC86ACC56FB19AD99F5 /* RVGRT */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 9ED1F109A40E47389D81F310 /* Build configuration list for PBXNativeTarget "RVGRT" */;
+			buildPhases = (
+				45402E5C1B9C2B1AAEB2C70C /* Generate CArray_impl.air */,
+				DE1D86DE3B4D30B0F2013AF9 /* Generate CoarseArray_impl.air */,
+				C483A81D69640C0CF0E6C099 /* Generate raytrace.air */,
+				0826D9330A243DE9C5C884C1 /* Generate raytracing_function_impl.air */,
+				13A6ABFDDD9F0CFC76F1380A /* Generate default.metallib */,
+				2873870306874C1D982D365F /* Resources */,
+				2F5933594CAB4AEB89252FED /* Sources */,
+				1FADEC24E17B4CCF8232B007 /* Frameworks */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				8CADF2EF338B456D8379AC67 /* PBXTargetDependency */,
+			);
+			name = RVGRT;
+			productName = RVGRT;
+			productReference = 2D59F92143414EB1B10E4922 /* RVGRT */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C34846FC77794C608544F2A0 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 2610;
+			};
+			buildConfigurationList = 4C9366411B8C424AB082DE6C /* Build configuration list for PBXProject "Programma" */;
+			buildSettings = {
+			};
+			buildStyles = (
+				AEDB619A2D0C4E9FA0BBFB90 /* Debug */,
+				34343E44317B4CF59BB93A56 /* Release */,
+				D5D28EB721FD4E10B3682C5D /* MinSizeRel */,
+				0E4A2A8E8DA24DCE8D9BE9F3 /* RelWithDebInfo */,
+			);
+			compatibilityVersion = "Xcode 3.2";
+			hasScannedForEncodings = 0;
+			mainGroup = 3412BC787D6847BBA16C6F19;
+			projectDirPath = /Users/rubenvlieger/Documents/RVGRT;
+			projectRoot = "";
+			targets = (
+				07563E77432332CF75EAEC13 /* ALL_BUILD */,
+				FA2E6AC86ACC56FB19AD99F5 /* RVGRT */,
+				033B13C37613A6DCD56F0232 /* ZERO_CHECK */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		0826D9330A243DE9C5C884C1 /* Generate raytracing_function_impl.air */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal			);
+			name = "Generate raytracing_function_impl.air";
+			outputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		13A6ABFDDD9F0CFC76F1380A /* Generate default.metallib */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air,/Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air,/Users/rubenvlieger/Documents/RVGRT/build/raytrace.air,/Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air			);
+			name = "Generate default.metallib";
+			outputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/default.metallib			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metallib -o /Users/rubenvlieger/Documents/RVGRT/build/default.metallib /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metallib -o /Users/rubenvlieger/Documents/RVGRT/build/default.metallib /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metallib -o /Users/rubenvlieger/Documents/RVGRT/build/default.metallib /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metallib -o /Users/rubenvlieger/Documents/RVGRT/build/default.metallib /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air /Users/rubenvlieger/Documents/RVGRT/build/raytracing_function_impl.air
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		33A5BD33FC79CA6A9F511A28 /* Generate CMakeFiles/ALL_BUILD */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Generate CMakeFiles/ALL_BUILD";
+			outputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/ALL_BUILD			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  echo Build\\ all\\ projects
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  echo Build\\ all\\ projects
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  echo Build\\ all\\ projects
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  echo Build\\ all\\ projects
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		3C0110FC8322DE7E50886E21 = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# shell script goes here
+exit 0";
+			showEnvVarsInLog = 0;
+		};
+		45402E5C1B9C2B1AAEB2C70C /* Generate CArray_impl.air */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal			);
+			name = "Generate CArray_impl.air";
+			outputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CArray_impl.air
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		9446A6871B6AFB0267ADB325 /* Generate CMakeFiles/ZERO_CHECK */ = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			name = "Generate CMakeFiles/ZERO_CHECK";
+			outputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/ZERO_CHECK			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  make -f /Users/rubenvlieger/Documents/RVGRT/build/CMakeScripts/ReRunCMake.make
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  make -f /Users/rubenvlieger/Documents/RVGRT/build/CMakeScripts/ReRunCMake.make
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  make -f /Users/rubenvlieger/Documents/RVGRT/build/CMakeScripts/ReRunCMake.make
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  make -f /Users/rubenvlieger/Documents/RVGRT/build/CMakeScripts/ReRunCMake.make
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		9B50530E35CC49C82C2FACCF = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# shell script goes here
+exit 0";
+			showEnvVarsInLog = 0;
+		};
+		C483A81D69640C0CF0E6C099 /* Generate raytrace.air */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal			);
+			name = "Generate raytrace.air";
+			outputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/raytrace.air			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal -o /Users/rubenvlieger/Documents/RVGRT/build/raytrace.air
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+		DE1D86DE3B4D30B0F2013AF9 /* Generate CoarseArray_impl.air */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal			);
+			name = "Generate CoarseArray_impl.air";
+			outputPaths = (
+/Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "set -e
+if test \"$CONFIGURATION\" = \"Debug\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air
+fi
+if test \"$CONFIGURATION\" = \"Release\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air
+fi
+if test \"$CONFIGURATION\" = \"MinSizeRel\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air
+fi
+if test \"$CONFIGURATION\" = \"RelWithDebInfo\"; then :
+  cd /Users/rubenvlieger/Documents/RVGRT/build
+  /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build/CoarseArray_impl.air
+fi
+";
+			showEnvVarsInLog = 0;
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXResourcesBuildPhase section */
+		2873870306874C1D982D365F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				57610B2D3BAA41C9AD07ED29 /* /Users/rubenvlieger/Documents/RVGRT/build/default.metallib */,
+				CAE7944C79D74DE6A5CF5266 /* /Users/rubenvlieger/Documents/RVGRT/resources/AppIcon.icns */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		2F5933594CAB4AEB89252FED /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1D55C9976BD40F986FF656F /* /Users/rubenvlieger/Documents/RVGRT/src/Camera.cpp */,
+				D611DFF7D43E441285756C96 /* /Users/rubenvlieger/Documents/RVGRT/src/Character.cpp */,
+				618801FEFE054A7E8135418A /* /Users/rubenvlieger/Documents/RVGRT/src/State.cpp */,
+				A5EE725AE85648F98019FBC3 /* /Users/rubenvlieger/Documents/RVGRT/src/main.cpp */,
+				40ADA111DB6F4C17A817F34F /* /Users/rubenvlieger/Documents/RVGRT/src/platform/GameView.mm */,
+				6A1C4542B17B41C69E34E73E /* /Users/rubenvlieger/Documents/RVGRT/src/platform/MacOSPlatform.mm */,
+				3F399E5F978D4988A4D39DA4 /* /Users/rubenvlieger/Documents/RVGRT/src/platform/macos_main.mm */,
+				A609CCF29118471FBF1B5CC5 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.mm */,
+				CCF3727C32DC4A2089EAFA7F /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.mm */,
+				D6388A6DC02E4AD4B5107FE8 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp */,
+				AE5226FE24CD4064A7241E6A /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalBuffer.mm */,
+				6FB687B76D064677B6AF9CA7 /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalDevice.mm */,
+				7161D8CCC8134B519666DB4E /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/MetalRenderer.mm */,
+				66A87BE77084414BB07ADCBA /* /Users/rubenvlieger/Documents/RVGRT/src/renderer/TexturePack_impl.mm */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		30879EC401414A628E5BC2E7 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 033B13C37613A6DCD56F0232 /* ZERO_CHECK */;
+			targetProxy = 84A5F66193F54F1086F708FC /* PBXContainerItemProxy */;
+		};
+		39A66159AE954A668B9AFE49 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = FA2E6AC86ACC56FB19AD99F5 /* RVGRT */;
+			targetProxy = E50CC888886D431CBA04E807 /* PBXContainerItemProxy */;
+		};
+		8CADF2EF338B456D8379AC67 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 033B13C37613A6DCD56F0232 /* ZERO_CHECK */;
+			targetProxy = 6E8B9B1A517F42A3A8577249 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		0494D3DDFFFC46488974AF9B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SYMROOT = /Users/rubenvlieger/Documents/RVGRT/build/build;
+			};
+			name = Debug;
+		};
+		214839DC099741CF9F629FCB /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SYMROOT = /Users/rubenvlieger/Documents/RVGRT/build/build;
+			};
+			name = MinSizeRel;
+		};
+		2B9A12193BBB4FF4AE906883 /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = MinSizeRel;
+		};
+		32E2212BFFBC4972B5259FBE /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SYMROOT = /Users/rubenvlieger/Documents/RVGRT/build/build;
+			};
+			name = RelWithDebInfo;
+		};
+		3FAB7F0B9CED47238109A403 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ARCHS = "$(NATIVE_ARCH_ACTUAL)";
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = "";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SYMROOT = /Users/rubenvlieger/Documents/RVGRT/build/build;
+			};
+			name = Release;
+		};
+		554332C21B334FD7BC72F243 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/rubenvlieger/Documents/RVGRT/build/Debug;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				HEADER_SEARCH_PATHS = (/Users/rubenvlieger/Documents/RVGRT/include,"$(inherited)");
+				INFOPLIST_FILE = /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "   '-std=gnu++20' -fobjc-arc ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework Cocoa","-framework Metal","-framework MetalKit","-framework QuartzCore","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RVGRT;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/rubenvlieger/Documents/RVGRT/build/build/RVGRT.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Debug;
+		};
+		594B70164D624C2399EA5997 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Debug;
+		};
+		5ABD256894E14849AC4C1F9B /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Release;
+		};
+		6D3A3F7DF29F4A65806DDDB5 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Release;
+		};
+		708577A093EF461ABC4D48D7 /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/rubenvlieger/Documents/RVGRT/build/MinSizeRel;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = s;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				HEADER_SEARCH_PATHS = (/Users/rubenvlieger/Documents/RVGRT/include,"$(inherited)");
+				INFOPLIST_FILE = /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "    -DNDEBUG '-std=gnu++20' -fobjc-arc ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework Cocoa","-framework Metal","-framework MetalKit","-framework QuartzCore","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RVGRT;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/rubenvlieger/Documents/RVGRT/build/build/RVGRT.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = MinSizeRel;
+		};
+		748C5FF7788648AAABFEC489 /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = RelWithDebInfo;
+		};
+		A483F949F7584D23A4B940BE /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/rubenvlieger/Documents/RVGRT/build/RelWithDebInfo;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 2;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				HEADER_SEARCH_PATHS = (/Users/rubenvlieger/Documents/RVGRT/include,"$(inherited)");
+				INFOPLIST_FILE = /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "       -DNDEBUG '-std=gnu++20' -fobjc-arc ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework Cocoa","-framework Metal","-framework MetalKit","-framework QuartzCore","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RVGRT;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/rubenvlieger/Documents/RVGRT/build/build/RVGRT.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = RelWithDebInfo;
+		};
+		ABFC392293354AD1B1E729A1 /* RelWithDebInfo */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = RelWithDebInfo;
+		};
+		AD7AA9300ECD4C14928FD12E /* MinSizeRel */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ALL_BUILD;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = MinSizeRel;
+		};
+		B7CE24C6009E497E979E584F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				CONFIGURATION_BUILD_DIR = /Users/rubenvlieger/Documents/RVGRT/build/Release;
+				EXECUTABLE_PREFIX = "";
+				EXECUTABLE_SUFFIX = "";
+				GCC_GENERATE_DEBUGGING_SYMBOLS = NO;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 3;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				HEADER_SEARCH_PATHS = (/Users/rubenvlieger/Documents/RVGRT/include,"$(inherited)");
+				INFOPLIST_FILE = /Users/rubenvlieger/Documents/RVGRT/build/CMakeFiles/RVGRT.dir/Info.plist;
+				INSTALL_PATH = "";
+				OTHER_CPLUSPLUSFLAGS = "    -DNDEBUG '-std=gnu++20' -fobjc-arc ";
+				OTHER_LDFLAGS = (" -Wl,-search_paths_first -Wl,-headerpad_max_install_names","-framework Cocoa","-framework Metal","-framework MetalKit","-framework QuartzCore","-lobjc","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = RVGRT;
+				SECTORDER_FLAGS = "";
+				TARGET_TEMP_DIR = "/Users/rubenvlieger/Documents/RVGRT/build/build/RVGRT.build/$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Release;
+		};
+		F85E8DD1AA0544FE8FAB746E /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				COMBINE_HIDPI_IMAGES = YES;
+				GCC_GENERATE_DEBUGGING_SYMBOLS = YES;
+				GCC_INLINES_ARE_PRIVATE_EXTERN = NO;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = ("'CMAKE_INTDIR=\"$(CONFIGURATION)$(EFFECTIVE_PLATFORM_NAME)\"'","$(inherited)");
+				GCC_SYMBOLS_PRIVATE_EXTERN = NO;
+				INSTALL_PATH = "";
+				OTHER_LDFLAGS = ("","$(inherited)");
+				OTHER_REZFLAGS = "";
+				PRODUCT_NAME = ZERO_CHECK;
+				SECTORDER_FLAGS = "";
+				USE_HEADERMAP = NO;
+				WARNING_CFLAGS = ("$(inherited)");
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		4C9366411B8C424AB082DE6C /* Build configuration list for PBXProject "Programma" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				0494D3DDFFFC46488974AF9B /* Debug */,
+				3FAB7F0B9CED47238109A403 /* Release */,
+				214839DC099741CF9F629FCB /* MinSizeRel */,
+				32E2212BFFBC4972B5259FBE /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		9ED1F109A40E47389D81F310 /* Build configuration list for PBXNativeTarget "RVGRT" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				554332C21B334FD7BC72F243 /* Debug */,
+				B7CE24C6009E497E979E584F /* Release */,
+				708577A093EF461ABC4D48D7 /* MinSizeRel */,
+				A483F949F7584D23A4B940BE /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C6C57D0904A14CBC801DD382 /* Build configuration list for PBXAggregateTarget "ALL_BUILD" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				594B70164D624C2399EA5997 /* Debug */,
+				6D3A3F7DF29F4A65806DDDB5 /* Release */,
+				AD7AA9300ECD4C14928FD12E /* MinSizeRel */,
+				748C5FF7788648AAABFEC489 /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		D20168BD1E50447281B3DC32 /* Build configuration list for PBXAggregateTarget "ZERO_CHECK" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F85E8DD1AA0544FE8FAB746E /* Debug */,
+				5ABD256894E14849AC4C1F9B /* Release */,
+				2B9A12193BBB4FF4AE906883 /* MinSizeRel */,
+				ABFC392293354AD1B1E729A1 /* RelWithDebInfo */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C34846FC77794C608544F2A0 /* Project object */;
+}

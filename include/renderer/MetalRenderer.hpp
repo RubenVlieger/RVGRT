@@ -30,6 +30,7 @@ public:
     void Draw(const Character& character, unsigned int frameCount) override;
 
     id GetOutputTexture();
+
     void GenerateWorld();
     void OnResize(uint32_t newWidth, uint32_t newHeight);
     void generateNoiseTexture();
@@ -42,22 +43,41 @@ private:
     Texturepack _texturepack;
 
     id _device;
+
     // --- Pipeline State Objects ---
-    id _worldGenerationPSO; // For voxel generation
-    id _distApproxPSO;      // Pre-pass (Accelerator)
-    id _tiledDeferredPSO;   // Main TBDR Pass (The big new one)
+    id _worldGenerationPSO; 
 
-    id _noiseTexture;
+    id _psoDistApprox;      // Kernel 0
+    id _psoGBuffer;         // Kernel 1
+    id _psoIndirect;        // Kernel 2
+    id _psoAccumulate;      // Kernel 3
+    id _psoDenoise;         // Kernel 4
+    id _psoComposite;       // Kernel 5
 
-    id _renderTargetTexture; 
+    // screen textures
+    id _texDirectLight;
+    id _texAlbedo;
+    id _texNormal;
+    id _texMotion;
+    id _texRawIndirect;
+    id _texDenoised;
+    id _texFinal;           // The main render target
+
+    id _texDepth[2];        // [0] = current, [1] = prev (swaps every frame)
+    id _texAccum[2];        // [0] = current, [1] = history (swaps every frame)
+    
     id _halfDistTexture;
 
+    // acceleration data structures
     id _voxelTexture; 
-
-    id _counterSampleBuffer; // MTLCounterSampleBuffer (Opaque GPU storage)
-    id _timestampBuffer;     // MTLBuffer (CPU readable storage)
-    bool _supportsTimestamps;
-
     CoarseArray _csdf;
-    CoarseArray _giData;
+
+    //remaining data structures
+    id _noiseTexture;
+
+    //remaining data
+    uint32_t _frameIndex = 0;
+    id _counterSampleBuffer;
+    id _timestampBuffer; 
+    bool _supportsTimestamps;
 };
