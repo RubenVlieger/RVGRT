@@ -199,9 +199,8 @@
                 double avgP1 = sumP1 / 30.0;
                 double avgTotal = avgP0 + avgP1;
 
-                double halfW = (double)State::screenWIDTH / 2.0;
-                double halfH = (double)State::screenHEIGHT / 2.0;
-                double numPixels = halfW * halfH;
+      
+                double numPixels = 1792 * 1057;
                 
                 double safeTimeSeconds = (avgP0 < 0.001 ? 0.001 : avgP0) / 1000.0;
                 

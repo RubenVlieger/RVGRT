@@ -107,7 +107,7 @@ kernel void CoarseArray_computeDistZ(texture3d<float, access::sample> inDistXY [
 
 
 kernel void CoarseArray_InitialGlobalIlluminate(
-    texture3d<uint, access::write> GIdata [[texture(0)]],
+    texture3d<float, access::write> GIdata [[texture(0)]],
     texture3d<uint, access::read> packedTex [[texture(1)]],
     texture3d<float, access::sample> csdf [[texture(2)]], 
     constant float3& c_sunDir2 [[buffer(3)]],
@@ -125,84 +125,91 @@ kernel void CoarseArray_InitialGlobalIlluminate(
     if (!shadowHit.hit) {
         accumulatedColor = c_sunColor;
     }
-    
-    uint packedColor = ((uint)(accumulatedColor.x * 255.h) << 0) | 
-                       ((uint)(accumulatedColor.y * 255.h) << 8) | 
-                       ((uint)(accumulatedColor.z * 255.h) << 16) | 
-                       (255u << 24);
-                       
-    GIdata.write(uint4(packedColor, 0, 0, 0), gid);
+
+    GIdata.write(float4((float3)accumulatedColor.xyz, 1.0f), gid);
 }
 
+#define GI_PACKING_SCALE 8.0h
+
 kernel void CoarseArray_GlobalIlluminate(
-    texture3d<uint, access::read_write> GIdata_curr [[texture(0)]],
+    texture3d<float, access::sample> GIdata_Read [[texture(0)]], // Bound as SAMPLE
     texture3d<uint, access::read> packedTex [[texture(1)]],
     texture3d<float, access::sample> csdf [[texture(2)]], 
     texture2d<float, access::sample> texturepack [[texture(3)]],
     constant float3& c_sunDir2 [[buffer(4)]],
     constant uint& frameNumber [[buffer(5)]],
     constant uint64_t& offset [[buffer(6)]],
+    texture3d<float, access::write> GIdata_Write [[texture(7)]], // Bound as WRITE
     uint idx_local [[thread_position_in_grid]])
 {
     uint64_t idx = idx_local + offset;
     if (idx >= GI_SIZE) return;
 
+    // ... Coordinate setup ...
     uint z = idx / (GI_SIZEX * GI_SIZEY);
     uint temp = idx % (GI_SIZEX * GI_SIZEY);
     uint y = temp / GI_SIZEX;
     uint x = temp % GI_SIZEX;
     uint3 gid = uint3(x, y, z);
 
-    float3 worldPos = make_float3((x + 0.5f) * COARSENESSGI, 
-                                  (y + 0.5f) * COARSENESSGI, 
-                                  (z + 0.5f) * COARSENESSGI);
-
+    // If solid, write 0 (encoded 0 is just 0)
     if (isCoarseBlockSolid(x, y, z, packedTex)) { 
-        GIdata_curr.write(uint4(0), gid);
+        GIdata_Write.write(float4(0.0f), gid);
         return; 
     }
 
     uint random_state = init_random_state(idx, frameNumber);
+    float3 worldPos = make_float3((x + 0.5f) * COARSENESSGI, 
+                                  (y + 0.5f) * COARSENESSGI, 
+                                  (z + 0.5f) * COARSENESSGI);
+
     half3 newSample = make_half3(0.0h);
 
+    // --- 1. Calculate Lighting (HDR Space) ---
+    // Direct Light
     hitInfo shadowHit = trace(worldPos, c_sunDir2, 0.001f, packedTex, csdf);
     if (!shadowHit.hit) {
-        newSample += c_sunColor;
+        newSample += c_sunColor / 8.0f; 
     }
 
+    // Indirect Bounce
     float3 randomDir = random_direction_in_sphere(random_state);
     hitInfo bounceHit = trace(worldPos, randomDir, 0.001f, packedTex, csdf);
 
     if (bounceHit.hit) {
-        int3 g = int3(floor(bounceHit.pos / (float)COARSENESSGI));
-        if (g.x >= 0 && g.y >= 0 && g.z >= 0 && g.x < (int)GI_SIZEX && g.y < (int)GI_SIZEY && g.z < (int)GI_SIZEZ) {
-            
-            uint prevSample = GIdata_curr.read(uint3(g)).r;
-            
-            half3 bouncedColor = make_half3((half)(prevSample & 255) / 255.0h, 
-                                            (half)((prevSample >> 8) & 255) / 255.0h, 
-                                            (half)((prevSample >> 16) & 255) / 255.0h);
-            
-            half3 surfaceAlbedo = sampleTexture(bounceHit.uv, bounceHit.pos, texturepack);
-            newSample += (bouncedColor * surfaceAlbedo);
-        }
+        constexpr sampler s(address::clamp_to_edge, filter::linear);
+        float3 uvw = bounceHit.pos / float3(SIZEX, SIZEY, SIZEZ);
+        
+        // SAMPLE NEIGHBOR (Returns 0..1)
+        half4 rawNeighbor = (half4)GIdata_Read.sample(s, uvw);
+        
+        // DECODE: Convert 0..1 back to 0..8 HDR
+        half3 neighborLight = rawNeighbor.rgb * GI_PACKING_SCALE;
+
+        half3 surfaceAlbedo = sampleTexture(bounceHit.uv, bounceHit.pos, texturepack);
+        newSample += (neighborLight * surfaceAlbedo);
     } else {
         newSample += sampleSky(randomDir, c_sunDir2);
     }
 
+    // --- 2. Temporal Accumulation ---
     const half LEARNING_RATE = 0.04h;
-    uint prevData = GIdata_curr.read(gid).r;
-    half3 previousColor = make_half3((half)(prevData & 255) / 255.h, 
-                                     (half)((prevData >> 8) & 255) / 255.h, 
-                                     (half)((prevData >> 16) & 255) / 255.h);
+
+    // READ HISTORY (Returns 0..1)
+    half4 prevRaw = (half4)GIdata_Read.read(gid);
     
-    half3 finalColor = lerp(previousColor, newSample, LEARNING_RATE);
-    finalColor = fmin(finalColor, make_half3(2.0h));
+    // DECODE HISTORY
+    half3 prevHDR = prevRaw.rgb * GI_PACKING_SCALE;
+    
+    // Blend in HDR space
+    half3 finalHDR = lerp(prevHDR, newSample, LEARNING_RATE);
+    
+    // --- 3. Encode & Write ---
+    // ENCODE: Divide by 8.0 to fit into unorm texture
+    half3 finalEncoded = finalHDR / GI_PACKING_SCALE;
+    
+    // Clamp to 1.0 so we don't wrap around or look weird, though write() handles saturation usually
+    finalEncoded = min(finalEncoded, half3(1.0h));
 
-    uint packedFinal = ((uint)(fmin(finalColor.x, 1.0h) * 255.h) << 0) | 
-                       ((uint)(fmin(finalColor.y, 1.0h) * 255.h) << 8) | 
-                       ((uint)(fmin(finalColor.z, 1.0h) * 255.h) << 16) | 
-                       (255u << 24);
-
-    GIdata_curr.write(uint4(packedFinal, 0, 0, 0), gid);
+    GIdata_Write.write(float4((float3)finalEncoded, 1.0f), gid);
 }

@@ -452,6 +452,40 @@ GPU_FUNC hitInfo trace(float3 camPos,
  * @param csdf Pointer to the CSDF for occlusion checks.
  * @return A float3 color representing the accumulated indirect light.
  */
+#if defined PLATFORM_METAL
+#define GI_PACKING_SCALE 8.0f // Must match the kernel value
+
+GPU_FUNC half3 traceCone(float3 pos, const half3 dir, 
+                          texture3d<float, access::sample> GIdata,
+                          texture3d<float, access::sample> csdf)
+{
+    half3 accumulatedColor = half3(0.0h);
+    float currentDist = COARSENESSGI * 1.5f;
+
+    constexpr sampler s(coord::normalized, address::clamp_to_edge, filter::linear);
+
+    for (int i = 0; i < 12; ++i) 
+    {
+        if (currentDist > 120.0f) break;
+
+        float3 currentPos = pos + (float3)dir * currentDist;
+        float3 uvw = currentPos / float3(SIZEX, SIZEY, SIZEZ); 
+        
+        if (uvw.x < 0 || uvw.y < 0 || uvw.z < 0 || uvw.x > 1 || uvw.y > 1 || uvw.z > 1) break;
+
+        half4 voxelSample = (half4)GIdata.sample(s, uvw);
+        
+        half3 lightIntensity = voxelSample.rgb * 8.0f;
+        
+        
+        accumulatedColor += lightIntensity;
+        currentDist += COARSENESSGI; 
+    }
+    
+    return accumulatedColor;
+}
+
+#else
 GPU_FUNC float3 traceCone(float3 pos, const float3 dir, 
                           TEX3D_U32_R GIdata,
                           TEX3D_U8_R csdf)
@@ -489,6 +523,7 @@ GPU_FUNC float3 traceCone(float3 pos, const float3 dir,
     }
     return accumulatedColor;
 }
+#endif
 
 /**
  * @brief Calculates the color of the sky for a given view direction.

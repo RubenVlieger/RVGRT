@@ -68,7 +68,7 @@ void CoarseArray::AllocateSDF() {
 
 void CoarseArray::AllocateGI() {
     id<MTLDevice> device = get_metal_device();
-    _giTexture = (__bridge_retained void*)create3DTexture(device, GI_SIZEX, GI_SIZEY, GI_SIZEZ, MTLPixelFormatR32Uint);
+    _giTexture = (__bridge_retained void*)create3DTexture(device, GI_SIZEX, GI_SIZEY, GI_SIZEZ, MTLPixelFormatRGBA8Unorm);
     std::cout << "Allocated GI 3D Texture" << std::endl;
 }
 
@@ -155,10 +155,14 @@ static uint64_t g_offsetCounter = 0;
 
 #define METAL_GI_UPDATE_BATCH_SIZE (64*64*64) 
 
-void CoarseArray::UpdateGIData(id<MTLComputeCommandEncoder> encoder, void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack) {
+void CoarseArray::UpdateGIData(id<MTLComputeCommandEncoder> encoder, void* packedVoxelTexture, CoarseArray& csdf, Texturepack& texturepack) 
+{
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoGiUpdate];
     
-    [encoder setTexture:(__bridge id<MTLTexture>)_giTexture atIndex:0];
+    id<MTLTexture> giTex = (__bridge id<MTLTexture>)_giTexture;
+    
+    [encoder setTexture:giTex atIndex:0]; 
+    
     [encoder setTexture:(__bridge id<MTLTexture>)packedVoxelTexture atIndex:1];
     [encoder setTexture:(__bridge id<MTLTexture>)csdf.getSDFTexture() atIndex:2];
     [encoder setTexture:(id<MTLTexture>)texturepack.getTextureObject() atIndex:3];
@@ -168,9 +172,10 @@ void CoarseArray::UpdateGIData(id<MTLComputeCommandEncoder> encoder, void* packe
     
     uint frameNum = g_frameNumber;
     [encoder setBytes:&frameNum length:sizeof(uint) atIndex:5];
-    
 
     [encoder setBytes:&g_offsetCounter length:sizeof(uint64_t) atIndex:6];
+
+    [encoder setTexture:giTex atIndex:7];
 
     MTLSize gridSize = MTLSizeMake(METAL_GI_UPDATE_BATCH_SIZE, 1, 1);
     MTLSize threadgroupSize = MTLSizeMake(256, 1, 1);

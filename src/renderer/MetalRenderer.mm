@@ -128,7 +128,7 @@ MetalRenderer::MetalRenderer(id device_id) : _texturepack()
 
     _giData.AllocateGI();
     _giData.InitializeGIData(_voxelTexture, _csdf, _texturepack);
-    
+
     auto t4 = std::chrono::high_resolution_clock::now();
     NSLog(@"GI grid initialized in %.2f ms", std::chrono::duration<double, std::milli>(t4 - t3).count());
 
@@ -199,6 +199,7 @@ void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& 
     [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:3];
     
     MTLSize gridHalf = MTLSizeMake([(id<MTLTexture>)_halfDistTexture width], [(id<MTLTexture>)_halfDistTexture height], 1);
+    std::cout << ([(id<MTLTexture>)_halfDistTexture width]) << " " << [(id<MTLTexture>)_halfDistTexture height] << std::endl;
     [encoder dispatchThreads:gridHalf threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
     [encoder popDebugGroup];
 
@@ -208,7 +209,13 @@ void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& 
         [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:1 withBarrier:YES];
     }
 
-    // Barrier: Ensure Pass 0 writes are visible to Pass 1
+
+    [encoder pushDebugGroup:@"Pass GI: Update Volume"];
+    _giData.UpdateGIData(encoder, _voxelTexture, _csdf, _texturepack);
+    [encoder popDebugGroup];
+
+
+
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
 
@@ -231,6 +238,7 @@ void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& 
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
     [encoder setTexture:_voxelTexture atIndex:2];
     [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:3];
+    [encoder setTexture:(__bridge id<MTLTexture>)_giData.getGITexture() atIndex:4]; 
     [encoder setTexture:(id<MTLTexture>)_texturepack.getTextureObject() atIndex:5];
     [encoder setTexture:_halfDistTexture atIndex:6]; // Read the accelerator
 
