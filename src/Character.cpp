@@ -39,15 +39,13 @@ Character::Character()
       speed(0.05f),
       speedDropoff(0.92f),
       jumpSpeed(2.0f),
-      sensitivity(0.0001f),
+      sensitivity(0.00007f),
       gravityAmount(0.0f)
       
 {
     lastRenderedViewProjectionMatrix = glm::mat4(1.0f);
     // Constructor body can be empty if all initialization is done above
 }
-
-
 
 glm::dvec3 calcDirfromSphere(double pitch, double yaw) 
 {
@@ -65,23 +63,36 @@ void Character::Update(unsigned int frameCount)
     if (!platform) return; // Guard against calls before platform is initialized
     prevViewProjectionMatrix = viewProjectionMatrix;
     prevUnjitteredViewProjectionMatrix = unjitteredViewProjectionMatrix;
+
+
+    vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) + (platform->IsKeyDown('A') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown(' ') ? 1.0f : 0.0f) + (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown('W') ? 1.0f : 0.0f) + (platform->IsKeyDown('S') ? -1.0f : 0.0f)) * speed;
+
+    
+    if(platform->IsKeyDown(0x38)){
+        inputs *= 0.3f;   
+    }     
+
     if (!lockMouse) 
     {
         // Access members through the platform pointer
-        yaw += platform->deltaXMouse.exchange(0) * sensitivity * platform->deltaTime * FOV;
-        pitch += platform->deltaYMouse.exchange(0) * sensitivity * platform->deltaTime * FOV;
+        float deltayaw = platform->deltaXMouse.exchange(0) * sensitivity * platform->deltaTime * FOV;
+        float deltapitch = platform->deltaYMouse.exchange(0) * sensitivity * platform->deltaTime * FOV;
+
+        if(platform->IsKeyDown(0x38)){
+            deltayaw *= 0.4f;
+            deltapitch *= 0.4f;
+        }     
+
+        yaw += deltayaw ;
+        pitch += deltapitch;
 
         yaw = fmod(yaw, std::numbers::pi * 2.0f);
         pitch = clamp(pitch, -4.5f, -1.65f);  
         direction = calcDirfromSphere(pitch, yaw);
     }
 
-    vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) + (platform->IsKeyDown('A') ? -1.0f : 0.0f),
-                       (platform->IsKeyDown(' ') ? 1.0f : 0.0f) + (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
-                       (platform->IsKeyDown('W') ? 1.0f : 0.0f) + (platform->IsKeyDown('S') ? -1.0f : 0.0f)) * speed;
-
-    if(platform->IsKeyDown(0x38))
-        inputs *= 0.2f;
 
     velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) + inputs.z * (vec3)direction;
     velocity *= speedDropoff;

@@ -90,4 +90,20 @@
     }
 }
 
+- (void)flagsChanged:(NSEvent *)event {
+    Platform* platform = State::state.platform.get();
+    if (!platform) return;
+
+    // 0x38 is kVK_Shift (Left Shift)
+    // Check if the Shift flag is currently active in the event
+    bool isShiftDown = (event.modifierFlags & NSEventModifierFlagShift) != 0;
+    
+    // 0x38 is the virtual key code for Shift
+    if (isShiftDown) {
+        platform->keysPressed.set(0x38, 1);
+    } else {
+        platform->keysPressed.set(0x38, 0);
+    }
+}
+
 @end

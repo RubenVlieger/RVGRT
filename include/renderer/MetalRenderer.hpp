@@ -6,6 +6,8 @@
 #include "Texturepack.h"
 #include "CoarseArray.h"
 
+#include <MetalFX/MetalFX.h>
+
 #include <cstdint> 
 #include <memory> 
 
@@ -26,7 +28,7 @@ public:
     MetalRenderer(id device);
     ~MetalRenderer() override;
 
-    void Draw(id<MTLComputeCommandEncoder> encoder, const Character& character, unsigned int frameCount);
+    void Draw(id<MTLCommandBuffer> buffer, const Character& character, unsigned int frameCount);
     void Draw(const Character& character, unsigned int frameCount) override;
 
     id GetOutputTexture();
@@ -34,6 +36,9 @@ public:
     void GenerateWorld();
     void OnResize(uint32_t newWidth, uint32_t newHeight);
     void generateNoiseTexture();
+
+    void ResetScaler(); // Helper to reset history (e.g. on teleport)
+
 
     id GetCounterBuffer() { return _counterSampleBuffer; }
     id GetTimestampBuffer() { return _timestampBuffer; }
@@ -62,6 +67,12 @@ private:
     id _texRawIndirect;
     id _texDenoised;
     id _texFinal;           // The main render target
+    id _texFinalHistory[2];
+    id _texDenoiseTemp;
+
+    id<MTLFXTemporalScaler> _temporalScaler;
+    bool _scalerNeedsReset = true;
+    id _texCompositeResult; 
 
     id _texDepth[2];        // [0] = current, [1] = prev (swaps every frame)
     id _texAccum[2];        // [0] = current, [1] = history (swaps every frame)

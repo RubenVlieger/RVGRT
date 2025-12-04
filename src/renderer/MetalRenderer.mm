@@ -1,4 +1,5 @@
 #import <MetalKit/MetalKit.h>
+#include <MetalFX/MetalFX.h>
 #include "renderer/MetalRenderer.hpp"
 #include "State.hpp"
 #include "Character.hpp"
@@ -11,6 +12,12 @@
 #include "Texturepack.h"
 #include <cassert>
 #include <chrono> // Ensure chrono is included
+
+
+@protocol MTLFXTemporalScaler_Unlocked <NSObject>
+@property (readwrite, nonatomic) simd_float2 motionVectorScale;
+@property (readwrite, nonatomic) simd_float2 jitterOffset;
+@end
 
 MetalRenderer::MetalRenderer(id device_id) : _texturepack() 
 {
@@ -115,12 +122,16 @@ MetalRenderer::MetalRenderer(id device_id) : _texturepack()
             MTLCounterSampleBufferDescriptor* desc = [[MTLCounterSampleBufferDescriptor alloc] init];
             desc.counterSet = timestampSet;
             desc.label = @"TimestampCounter";
-            desc.sampleCount = 12;
+            desc.sampleCount = 14;
             desc.storageMode = MTLStorageModePrivate;
             _counterSampleBuffer = [dev newCounterSampleBufferWithDescriptor:desc error:nil];
-            _timestampBuffer = [dev newBufferWithLength:12 * sizeof(uint64_t) options:MTLResourceStorageModeShared];
+            _timestampBuffer = [dev newBufferWithLength:14 * sizeof(uint64_t) options:MTLResourceStorageModeShared];
         }
     }
+}
+
+void MetalRenderer::ResetScaler() {
+    _scalerNeedsReset = true;
 }
 
 MetalRenderer::~MetalRenderer() {}
@@ -158,10 +169,16 @@ void MetalRenderer::createRenderTarget(uint32_t width, uint32_t height)
     _texRawIndirect = makeTex(MTLPixelFormatRGBA16Float, @"RawIndirect");
     _texDenoised    = makeTex(MTLPixelFormatRGBA16Float, @"Denoised");
     _texFinal       = makeTex(MTLPixelFormatRGBA8Unorm,  @"FinalOutput");
+    _texDenoiseTemp = makeTex(MTLPixelFormatRGBA16Float, @"DenoiseTemp");
+
 
     for(int i=0; i<2; i++) {
         _texDepth[i] = makeTex(MTLPixelFormatR32Float, [NSString stringWithFormat:@"Depth_%d", i]);
         _texAccum[i] = makeTex(MTLPixelFormatRGBA16Float, [NSString stringWithFormat:@"Accum_%d", i]);
+    }
+
+    for(int i=0; i<2; i++) {
+        _texFinalHistory[i] = makeTex(MTLPixelFormatRGBA16Float, [NSString stringWithFormat:@"FinalHistory_%d", i]);
     }
 
     MTLTextureDescriptor *distDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float width:width/2 height:height/2 mipmapped:NO];
@@ -169,6 +186,35 @@ void MetalRenderer::createRenderTarget(uint32_t width, uint32_t height)
     distDesc.storageMode = MTLStorageModePrivate;
     _halfDistTexture = [_device newTextureWithDescriptor:distDesc];
 
+
+    MTLTextureDescriptor *compDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float 
+                                                                                        width:width 
+                                                                                       height:height 
+                                                                                    mipmapped:NO];
+    compDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+    compDesc.storageMode = MTLStorageModePrivate;
+    _texCompositeResult = [_device newTextureWithDescriptor:compDesc];
+    [(id<MTLTexture>)_texCompositeResult setLabel:@"CompositeResult(Aliased)"];
+
+        MTLFXTemporalScalerDescriptor* scalerDesc = [[MTLFXTemporalScalerDescriptor alloc] init];
+    
+    // Input is your internal render resolution
+    scalerDesc.inputWidth = width;
+    scalerDesc.inputHeight = height;
+    
+    // Output is the screen size (Scaling 1.0x for native AA, or higher for upscaling)
+    // For now, let's keep it 1:1 for native TAA
+    scalerDesc.outputWidth = width;
+    scalerDesc.outputHeight = height;
+    
+    scalerDesc.colorTextureFormat = MTLPixelFormatRGBA16Float; // _texCompositeResult format
+    scalerDesc.depthTextureFormat = MTLPixelFormatR32Float;    // _texDepth format
+    scalerDesc.motionTextureFormat = MTLPixelFormatRG16Float;  // _texMotion format
+    scalerDesc.outputTextureFormat = MTLPixelFormatRGBA8Unorm; // _texFinal format (Screen)
+    
+    _temporalScaler = [scalerDesc newTemporalScalerWithDevice:_device];
+    
+    _scalerNeedsReset = true;
 
 
 //    id<MTLCommandQueue> queue = [_device newCommandQueue];
@@ -200,8 +246,12 @@ void MetalRenderer::OnResize(uint32_t newWidth, uint32_t newHeight)
     }
 }
 
-void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& character, unsigned int frameCount)
+void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf, const Character& character, unsigned int frameCount)
 {
+    id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
+    encoder.label = @"Main Compute Loop";
+
+
     int currIdx = _frameIndex % 2;
     int prevIdx = (_frameIndex + 1) % 2;
 
@@ -336,15 +386,41 @@ void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& 
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:8 withBarrier:NO];
 
-    [encoder pushDebugGroup:@"Pass 4: Denoise"];
+    [encoder pushDebugGroup:@"Pass 4: Denoise Loop"];
     [encoder setComputePipelineState:_psoDenoise];
 
-    [encoder setTexture:_texDenoised atIndex:0]; // Output
-    [encoder setTexture:_texAccum[currIdx] atIndex:1]; // Input: Current Accum
     [encoder setTexture:_texNormal atIndex:2];
     [encoder setTexture:_texDepth[currIdx] atIndex:3];
 
-    [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
+    id<MTLTexture> inputTex = _texAccum[currIdx];
+    id<MTLTexture> outputTex = _texDenoiseTemp;
+
+    const int iterations = 3;
+   for(int i = 0; i < iterations; i++) {
+        // Double step width each time: 1, 2, 4
+        int stepWidth = 1 << i; 
+        
+        [encoder setTexture:outputTex atIndex:0]; // Write
+        [encoder setTexture:inputTex atIndex:1];  // Read
+        [encoder setBytes:&stepWidth length:sizeof(int) atIndex:0];
+        
+        MTLSize gridFull = MTLSizeMake([(id<MTLTexture>)_texFinal width], [(id<MTLTexture>)_texFinal height], 1);
+        MTLSize threadGroup = MTLSizeMake(16, 16, 1);
+        [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
+        
+        [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
+        
+        // Swap textures for next pass
+        id<MTLTexture> temp = inputTex;
+        inputTex = outputTex;
+        
+        // For the final pass, we want to write into _texDenoised
+        if (i == iterations - 2) {
+            outputTex = _texDenoised; 
+        } else {
+            outputTex = temp; // Reuse the old input as the new output
+        }
+    }
     [encoder popDebugGroup];
 
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:9 withBarrier:YES];
@@ -352,25 +428,70 @@ void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& 
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
-    // PASS 5: Composite
+    // PASS 5: Composite (Light * Albedo)
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:10 withBarrier:NO];
 
     [encoder pushDebugGroup:@"Pass 5: Composite"];
     [encoder setComputePipelineState:_psoComposite];
 
-    [encoder setTexture:_texFinal atIndex:0]; // Final Output
+    [encoder setTexture:_texCompositeResult atIndex:0]; 
+    
     [encoder setTexture:_texDirectLight atIndex:1];
     [encoder setTexture:_texDenoised atIndex:2];
     [encoder setTexture:_texAlbedo atIndex:3];
     [encoder setTexture:_texDepth[currIdx] atIndex:4];
-
 
     [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
     [encoder popDebugGroup];
 
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:11 withBarrier:YES];
 
+    // End Compute Encoder so we can start MetalFX
+    [encoder endEncoding]; 
+
+
+
+// -----------------------------------------------------------
+    // PASS 6: MetalFX Temporal AA / Upscaling
+    // -----------------------------------------------------------
+    
+    // 1. Profiling Start for MetalFX
+    // Use 'cmdBuf' directly since we don't have an active encoder anymore.
+    if (_supportsTimestamps) {
+        id<MTLBlitCommandEncoder> preFXBlit = [cmdBuf blitCommandEncoder];
+        [preFXBlit sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:12 withBarrier:NO];
+        [preFXBlit endEncoding];
+    }
+
+    _temporalScaler.colorTexture = (id<MTLTexture>)_texCompositeResult;
+    _temporalScaler.depthTexture = (id<MTLTexture>)_texDepth[currIdx];
+    _temporalScaler.motionTexture = (id<MTLTexture>)_texMotion;
+    _temporalScaler.outputTexture = (id<MTLTexture>)_texFinal;
+    
+    id<MTLFXTemporalScaler_Unlocked> scalerUnlocked = (id<MTLFXTemporalScaler_Unlocked>)_temporalScaler;
+    
+scalerUnlocked.motionVectorScale = simd_make_float2(-(float)State::dispWIDTH, -(float)State::dispHEIGHT);
+    scalerUnlocked.jitterOffset = simd_make_float2(-character.jitterX, -character.jitterY);
+
+    _temporalScaler.reset = _scalerNeedsReset;
+    _scalerNeedsReset = false;
+
+    // 3. Encode MetalFX
+    // Use 'cmdBuf' directly
+    [_temporalScaler encodeToCommandBuffer:cmdBuf];
+
+    // 4. Profiling End for MetalFX
+    if (_supportsTimestamps) {
+        id<MTLBlitCommandEncoder> postFXBlit = [cmdBuf blitCommandEncoder];
+       [postFXBlit sampleCountersInBuffer:_counterSampleBuffer 
+                             atSampleIndex:13 
+                               withBarrier:YES];
+
+        [postFXBlit endEncoding];
+    }
+    
+    // Update state for next frame
     _frameIndex++;
     const_cast<Character&>(character).lastRenderedViewProjectionMatrix = character.unjitteredViewProjectionMatrix;
 }

@@ -223,7 +223,7 @@ kernel void GBufferAndDirectLight(
             // 2. Shadow Trace
             // Offset start pos slightly to avoid acne
             bool isShadowed = traceShadowAnyHitSlow(hit.pos + (float3)normal * 0.005f, frame.sunDirection, 2000.0f, bitsTex, csdf);
-            half shadowFactor = isShadowed ? 0.0h : 1.0h;
+            half shadowFactor = isShadowed ? 0.02h : 1.0h;
             
             // 3. Lambertian Diffuse Lighting
             // Intensity = LightColor * dot(N, L) * Shadow
@@ -345,22 +345,25 @@ kernel void IndirectBounce(
         // B. Get Material of the bounced surface
         half2 hitUV = reconstructUV(hit.pos, hit.normal);
         float3 bounceVec = hit.pos - pos;
-        float totalDistSq = (depth * depth) + dot(bounceVec, bounceVec); // LOD calculation
+        float totalDistSq = (depth * depth) + dot(bounceVec, bounceVec); 
         
-        half3 hitAlbedo = sampleTexture(hitUV, hit.pos, textureAtlas, totalDistSq);
+        half3 bouncedAlbedo = sampleTexture(hitUV, hit.pos, textureAtlas, totalDistSq);
         
         // C. Calculate Radiance
-        // Light = SunColor * dot(N, L) * Visibility
         half NdotL = max(dot(hit.normal, (half3)frame.sunDirection), 0.0h);
-        half3 directLightAtHit = c_sunColor * NdotL * (isShadowed ? 0.05h : 1.0h); // 0.05h is small ambient approximation
         
-        // The light bouncing TOWARDS us is (LightAtHit * AlbedoAtHit)
-        incomingLight = directLightAtHit * hitAlbedo;
+        // This restores color bleeding (e.g. Gold reflecting yellow light)
+        half3 directLightAtHit = c_sunColor * NdotL * (isShadowed ? 0.0h : 1.0h); 
+        
+        // Add a tiny bit of bounce ambient to prevent pitch black corners, 
+        // but keep it the color of the material
+        half3 bounceAmbient = bouncedAlbedo * 0.05h; 
+
+        incomingLight = (directLightAtHit * bouncedAlbedo) + bounceAmbient;
 
     } else {
         // We hit the sky
         half3 skyLight = sampleSky(rayDir, frame.sunDirection);
-        
         float luma = dot((float3)skyLight, float3(0.3f, 0.59f, 0.11f));
         half3 desaturatedSky = mix(skyLight, half3(luma), 0.6h); 
         
@@ -412,6 +415,10 @@ kernel void TemporalAccumulation(
     
     // 2. Motion and UVs
     float2 motion = texMotion.read(gid).xy;
+    float velMag = length(motion);
+    float movementFactor = saturate(velMag * 200.0f); 
+    
+
     float2 uv = (float2(gid) + 0.5f) / float2(texAccum.get_width(), texAccum.get_height());
     float2 prevUV = uv - motion;
 
@@ -439,10 +446,8 @@ kernel void TemporalAccumulation(
     float3 mu = m1 / 9.0f;
     float3 sigma = sqrt(abs(m2 / 9.0f - mu * mu));
 
-    // 4. Define the Clamp Box (Gamma controls aggressiveness)
-    // Higher Gamma (e.g., 1.5) = Slower convergence, Less Ghosting, More stable
-    // Lower Gamma (e.g., 0.75) = Faster convergence, More boiling noise, Less smearing
-    const float gamma = 1.0f; 
+
+    float gamma = mix(10.0f, 0.75f, movementFactor); 
     float3 minColor = mu - gamma * sigma;
     float3 maxColor = mu + gamma * sigma;
 
@@ -457,38 +462,27 @@ kernel void TemporalAccumulation(
     float3 clampedHistoryYCoCg = clamp(historyYCoCg, minColor, maxColor);
     float3 clampedHistoryRGB = YCoCgToRGB(clampedHistoryYCoCg);
 
-    // 7. Dynamic Feedback Weight
-    // At low FPS, high velocity creates blur. We reduce history influence if moving fast.
-    float velocityFactor = length(motion) * 100.0f; // Scale up motion to 0-1 range roughly
-    float baseWeight = 0.90f;
-    float weight = clamp(baseWeight - velocityFactor, 0.6f, 0.975f);
+
+    float blendWeight = mix(0.98f, 0.9f, movementFactor);
     
     // 8. Depth Rejection (Disocclusion Check)
     bool validHistory = (prevUV.x >= 0.0f && prevUV.x <= 1.0f && prevUV.y >= 0.0f && prevUV.y <= 1.0f);
-    
     if (validHistory) {
         uint2 prevCoords = uint2(prevUV.x * texPrevDepth.get_width(), prevUV.y * texPrevDepth.get_height());
         float currentDepth = texDepth.read(gid).r;
         float prevDepth = texPrevDepth.read(prevCoords).r;
         
-        float relativeDiff = abs(currentDepth - prevDepth) / (currentDepth + 1e-5f);
-        
-        // If depth is too different, it's a disocclusion. Reset to current.
-        if (relativeDiff > 0.1f) {
-            weight = 0.0f; // Reject history
+        // Use relative difference
+        float diff = abs(currentDepth - prevDepth) / (currentDepth + 1e-5f);
+        if (diff > 0.05f) { // Stricter threshold
+            blendWeight = 0.0f; // Reset
         }
     } else {
-        weight = 0.0f; // Off-screen history
+        blendWeight = 0.0f;
     }
 
-    // 9. Blend and Output
-    // Use Clamped History for blending to prevent trails
-    float3 result = mix(currentRGB, clampedHistoryRGB, weight);
-    
-    // Optional: Anti-Flicker (if single pixels are extremely bright)
-    // result = result / (1.0f + result); // Tone map down
-    // (Undo tone map later if used)
-    
+    // 8. Blend
+    float3 result = mix(currentRGB, clampedHistoryRGB, blendWeight);
     texAccum.write(float4(result, 1.0f), gid);
 }
 
@@ -500,6 +494,7 @@ kernel void BilateralDenoise(
     texture2d<float, access::read>  texAccum    [[texture(1)]],
     texture2d<float, access::read>  texNormal   [[texture(2)]],
     texture2d<float, access::read>  texDepth    [[texture(3)]],
+    constant int& step_width        [[buffer(0)]], 
     uint2 gid [[thread_position_in_grid]])
 {
     if (gid.x >= texDenoised.get_width() || gid.y >= texDenoised.get_height()) return;
@@ -509,9 +504,6 @@ kernel void BilateralDenoise(
     float3 centerN = texNormal.read(gid).rgb;
     float centerD  = texDepth.read(gid).r;
 
-    // 2. Kernel Configuration
-    const int step_width = 2; 
-    
     // Gaussian-approximate weights for 3x3
     const float kernelWeights[3] = { 1.0f, 2.0f / 1.0f, 4.0f / 1.0f };
 
@@ -583,12 +575,9 @@ kernel void Composite(
     float3 albedo        = texAlbedo.read(gid).rgb;
     float depth          = texDepth.read(gid).r;
 
-    // 2. Lighting Combination
-    float3 ambient = float3(0.005f) * albedo; // Ambient boost: prevents shadows from being pitch black, keeps them colorful
-    float3 totalLight = directLight + indirectLight + ambient;
-
     // 3. Apply Material (Linear Space)
-    float3 linearColor = totalLight * albedo + ambient;
+    float3 totalIrradiance = directLight + indirectLight;
+    float3 linearColor = totalIrradiance * albedo;
 
     // 4. BETTER FOG LOGIC
     if (depth < 50000.0f) 
@@ -614,7 +603,7 @@ kernel void Composite(
     linearColor = applySaturation(linearColor, (depth > 50000.0f) ? 1.05f : 1.4f); 
 
     // C. Contrast S-Curve (make darks darker, brights brighter)
-    //linearColor = applyContrast(linearColor, 1.01f);
+    //linearColor = applyContrast(linearColor, 1.03f);
 
     // 6. Tone Mapping (ACES)
     float3 toneMapped = ACESFilm(linearColor);
