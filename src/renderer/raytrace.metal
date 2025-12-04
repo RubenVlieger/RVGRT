@@ -24,6 +24,14 @@ inline float rand_float(thread uint& seed) {
     return (float)seed / (float)UINT_MAX;
 }
 
+inline uint hash3_to_1(int3 p) {
+    uint3 u = uint3(p);
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    return u.x ^ u.y ^ u.z;
+}
+
 // Reconstruct World Position from Depth and Camera info
 inline float3 reconstructPos(float depth, float2 uv, constant const CameraData& cam) {
     float2 ndc = uv * 2.0f - 1.0f;
@@ -40,16 +48,47 @@ inline half2 reconstructUV(float3 pos, half3 normal) {
     return uv;
 }
 
+// Standard ACES fitted tone mapper (Unreal Engine 4 version)
+// Compresses High Dynamic Range (e.g., 0 to 100) to LDR (0 to 1).
+inline float3 ACESFilm(float3 x) {
+    float a = 2.51f;
+    float b = 0.03f;
+    float c = 2.43f;
+    float d = 0.59f;
+    float e = 0.14f;
+    return saturate((x*(a*x+b))/(x*(c*x+d)+e));
+}
+
+inline float3 LinearToSRGB(float3 color) {
+    // Approx pow(x, 1.0/2.2)
+    return select(1.055f * pow(color, 1.0f / 2.4f) - 0.055f,
+                  12.92f * color,
+                  color <= 0.0031308f);
+}
+
+// Schlick's approximation for Fresnel
+inline float3 F_Schlick(float cosTheta, float3 F0) {
+    return F0 + (1.0f - F0) * pow(1.0f - cosTheta, 5.0f);
+}
+
+inline float3 applyContrast(float3 color, float contrast) {
+    return max(float3(0.0f), (color - 0.5f) * contrast + 0.5f);
+}
+
+// Saturation boost (Luma-based)
+inline float3 applySaturation(float3 color, float saturation) {
+    // Standard Luma coefficients (Rec. 709)
+    float luma = dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+    return mix(float3(luma), color, saturation);
+}
 
 // =================================================================================
-// KERNEL 1: G-BUFFER & DIRECT LIGHTING
+// KERNEL 1: G-BUFFER & DIRECT LIGHTING (Physically Based Update)
 // =================================================================================
-// This kernel traces the primary ray, handles water reflections, 
-// shadows from the sun, and outputs data for the GI pass.
 kernel void GBufferAndDirectLight(
     // --- Outputs ---
-    texture2d<float, access::write> texDirectLight [[texture(0)]], // RGB = Lit Color
-    texture2d<float, access::write> texAlbedo      [[texture(1)]], // RGB = Surface Color
+    texture2d<float, access::write> texDirectLight [[texture(0)]], // RGB = Incoming Light Intensity (Irradiance)
+    texture2d<float, access::write> texAlbedo      [[texture(1)]], // RGB = Surface Color (Material)
     texture2d<float, access::write> texNormal      [[texture(2)]], // RGB = Encoded Normal
     texture2d<float, access::write> texMotion      [[texture(3)]], // RG = Motion Vector
     texture2d<float, access::write> texDepth       [[texture(4)]], // R = Depth
@@ -60,13 +99,15 @@ kernel void GBufferAndDirectLight(
     
     texture3d<uint, access::read>     bitsTex     [[texture(5)]],
     texture3d<float, access::sample>  csdf        [[texture(6)]],
-    texture2d<float, access::sample>  textureAtlas[[texture(7)]],
+    texture2d_array<float, access::sample>  textureAtlas[[texture(7)]],
     texture2d<float, access::sample>  halfDistTex [[texture(8)]],
 
     uint2 gid [[thread_position_in_grid]])
 {
+    // Bounds Check
     if (gid.x >= texDirectLight.get_width() || gid.y >= texDirectLight.get_height()) return;
 
+    // 1. Ray Generation (Standard Pinhole with TAA Jitter)
     float2 pixelCenter = float2(gid) + 0.5f;
     float2 jitteredCoord = pixelCenter + camera.jitter; 
     
@@ -74,27 +115,25 @@ kernel void GBufferAndDirectLight(
     float2 ndc = uv * 2.0f - 1.0f;
     float3 dir = normalize(camera.forward + ndc.x * camera.right + ndc.y * camera.up);
 
-    // Accelerator read
+    // 2. Accelerator Read (Distance Estimation from Pre-Pass)
     constexpr sampler sLinear(filter::linear);
     float startDist = halfDistTex.sample(sLinear, uv).r;
     
-    // Trace
+    // 3. Primary Ray Trace
     hitInfo hit = trace(camera.position, dir, startDist, bitsTex, csdf);
 
+    // Initialize Outputs
     float depth = 100000.0f;
-    half3 finalDirectColor = half3(0.0h);
-    half3 albedo = half3(0.0h);
-    half3 normal = half3(0.0h); // default 0
+    half3 irradiance = half3(0.0h); // Incoming Light
+    half3 albedo = half3(0.0h);     // Material Color
+    half3 normal = half3(0.0h);
 
     if (hit.hit) 
     {
         depth = length(hit.pos - camera.position);
         normal = hit.normal;
         
-        // --- Material Handling ---
-        bool isWater = (hit.pos.y < 31.001f && normal.y > 0.8h);
-
-        // Calculate Motion Vector
+        // --- Motion Vector Calculation ---
         float2 motionVector = float2(0.0f);
         if (depth < 50000.0f) {
             float4 currentClipPos = camera.unjitteredViewProjection * float4(hit.pos, 1.0f);
@@ -102,67 +141,131 @@ kernel void GBufferAndDirectLight(
             if (previousClipPos.w > 0.0f && currentClipPos.w > 0.0f) {
                 float2 prevNDC = previousClipPos.xy / previousClipPos.w;
                 float2 currNDC = currentClipPos.xy / currentClipPos.w;
-                motionVector = currNDC - prevNDC;
+                motionVector = 0.5f * (currNDC - prevNDC);
                 motionVector.y = -motionVector.y; // Flip Y for texture coords
             }
         }
         texMotion.write(float4(motionVector.x, motionVector.y, 0, 0), gid);
 
-        // --- Shading ---
+        // --- Material Logic ---
+        bool isWater = (hit.pos.y < 31.001f && normal.y > 0.8h);
         if (isWater) 
         {
-            // Water logic (Reflections + Blue tint)
+            // === WATER FIX ===
+            
+            // 1. Dark Albedo
+            // Water is dark. This allows the reflection to sit "on top".
+            // We use a slight blue tint for the "deep water" color.
+            albedo = half3(0.04h, 0.1h, 0.25h); 
+
+            // 2. Waves
             float nx_wave = fbm3D(hit.pos.x, hit.pos.z, frame.time, 3, 0.06f, 2.0f, 0.6f);
             float ny_wave = fbm3D(hit.pos.z, hit.pos.x, frame.time + 112.0f, 3, 0.06f, 2.0f, 0.6f);
             half3 distortedNormal = normalize(normal + half3(half(nx_wave) * 0.1h, 0.0h, half(ny_wave) * 0.1h));
             
+            // 3. Reflection
             float3 reflDir = reflect(dir, (float3)distortedNormal);
-            hitInfo reflHit = trace(hit.pos + (float3)normal * 0.05f, reflDir, 400.0f, bitsTex, csdf);
+            hitInfo reflHit = trace(hit.pos, reflDir, 0.05f, bitsTex, csdf);
             
             half3 reflectColor;
             if (reflHit.hit) {
-                half3 rAlbedo = sampleTexture(reflHit.uv, reflHit.pos, textureAtlas);
-                bool rShadow = traceShadowAnyHit(reflHit.pos + (float3)reflHit.normal * 0.01f, frame.sunDirection, 50.0f, bitsTex, csdf);
-                reflectColor = rAlbedo * c_sunColor * (rShadow ? 0.1h : 1.0h);
+                // Hitting geometry
+                float3 camToWater = hit.pos - camera.position;
+                float3 waterToRefl = reflHit.pos - hit.pos;
+                float distSq = dot(camToWater, camToWater) + dot(waterToRefl, waterToRefl);
+                half3 rAlbedo = sampleTexture(reflHit.uv, reflHit.pos, textureAtlas, distSq);
+                
+                // Shadow check for the reflected object
+                bool rShadow = traceShadowAnyHitSlow(reflHit.pos + (float3)reflHit.normal * 0.01f, frame.sunDirection, 1000.0f, bitsTex, csdf);
+                
+                half3 litVal = c_sunColor;
+                half3 shadowVal = half3(0.05h); // Neutral dark grey ambient
+
+                reflectColor = rAlbedo * (rShadow ? shadowVal : litVal);
             } else {
+                // Hitting Sky
                 reflectColor = sampleSky(reflDir, frame.sunDirection);
             }
             
-            half NdotV = max(dot(distortedNormal, -(half3)dir), 0.0h);
+            // 4. Specular (Sun Highlight on water)
+            float3 viewDir = -dir;
+            float3 halfVec = normalize(viewDir + frame.sunDirection);
+            float NdotH = max(dot((float3)distortedNormal, halfVec), 0.0f);
+            half specular = pow(NdotH, 512.0f) * 4.0f; 
+
+            // 5. Fresnel
+            half NdotV = max(dot(distortedNormal, (half3)viewDir), 0.0h);
+            // F0=0.02 (Water). at 90 degrees (grazing), it becomes 1.0 reflection.
             half fresnel = 0.02h + (0.98h) * pow(1.0h - NdotV, 5.0h);
-            finalDirectColor = lerp(make_half3(0.0h, 0.1h, 0.3h), reflectColor, fresnel);
             
-            // For GI: Water has very low diffuse albedo (it absorbs light), mostly specular
-            albedo = half3(0.05h, 0.1h, 0.2h); 
-        } 
-        else 
+            bool waterShadow = traceShadowAnyHitSlow(hit.pos, frame.sunDirection, 1000.0f, bitsTex, csdf);
+            half shadowVal = waterShadow ? 0.0h : 1.0h;
+
+            // 6. Combine
+            // Total light coming from surface = (Reflection * Fresnel) + (SunSpec * Shadow)
+            half3 totalReflection = (reflectColor * fresnel) + (c_sunColor * specular * shadowVal);
+
+            // 7. Store using the Math Hack
+            
+            // Composite Logic: Final = (StoredDirect + Indirect) * Albedo
+            // StoredDirect = TotalReflection / Albedo
+            // We add a tiny epsilon to albedo to avoid divide-by-zero
+            irradiance = totalReflection / (albedo + 0.001h);
+        } else 
         {
+            // === SOLID BLOCK SHADING ===
+            
+            // 1. Texture Sampling
             half2 localUV = reconstructUV(hit.pos, normal);
-            albedo = sampleTexture(localUV, hit.pos, textureAtlas);
+            // PBR Rule: This is purely color. Do NOT multiply by sun here.
+            albedo = sampleTexture(localUV, hit.pos, textureAtlas, depth * depth);
             
-            bool isShadowed = traceShadowAnyHit(hit.pos + (float3)(normal * 1e-3h), frame.sunDirection, 2000.0f, bitsTex, csdf);
+            // 2. Shadow Trace
+            // Offset start pos slightly to avoid acne
+            bool isShadowed = traceShadowAnyHitSlow(hit.pos + (float3)normal * 0.005f, frame.sunDirection, 2000.0f, bitsTex, csdf);
+            half shadowFactor = isShadowed ? 0.0h : 1.0h;
             
-            half diffuse = max(dot(normal, (half3)frame.sunDirection), 0.0h);
-            finalDirectColor = c_sunColor * diffuse * (isShadowed ? 0.1h : 1.0h);
+            // 3. Lambertian Diffuse Lighting
+            // Intensity = LightColor * dot(N, L) * Shadow
+            half NdotL = max(dot(normal, (half3)frame.sunDirection), 0.0h);
+            
+            irradiance = c_sunColor * NdotL * shadowFactor;
         }
     } 
     else 
     {
-        finalDirectColor = sampleSky(dir, frame.sunDirection);
-        texMotion.write(float4(0,0,0,0), gid);
+        // === SKYBOX LOGIC ===
+        
+        // 1. Sky Motion Vectors
+        float3 fakePos = camera.position + dir * 1000.0f;
+        float4 currentClipPos = camera.unjitteredViewProjection * float4(fakePos, 1.0f);
+        float4 previousClipPos = camera.prevUnjitteredViewProjection * float4(fakePos, 1.0f);
+        
+        float2 mv = float2(0.0);
+        if (previousClipPos.w > 0.0f && currentClipPos.w > 0.0f) {
+            float2 prevNDC = previousClipPos.xy / previousClipPos.w;
+            float2 currNDC = currentClipPos.xy / currentClipPos.w;
+            mv = 0.5f * (currNDC - prevNDC);
+            mv.y = -mv.y;
+        }
+        texMotion.write(float4(mv.x, mv.y, 0, 0), gid);
+
+        // 2. Sky Lighting
+        // For the sky, Light * Albedo must equal SkyColor.
+        irradiance = sampleSky(dir, frame.sunDirection);
+        albedo = half3(1.0h); 
     }
 
-    // Write Outputs
-    texDirectLight.write(float4((float3)finalDirectColor, 1.0f), gid);
+    // --- Write Outputs ---
+    texDirectLight.write(float4((float3)irradiance, 1.0f), gid);
     texAlbedo.write(float4((float3)albedo, 1.0f), gid);
-
     texNormal.write(float4(((float3)normal), 1.0f), gid); 
     texDepth.write(float4(depth), gid);
 }
 
 
 // =================================================================================
-// KERNEL 2: INDIRECT BOUNCE (Path Tracing 1spp)
+// KERNEL 2: INDIRECT BOUNCE (Physically Based - 1 Bounce)
 // =================================================================================
 kernel void IndirectBounce(
     // --- Output ---
@@ -177,68 +280,120 @@ kernel void IndirectBounce(
     
     texture3d<uint, access::read>    bitsTex     [[texture(3)]],
     texture3d<float, access::sample> csdf        [[texture(4)]],
-    texture2d<float, access::sample> textureAtlas[[texture(5)]],
+    texture2d_array<float, access::sample> textureAtlas[[texture(5)]],
     
     uint2 gid [[thread_position_in_grid]])
 {
+    // 1. Bounds Check
     if (gid.x >= texRawIndirect.get_width() || gid.y >= texRawIndirect.get_height()) return;
+    
+    // 2. Read G-Buffer
     float depth = texDepth.read(gid).r;
     
-    if (depth > 5000.0f) {
+    // Sky Optimization: If depth is infinite (sky), there is no surface to receive indirect light.
+    if (depth > 50000.0f) {
         texRawIndirect.write(float4(0,0,0,0), gid);
         return;
     }
 
     half3 normal = (half3)texNormal.read(gid).rgb;
     
-    // 2. Reconstruct Position
+    // 3. Reconstruct World Position
     float2 uv = (float2(gid) + 0.5f) / float2(texRawIndirect.get_width(), texRawIndirect.get_height());
     float3 pos = reconstructPos(depth, uv, camera);
 
-    // 3. Initialize Random State (Temporal Jitter)
-    uint seed = (gid.y * texRawIndirect.get_width() + gid.x) + uint(frame.time * 1000.0f);
+    // 4. Initialize Random Number Generator (PCG Hash)
+    // We use position + time to get a stable but animated noise pattern
+    uint voxelHash = hash3_to_1(int3(pos * 1024.f));
+    uint seed = voxelHash + uint(frame.time * 123456.0f); // Time dependent for accumulation
     
-    // 4. Create Orthonormal Basis (Tangent, Bitangent) around Normal
+    // 5. Create Orthonormal Basis (Tangent Space)
     float3 N = (float3)normal;
+    // Duff's method or simple helper to find perpendicular vector
     float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
     float3 Tangent = normalize(cross(N, helper));
     float3 Bitangent = cross(N, Tangent);
 
-    // 5. Cosine-Weighted Hemisphere Sampling (Ideally stratified)
+    // 6. Cosine-Weighted Hemisphere Sampling
+    // PBR requirement: Diffuse surfaces reflect light in a cosine-weighted lobe.
     float r1 = rand_float(seed);
     float r2 = rand_float(seed);
     
+    // Map square random numbers to hemisphere
     float phi = 2.0f * 3.14159f * r1;
-    float sqr2 = sqrt(r2);
-    float3 localDir = float3(sqr2 * cos(phi), sqrt(1.0f - r2), sqr2 * sin(phi));
+    float cosTheta = sqrt(1.0f - r2);
+    float sinTheta = sqrt(r2); 
+    
+    float3 localDir = float3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
 
-    // Transform to World Space (Note: localDir.y is 'up' aligned with Normal)
+    // Transform to World Space
+    // Note: localDir.y corresponds to the Up vector (Normal)
     float3 rayDir = localDir.x * Tangent + localDir.y * N + localDir.z * Bitangent;
     rayDir = normalize(rayDir);
 
-    hitInfo hit = trace(pos + (float3)normal * 0.05f, rayDir, 64.0f, bitsTex, csdf);
+    // 7. Trace the Bounce Ray
+    hitInfo hit = trace(pos , rayDir, 0.05f, bitsTex, csdf);
     
     half3 incomingLight = half3(0.0h);
 
     if (hit.hit) {
-        // Shadow check for the bounced point
-        bool isShadowed = traceShadowAnyHit(hit.pos + (float3)hit.normal * 0.01f, frame.sunDirection, 1000.0f, bitsTex, csdf);
+        // --- NEXT EVENT ESTIMATION (Lighting at the hit point) ---
         
+        // A. Shadow Check (Is the bounced surface lit by the sun?)
+        bool isShadowed = traceShadowAnyHitFast(hit.pos + (float3)hit.normal * 0.01f, frame.sunDirection, 1000.0f, bitsTex, csdf);
+        
+        // B. Get Material of the bounced surface
         half2 hitUV = reconstructUV(hit.pos, hit.normal);
-        half3 hitAlbedo = sampleTexture(hitUV, hit.pos, textureAtlas);
+        float3 bounceVec = hit.pos - pos;
+        float totalDistSq = (depth * depth) + dot(bounceVec, bounceVec); // LOD calculation
         
-        half diffuse = max(dot(hit.normal, (half3)frame.sunDirection), 0.0h);
+        half3 hitAlbedo = sampleTexture(hitUV, hit.pos, textureAtlas, totalDistSq);
         
-        incomingLight = c_sunColor * diffuse * (isShadowed ? 0.1h : 1.0h);
+        // C. Calculate Radiance
+        // Light = SunColor * dot(N, L) * Visibility
+        half NdotL = max(dot(hit.normal, (half3)frame.sunDirection), 0.0h);
+        half3 directLightAtHit = c_sunColor * NdotL * (isShadowed ? 0.05h : 1.0h); // 0.05h is small ambient approximation
+        
+        // The light bouncing TOWARDS us is (LightAtHit * AlbedoAtHit)
+        incomingLight = directLightAtHit * hitAlbedo;
+
     } else {
-        incomingLight = sampleSky(rayDir, frame.sunDirection);
+        // We hit the sky
+        half3 skyLight = sampleSky(rayDir, frame.sunDirection);
+        
+        float luma = dot((float3)skyLight, float3(0.3f, 0.59f, 0.11f));
+        half3 desaturatedSky = mix(skyLight, half3(luma), 0.6h); 
+        
+        incomingLight = desaturatedSky * 0.25h; 
     }
+    
+    // Note on Division by PI / Cosine Term:
+    // Since we used Cosine-Weighted Sampling for the ray direction, the PDF (Probability Density Function)
+    // cancels out the cosine term in the rendering equation. We usually divide by PI, but often
+    // sun intensity is calibrated without it. For now, this is statistically unbiased.
     
     texRawIndirect.write(float4((float3)incomingLight, 1.0f), gid);
 }
 
 // =================================================================================
-// KERNEL 3: TEMPORAL ACCUMULATION (Reprojection)
+// HELPER: RGB <-> YCoCg Conversions
+// =================================================================================
+inline float3 RGBToYCoCg(float3 rgb) {
+    float Y  = dot(rgb, float3(0.25f, 0.50f, 0.25f));
+    float Co = dot(rgb, float3(0.50f, 0.00f, -0.50f));
+    float Cg = dot(rgb, float3(-0.25f, 0.50f, -0.25f));
+    return float3(Y, Co, Cg);
+}
+
+inline float3 YCoCgToRGB(float3 ycocg) {
+    float Y  = ycocg.x;
+    float Co = ycocg.y;
+    float Cg = ycocg.z;
+    return float3(Y + Co - Cg, Y + Cg, Y - Co - Cg);
+}
+
+// =================================================================================
+// KERNEL 3: ADVANCED TEMPORAL ACCUMULATION
 // =================================================================================
 kernel void TemporalAccumulation(
     texture2d<float, access::write> texAccum      [[texture(0)]],
@@ -246,76 +401,99 @@ kernel void TemporalAccumulation(
     texture2d<float, access::sample> texHistory   [[texture(2)]], 
     texture2d<float, access::read>  texMotion     [[texture(3)]],
     texture2d<float, access::read>  texDepth      [[texture(4)]],
-    // CHANGE: Use access::read instead of sample for precise depth lookup
     texture2d<float, access::read>  texPrevDepth  [[texture(5)]], 
     texture2d<float, access::read>  texDirect     [[texture(6)]],
-
     uint2 gid [[thread_position_in_grid]])
 {
     if (gid.x >= texAccum.get_width() || gid.y >= texAccum.get_height()) return;
 
-    float3 direct = texDirect.read(gid).rgb;
-    float3 indirect = texRawIndirect.read(gid).rgb;
-    float3 current = direct + indirect; // TOTAL LIGHTING
+    // 1. Read Current Frame Color (Direct + Indirect)
+    float3 currentRGB = texDirect.read(gid).rgb + texRawIndirect.read(gid).rgb;
     
+    // 2. Motion and UVs
     float2 motion = texMotion.read(gid).xy;
-    float currentDepth = texDepth.read(gid).r;
-    
-    // Calculate Previous UV
     float2 uv = (float2(gid) + 0.5f) / float2(texAccum.get_width(), texAccum.get_height());
     float2 prevUV = uv - motion;
 
-    // Check bounds
-    bool validHistory = (prevUV.x >= 0.0f && prevUV.x <= 1.0f && prevUV.y >= 0.0f && prevUV.y <= 1.0f);
+    // 3. Neighborhood Statistics (Variance Calculation)
+    float3 m1 = float3(0.0f); // First moment (Mean)
+    float3 m2 = float3(0.0f); // Second moment (Variance)
     
-    float3 history = current; 
-    float historyWeight = 0.0f; // Default to 0 (reject)
-
-    if (validHistory) 
-    {
-        // Use Linear for Color to look smooth (This is fine)
-        constexpr sampler sLinear(filter::linear);
-        history = texHistory.sample(sLinear, prevUV).rgb;
-        
-        uint2 prevCoords = uint2(prevUV.x * texPrevDepth.get_width(), prevUV.y * texPrevDepth.get_height());
-        
-        // Clamp to ensure we don't crash (though validHistory check should cover this)
-        prevCoords.x = min(prevCoords.x, texPrevDepth.get_width() - 1);
-        prevCoords.y = min(prevCoords.y, texPrevDepth.get_height() - 1);
-
-        float prevDepth = texPrevDepth.read(prevCoords).r;
-        
-        // --- DEPTH CHECK ---
-        float depthDiff = abs(currentDepth - prevDepth);
-        
-        // Relaxed threshold for Voxel scenes (voxels have hard edges that jump in depth)
-        // If the difference is less than 10% of the total depth, accept it.
-        float relativeDiff = depthDiff / (currentDepth + 0.001f);
-
-        if (relativeDiff < 0.1f) 
-        {
-            historyWeight = 0.9f; 
+    // We sample a 3x3 neighborhood
+    for(int y = -1; y <= 1; ++y) {
+        for(int x = -1; x <= 1; ++x) {
+            uint2 tapCoord = uint2(gid.x + x, gid.y + y);
             
-            // Reduce ghosting during fast movement
-            if (length(motion) > 0.001f) historyWeight = 0.85f;
-        }
-        else 
-        {
-            // Disocclusion: Fallback to current
-            historyWeight = 0.0f; 
+            // Boundary checks (clamp to edge)
+            tapCoord.x = clamp(tapCoord.x, 0u, texAccum.get_width() - 1);
+            tapCoord.y = clamp(tapCoord.y, 0u, texAccum.get_height() - 1);
+
+            float3 neighborRGB = texDirect.read(tapCoord).rgb + texRawIndirect.read(tapCoord).rgb;
+            float3 neighborYCoCg = RGBToYCoCg(neighborRGB);
+
+            m1 += neighborYCoCg;
+            m2 += neighborYCoCg * neighborYCoCg;
         }
     }
-    
-    // DEBUG: Uncomment this to visualize rejection.
-    // Red = Rejection, Green = Good Accumulation
-    // 
-    //texAccum.write(float4(historyWeight, validHistory ? 1.0 : 0.0, 0.0, 1.0f), gid); return;
 
-    float3 result = mix(current, history, historyWeight);
+    float3 mu = m1 / 9.0f;
+    float3 sigma = sqrt(abs(m2 / 9.0f - mu * mu));
+
+    // 4. Define the Clamp Box (Gamma controls aggressiveness)
+    // Higher Gamma (e.g., 1.5) = Slower convergence, Less Ghosting, More stable
+    // Lower Gamma (e.g., 0.75) = Faster convergence, More boiling noise, Less smearing
+    const float gamma = 1.0f; 
+    float3 minColor = mu - gamma * sigma;
+    float3 maxColor = mu + gamma * sigma;
+
+    // 5. Sample History
+    constexpr sampler sLinear(filter::linear);
+    float3 historyRGB = texHistory.sample(sLinear, prevUV).rgb;
+    float3 historyYCoCg = RGBToYCoCg(historyRGB);
+
+    // 6. CLIP History to Box
+    // Instead of hard clamp, we clip the vector towards the center (better color stability)
+    // But for performance/simplicity, hard clamping in YCoCg is usually sufficient.
+    float3 clampedHistoryYCoCg = clamp(historyYCoCg, minColor, maxColor);
+    float3 clampedHistoryRGB = YCoCgToRGB(clampedHistoryYCoCg);
+
+    // 7. Dynamic Feedback Weight
+    // At low FPS, high velocity creates blur. We reduce history influence if moving fast.
+    float velocityFactor = length(motion) * 100.0f; // Scale up motion to 0-1 range roughly
+    float baseWeight = 0.90f;
+    float weight = clamp(baseWeight - velocityFactor, 0.6f, 0.975f);
+    
+    // 8. Depth Rejection (Disocclusion Check)
+    bool validHistory = (prevUV.x >= 0.0f && prevUV.x <= 1.0f && prevUV.y >= 0.0f && prevUV.y <= 1.0f);
+    
+    if (validHistory) {
+        uint2 prevCoords = uint2(prevUV.x * texPrevDepth.get_width(), prevUV.y * texPrevDepth.get_height());
+        float currentDepth = texDepth.read(gid).r;
+        float prevDepth = texPrevDepth.read(prevCoords).r;
+        
+        float relativeDiff = abs(currentDepth - prevDepth) / (currentDepth + 1e-5f);
+        
+        // If depth is too different, it's a disocclusion. Reset to current.
+        if (relativeDiff > 0.1f) {
+            weight = 0.0f; // Reject history
+        }
+    } else {
+        weight = 0.0f; // Off-screen history
+    }
+
+    // 9. Blend and Output
+    // Use Clamped History for blending to prevent trails
+    float3 result = mix(currentRGB, clampedHistoryRGB, weight);
+    
+    // Optional: Anti-Flicker (if single pixels are extremely bright)
+    // result = result / (1.0f + result); // Tone map down
+    // (Undo tone map later if used)
+    
     texAccum.write(float4(result, 1.0f), gid);
 }
+
 // =================================================================================
-// KERNEL 4: SPATIAL DENOISING (Bilateral Filter)
+// KERNEL 4: A-TROUS EDGE-AVOIDING FILTER
 // =================================================================================
 kernel void BilateralDenoise(
     texture2d<float, access::write> texDenoised [[texture(0)]],
@@ -326,84 +504,125 @@ kernel void BilateralDenoise(
 {
     if (gid.x >= texDenoised.get_width() || gid.y >= texDenoised.get_height()) return;
 
-    float3 centerColor = texAccum.read(gid).rgb;
-    float3 centerNormal = texNormal.read(gid).rgb;
-    float centerDepth = texDepth.read(gid).r;
+    // 1. Center Tap Data
+    float3 centerC = texAccum.read(gid).rgb;
+    float3 centerN = texNormal.read(gid).rgb;
+    float centerD  = texDepth.read(gid).r;
 
-    float3 sum = float3(0.0f);
-    float weightSum = 0.0f;
+    // 2. Kernel Configuration
+    const int step_width = 2; 
+    
+    // Gaussian-approximate weights for 3x3
+    const float kernelWeights[3] = { 1.0f, 2.0f / 1.0f, 4.0f / 1.0f };
 
-    // TWEAK: Relax constraints as objects get further away.
-    // At 500 units away, normal differences matter less than at 5 units.
-    float distanceFactor = clamp(centerDepth / 200.0f, 0.0f, 1.0f);
-    float normalPower = mix(4.0f, 0.1f, distanceFactor); // High sensitivity close, low far
-    float depthPhi = mix(2.0f, 0.1f, distanceFactor);    // High sensitivity close, low far
+    float3 sumColor = float3(0.0f);
+    float sumWeight = 0.0f;
 
-    for (int y = -2; y <= 2; ++y) {
-        for (int x = -2; x <= 2; ++x) {
-            uint2 tapCoord = uint2(gid.x + x, gid.y + y);
-            if (tapCoord.x >= texDenoised.get_width() || tapCoord.y >= texDenoised.get_height()) continue;
-
-            float3 tapColor = texAccum.read(tapCoord).rgb;
-            float3 tapNormal = texNormal.read(tapCoord).rgb;
-            float tapDepth = texDepth.read(tapCoord).r;
-
-            // 1. Spatial Weight (Gaussian)
-            float spatialW = exp(-(float)(x*x + y*y) / 4.0f);
+    // 3. Iteration (3x3 grid with holes)
+    for(int y = -1; y <= 1; y++) {
+        for(int x = -1; x <= 1; x++) {
             
-            // 2. Normal Weight (Relaxed by distance)
-            float dotP = max(dot(centerNormal, tapNormal), 0.0f);
-            float normalW = pow(dotP, normalPower);
+            // Offset coordinate by step_width
+            int2 offset = int2(x, y) * step_width;
+            uint2 tapCoord = uint2(gid.x + offset.x, gid.y + offset.y);
 
-            // 3. Depth Weight (Relative Difference)
-            // Using absolute difference fails in the distance because 
-            // 0.1 unit difference is huge close up, but microscopic far away.
-            // We use relative difference instead.
-            float diff = abs(centerDepth - tapDepth);
-            float relativeDiff = diff / (centerDepth + 0.001f);
-            float depthW = exp(-relativeDiff * relativeDiff * 100.0f * depthPhi);
+            // Bounds check
+            if(tapCoord.x >= texDenoised.get_width() || tapCoord.y >= texDenoised.get_height()) {
+                tapCoord = gid;
+            }
 
-            float totalWeight = spatialW * normalW * depthW;
+            float3 tapC = texAccum.read(tapCoord).rgb;
+            float3 tapN = texNormal.read(tapCoord).rgb;
+            float tapD  = texDepth.read(tapCoord).r;
 
-            sum += tapColor * totalWeight;
-            weightSum += totalWeight;
+            // --- A. Normal Weight
+            float dotN = max(dot(centerN, tapN), 0.0f);
+            float wNormal = pow(dotN, 16.0f); // High power ensures we don't bleed colors around voxel corners
+
+            // --- B. Depth Weight (Plane Distance) ---
+            // 1.0 = Allow 1 unit (1 block) of depth deviation before rejecting
+            float wDepth = (abs(centerD - tapD) < 1.5f) ? 1.0f : 0.0f;
+            
+
+            // Calculate Kernel Weight (Gaussian)
+            float kWeight = kernelWeights[abs(x)] * kernelWeights[abs(y)];
+
+            // Combine
+            float w = wNormal * wDepth * kWeight;
+
+            sumColor  += tapC * w;
+            sumWeight += w;
         }
     }
 
-    if (weightSum < 1e-4f) weightSum = 1.0f;
-    texDenoised.write(float4(sum / weightSum, 1.0f), gid);
+    if (sumWeight < 1e-4f) {
+        sumColor = centerC;
+        sumWeight = 1.0f;
+    }
+
+    texDenoised.write(float4(sumColor / sumWeight, 1.0f), gid);
 }
 
 // =================================================================================
-// KERNEL 5: COMPOSITE (Combine Direct + Indirect)
+// KERNEL 5: COMPOSITE (Color Grading & Fog Fix)
 // =================================================================================
 kernel void Composite(
     texture2d<float, access::write> texFinal   [[texture(0)]],
     texture2d<float, access::read>  texDirect  [[texture(1)]],
-    texture2d<float, access::read>  texAccum   [[texture(2)]], // Denoised
+    texture2d<float, access::read>  texAccum   [[texture(2)]], 
     texture2d<float, access::read>  texAlbedo  [[texture(3)]],
     texture2d<float, access::read>  texDepth   [[texture(4)]],
+
     uint2 gid [[thread_position_in_grid]])
 {
     if (gid.x >= texFinal.get_width() || gid.y >= texFinal.get_height()) return;
 
-    float3 totalLight = texAccum.read(gid).rgb;
-    float3 albedo = texAlbedo.read(gid).rgb;
-    float depth = texDepth.read(gid).r;
+    // 1. Gather Data
+    float3 directLight   = texDirect.read(gid).rgb;
+    float3 indirectLight = texAccum.read(gid).rgb;
+    float3 albedo        = texAlbedo.read(gid).rgb;
+    float depth          = texDepth.read(gid).r;
 
-    float3 finalColor = totalLight * albedo; 
+    // 2. Lighting Combination
+    float3 ambient = float3(0.005f) * albedo; // Ambient boost: prevents shadows from being pitch black, keeps them colorful
+    float3 totalLight = directLight + indirectLight + ambient;
 
-    finalColor *= 1.5f; 
+    // 3. Apply Material (Linear Space)
+    float3 linearColor = totalLight * albedo + ambient;
 
-    float fogAmount = clamp(1.0f - exp(-depth * 0.0004f), 0.0f, 1.0f);
-    float3 fogColor = float3(0.95f, 0.95f, 1.0f);
-    
-    if (depth > 50000.0f) {
-        texFinal.write(float4(totalLight, 1.0f), gid);
-    } else {
-        finalColor = mix(finalColor, fogColor, fogAmount);
-        texFinal.write(float4(finalColor, 1.0f), gid);
+    // 4. BETTER FOG LOGIC
+    if (depth < 50000.0f) 
+    {
+        const float fogStart = 60.0f;  // Fog starts 60 blocks away (keeps foreground clear)
+        const float fogDensity = 0.0002f; 
+        
+        // Calculate factor
+        float dist = max(depth - fogStart, 0.0f);
+        float fogFactor = 1.0f - exp(-dist * fogDensity);
+
+        float3 fogColor = float3(0.5f, 0.7f, 0.9f); 
+        
+        linearColor = mix(linearColor, fogColor, fogFactor);
     }
+
+    // 5. COLOR GRADING 
+    
+    // A. Exposure Compensation (Brighten the image up)
+    linearColor *= 0.8f; 
+
+    // B. Saturation Boost 
+    linearColor = applySaturation(linearColor, (depth > 50000.0f) ? 1.05f : 1.4f); 
+
+    // C. Contrast S-Curve (make darks darker, brights brighter)
+    //linearColor = applyContrast(linearColor, 1.01f);
+
+    // 6. Tone Mapping (ACES)
+    float3 toneMapped = ACESFilm(linearColor);
+
+    // 7. Gamma Correction (Linear -> sRGB)
+    float3 finalColor = LinearToSRGB(toneMapped);
+
+    texFinal.write(float4(finalColor, 1.0f), gid);
 }
 
 

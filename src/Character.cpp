@@ -15,7 +15,7 @@ float halton(int index, int base) {
         r = r + f * (float)(index % base);
         index = index / base;
     }
-    return r;
+    return r * 0.5f;
 }
 Character::Character()
     : viewMatrix(1.0f),
@@ -36,12 +36,14 @@ Character::Character()
       direction(0.0f, 0.0f, -1.0f),
       yaw(std::numbers::pi_v<float>),
       pitch(-std::numbers::pi_v<float> * 0.5f),
-      speed(0.1f),
+      speed(0.05f),
       speedDropoff(0.92f),
-      jumpSpeed(1.0f),
+      jumpSpeed(2.0f),
       sensitivity(0.0001f),
       gravityAmount(0.0f)
+      
 {
+    lastRenderedViewProjectionMatrix = glm::mat4(1.0f);
     // Constructor body can be empty if all initialization is done above
 }
 
@@ -78,7 +80,7 @@ void Character::Update(unsigned int frameCount)
                        (platform->IsKeyDown(' ') ? 1.0f : 0.0f) + (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
                        (platform->IsKeyDown('W') ? 1.0f : 0.0f) + (platform->IsKeyDown('S') ? -1.0f : 0.0f)) * speed;
 
-    if(platform->IsKeyDown('0x38'))
+    if(platform->IsKeyDown(0x38))
         inputs *= 0.2f;
 
     velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) + inputs.z * (vec3)direction;

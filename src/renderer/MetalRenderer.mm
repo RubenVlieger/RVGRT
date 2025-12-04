@@ -214,7 +214,7 @@ void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& 
     camData.jitter = { character.jitterX, character.jitterY };
 
     memcpy(&camData.unjitteredViewProjection, &character.unjitteredViewProjectionMatrix, sizeof(float) * 16);
-    memcpy(&camData.prevUnjitteredViewProjection, &character.prevUnjitteredViewProjectionMatrix, sizeof(float) * 16);
+    memcpy(&camData.prevUnjitteredViewProjection, &character.lastRenderedViewProjectionMatrix, sizeof(float) * 16);
 
     FrameData frameData;
     frameData.sunDirection = simd_normalize(simd_make_float3(10.f, 5.f, -4.f));
@@ -365,12 +365,14 @@ void MetalRenderer::Draw(id<MTLComputeCommandEncoder> encoder, const Character& 
     [encoder setTexture:_texAlbedo atIndex:3];
     [encoder setTexture:_texDepth[currIdx] atIndex:4];
 
+
     [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
     [encoder popDebugGroup];
 
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:11 withBarrier:YES];
 
     _frameIndex++;
+    const_cast<Character&>(character).lastRenderedViewProjectionMatrix = character.unjitteredViewProjectionMatrix;
 }
 
 

@@ -98,14 +98,13 @@ elseif(APPLE)
         src/renderer/CoarseArray_impl.mm
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
-
         ${MACOS_ICON} 
     )
     
-    # 1. Compile Metal Shaders to .air files
-    file(GLOB MAC_METAL_SOURCES "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal")
+    file(GLOB MAC_METAL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal")
+    
     set(MAC_METAL_AIR_FILES "")
-    set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") # The compiled library
+    set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") 
 
     find_program(XCRUN_TOOL xcrun REQUIRED)
 
@@ -133,6 +132,8 @@ elseif(APPLE)
         DEPENDS ${MAC_METAL_AIR_FILES}
         COMMENT "Creating Metal library from ${MAC_METAL_AIR_FILES}"
     )
+
+    add_custom_target(BuildMetalShaders DEPENDS "${MAC_METAL_LIBRARY_SRC}")
     
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
         "#include \"renderer/Renderer.hpp\"
@@ -153,6 +154,10 @@ elseif(APPLE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
         "${MAC_METAL_LIBRARY_SRC}" 
     )
+
+    add_dependencies(${APP_NAME} BuildMetalShaders)
+
+    #set_target_properties(${APP_NAME} PROPERTIES UNITY_BUILD ON)
     target_compile_options(${APP_NAME} PRIVATE -fobjc-arc)
     
     set_target_properties(${APP_NAME} PROPERTIES
@@ -171,6 +176,11 @@ elseif(APPLE)
         "-framework QuartzCore"
     )
 endif()
+
+
+set(CMAKE_CXX_COMPILER_LAUNCHER ccache)
+set(CMAKE_OBJCXX_COMPILER_LAUNCHER ccache)
+
 
 # ------------------------------------------------------------------
 #  Common Compile Options (Applied to both platforms)

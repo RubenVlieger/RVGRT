@@ -100,7 +100,9 @@
         "__locale": "cpp",
         "__verbose_abort": "cpp",
         "execution": "cpp",
-        "variant": "cpp"
+        "variant": "cpp",
+        "__hash_table": "cpp",
+        "complex": "cpp"
     },
     "C_Cpp.errorSquiggles": "disabled",
 }

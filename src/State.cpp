@@ -6,10 +6,10 @@
 // The global singleton instance
 State State::state = State();
 
-int State::dispWIDTH = 3072 * 0.6f;
-int State::dispHEIGHT = 1920 * 0.6f;
-int State::screenWIDTH = 3072 * 0.6f;
-int State::screenHEIGHT = 1920 * 0.6f;
+int State::dispWIDTH = 1920;
+int State::dispHEIGHT = 1080;
+int State::screenWIDTH = 1920;
+int State::screenHEIGHT = 1080;
 
 State::State()
 {

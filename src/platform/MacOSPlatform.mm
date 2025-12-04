@@ -20,9 +20,9 @@ bool MacOSPlatform::IsKeyDown(char keycode) {
 
         case 'Z': nativeKeyCode = kVK_ANSI_Z; break;
 
-        case '0x38': nativeKeyCode = kVK_Shift; break;
-        case '0x7E' : nativeKeyCode = kVK_UpArrow; break;
-        case '0x7D' : nativeKeyCode = kVK_DownArrow; break;
+        case 0x38: nativeKeyCode = kVK_Shift; break;
+        case 0x7E : nativeKeyCode = kVK_UpArrow; break;
+        case 0x7D : nativeKeyCode = kVK_DownArrow; break;
 
         case ' ': nativeKeyCode = kVK_Space;  break;
         default:

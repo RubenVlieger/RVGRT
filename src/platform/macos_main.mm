@@ -46,7 +46,8 @@
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
     NSRect frame = NSMakeRect(0, 0, State::screenWIDTH, State::screenHEIGHT);
-    NSUInteger style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable;
+    NSUInteger style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
+    
 
     _window = [[NSWindow alloc]
         initWithContentRect:frame
@@ -86,6 +87,10 @@
     [_window setContentView:_view];
     [_window makeFirstResponder:_view];
     [_window makeKeyAndOrderFront:nil];
+    _view.autoResizeDrawable = NO;
+
+    _view.drawableSize = CGSizeMake(State::dispWIDTH, State::dispHEIGHT);
+    _view.layer.contentsGravity = kCAGravityResizeAspectFill; 
     
     [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
     [NSApp activateIgnoringOtherApps:YES];

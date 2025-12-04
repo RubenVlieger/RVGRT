@@ -12,6 +12,9 @@ class Character
     glm::mat4 prevUnjitteredViewProjectionMatrix;
     glm::mat4 inverseViewProjectionMatrix;
     glm::mat4 prevViewProjectionMatrix;   // Previous frame's combined matrix
+
+    glm::mat4 lastRenderedViewProjectionMatrix; 
+    
     float nearPlane;
     float farPlane;
     float FOV;

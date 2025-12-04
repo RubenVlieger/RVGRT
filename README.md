@@ -1,6 +1,6 @@
 # 🟩 Voxel World Engine (WIP)
 
-This is an attempt at creating a **Minecraft-like voxel world engine**, built mostly with CUDA for accelerated rendering. This is a platform which allows me to try certain algorithms and datastructures and optimization techniques for realtime rendering.  
+This is an attempt at creating a **Minecraft-like voxel world engine**, built mostly with CUDA and Metal for accelerated rendering, in a mostly cross platform way with a big shared codebase. This is a platform which allows me to try certain algorithms and datastructures and optimization techniques for realtime rendering.  
 
 ---
 
@@ -8,25 +8,38 @@ This is an attempt at creating a **Minecraft-like voxel world engine**, built mo
 - Procedural voxel world generation.
 - CUDA + DirectX 12 interop for GPU-accelerated rendering.
 - GPU accelerated world generation
-- GPU accelerated coarse signed distance field creation and usage
-- Lower resolution estimation of primary ray distance and shadows.
-- Hybrid based voxel raytracing algorithm consisting of distance estimation and DDA for analytical normals.
-- Implemenation of global illumination, with voxel cone tracing for smooth shadows
-- Usage of a texturepack, shadows and reflections
-- Usage of DLSS image upscaling
----
+- GPU accelerated signed distance field (SDF) creation and usage
+- Lower resolution estimation of primary ray distance.
+- Hybrid based voxel raytracing algorithm: consisting of distance estimation (SDF accelerated) and DDA for precise hits and normals. 
+- Path tracing approach with multiple samples per pixel, which produces global illumination
+- Deferred rendering pipeline consisting of multiple kernels
+- A-Trous edge aware denoising of the indirect lighting 
+- Usage of the orignial Minecraft texturepack
+- Implemented shadows and reflections
+- Usage of DLSS image upscaling for windows 
+
+
+## To-do list:
+- Better denoising, and maybe implementing proprietery denoising (if supported on device) with DLSS and MetalFX
+- Volumetric lighting
+- Clouds
+- Automatic camera exposure which changes on amount of brightness
+- Realistic lens effects
+- A plane to fly around in
+- Ability to upload voxel scenes to render
+- Ability to walk around and possibly interact with the world
+- A compact and fast data structure for storing materialID's
+
 
 ## Requirements
-- **OS**: Windows only currently (uses the Win32 API)  
-- **Graphics**: Direct3D 12 + CUDA-capable GPU (e.g., NVIDIA)  
+- **OS**: Windows, and MacOS
+- **Graphics**: Discrete GPU with >4gb video memory recommended   
 
 
 ##  Build Instructions
 Make sure you have the following installed:
 - [CMake](https://cmake.org/) **3.18+**
-- [CUDA Toolkit](https://developer.nvidia.com/cuda-toolkit) **12.6+** (tested)
-- [Visual Studio 2022](https://visualstudio.microsoft.com/vs/) (MSVC compiler)
-
+- Either the MSVC compiler (Windows) or Xcode development tools (MacOS) and Metal shader compiler required
 ### Steps
 ```bash
 # Clone this repository

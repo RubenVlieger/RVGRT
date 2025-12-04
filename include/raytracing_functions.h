@@ -225,8 +225,84 @@ GPU_FUNC GPU_INLINE half3 clamp3(const half3 a, const half3 b, const half3 c)
                      d.z > c.z ? c.z : d.z);
 }
 
+GPU_FUNC bool traceShadowAnyHitSlow(
+    float3 startPos, 
+    float3 lightDir, 
+    float maxDist, 
+    texture3d<uint, access::read> bits, 
+    texture3d<float, access::sample> csdf)
+{
+    float t_current = 0.0f;
+    float3 currentPos = startPos;
 
-GPU_FUNC bool traceShadowAnyHit(
+    const float3 deltaDist = make_float3(
+        abs(lightDir.x) > 1e-5f ? abs(1.0f / lightDir.x) : 1.0e30f,
+        abs(lightDir.y) > 1e-5f ? abs(1.0f / lightDir.y) : 1.0e30f,
+        abs(lightDir.z) > 1e-5f ? abs(1.0f / lightDir.z) : 1.0e30f
+    );
+
+    const int3 step = make_int3(
+        lightDir.x > 0.0f ? 1 : -1,
+        lightDir.y > 0.0f ? 1 : -1,
+        lightDir.z > 0.0f ? 1 : -1
+    );
+
+    for (int majorIteration = 0; majorIteration < 8; majorIteration++)
+    {
+        currentPos = approximateCSDF(currentPos, lightDir, csdf);
+        
+        if (currentPos.x < 0.0f || currentPos.y < 0.0f || currentPos.z < 0.0f || 
+            currentPos.x >= (float)SIZEX || currentPos.y >= (float)SIZEY || currentPos.z >= (float)SIZEZ) {
+            return false;
+        }
+        
+        if (length(currentPos - startPos) >= maxDist) return false;
+
+        // 2. DDA SETUP (Fine Marching)
+        int3 ipos = to_int3(floor3(currentPos));
+        float3 fpos = make_float3(ipos);
+        
+        float3 tMax;
+        tMax.x = ((step.x > 0) ? (fpos.x + 1.0f - currentPos.x) : (currentPos.x - fpos.x)) * deltaDist.x;
+        tMax.y = ((step.y > 0) ? (fpos.y + 1.0f - currentPos.y) : (currentPos.y - fpos.y)) * deltaDist.y;
+        tMax.z = ((step.z > 0) ? (fpos.z + 1.0f - currentPos.z) : (currentPos.z - fpos.z)) * deltaDist.z;
+
+        float distTraveledInDDA = 0.0f;
+        
+        for (int i = 0; i < 12; i++) 
+        {
+            if (ipos.x < 0 || ipos.y < 0 || ipos.z < 0 || 
+                ipos.x >= (int)SIZEX || ipos.y >= (int)SIZEY || ipos.z >= (int)SIZEZ) {
+                return false; // Escaped world -> Lit
+            }
+
+            if (IsSolid(ipos, bits)) {
+                return true;
+            }
+            if (tMax.x < tMax.y) {
+                if (tMax.x < tMax.z) { 
+                    distTraveledInDDA = tMax.x;
+                    tMax.x += deltaDist.x; ipos.x += step.x; 
+                } else { 
+                    distTraveledInDDA = tMax.z;
+                    tMax.z += deltaDist.z; ipos.z += step.z; 
+                }
+            } else {
+                if (tMax.y < tMax.z) { 
+                    distTraveledInDDA = tMax.y;
+                    tMax.y += deltaDist.y; ipos.y += step.y; 
+                } else { 
+                    distTraveledInDDA = tMax.z;
+                    tMax.z += deltaDist.z; ipos.z += step.z; 
+                }
+            }
+        }
+        currentPos += lightDir * (distTraveledInDDA + 0.001f);
+    }
+    return false;
+}
+
+GPU_FUNC bool traceShadowAnyHitFast(
     float3 startPos, 
     float3 lightDir, 
     float maxDist, 
@@ -235,7 +311,7 @@ GPU_FUNC bool traceShadowAnyHit(
 {
     float t = 0.5f;
     
-    for(int i = 0; i < 24; ++i) 
+    for(int i = 0; i < 16; ++i) 
     {
         if (t >= maxDist) return false;
 
@@ -249,9 +325,9 @@ GPU_FUNC bool traceShadowAnyHit(
 
         float dWorld = (d - 0.5f) * (float)COARSENESSSDF;
 
-        if (dWorld < 1.0f) break; 
+        if (dWorld < 1.5f) break; 
         
-        t += dWorld;
+        t += dWorld * 0.95f;
     }
 
     float3 currentPos = startPos + lightDir * t;
@@ -288,7 +364,7 @@ GPU_FUNC bool traceShadowAnyHit(
             uint blockBits = bits.read(superPos).r;
             int bitIndex = (ipos.x & 3) | ((ipos.y & 3) << 2) | ((ipos.z & 1) << 4);
             
-            if ((blockBits >> bitIndex) & 1) return true; // HIT!
+            if ((blockBits >> bitIndex) & 1) return true;
         } 
         else {
             return false; 
@@ -307,7 +383,6 @@ GPU_FUNC bool traceShadowAnyHit(
             }
         }
     }
-
     return false;
 }
 
@@ -492,18 +567,25 @@ GPU_FUNC float3 traceCone(float3 pos, const float3 dir,
  * @param sunDir The normalized direction to the sun.
  * @return A float3 representing the sky color.
  */
-GPU_FUNC GPU_INLINE half3 sampleSky(const float3 dir, const float3 sunDir)
+inline half3 sampleSky(const float3 dir, const float3 sunDir)
 {
     float sunDot = dot(dir, sunDir);
+    
+    // Sun Disk (Sharp)
     if (sunDot > 0.999h) {
-        // Convert the constant float3 from cumath.hpp to a glm::vec3 for the return value
-        return c_sunColor;
-    } else {
-        half t = clamp(0.5h * ((half)dir.y + 1.0h), 0.0h, 1.0h);
-        return lerp(make_half3(0.2h, 0.4h, 0.8h),   // horizon blue
-                    make_half3(0.6h, 0.8h, 1.0h),   // zenith blue
-                    t);
-    }
+        return c_sunColor * 2.0h; // Super bright sun disk
+    } 
+    
+    // Gradient: Deep Blue at top, lighter blue at horizon
+    float y = clamp(dir.y, 0.0f, 1.0f);
+    
+    // Richer Blues for vibrant look
+    half3 zenith = half3(0.1h, 0.4h, 0.8h);  // Deep blue top
+    half3 horizon = half3(0.4h, 0.6h, 0.9h); // Cyan/White horizon
+    
+    half3 skyColor = lerp(horizon, zenith, half(pow(y, 0.7f)));
+    
+    return skyColor;
 }
 
 
@@ -514,4 +596,4 @@ GPU_FUNC GPU_INLINE half3 sampleSky(const float3 dir, const float3 sunDir)
  * @param texObj The CUDA texture object for the texture atlas.
  * @return A float3 representing the albedo color from the texture.
  */
-half3 sampleTexture(half2 uv, const float3 pos, TEXTURE_OBJECT texObj);
+half3 sampleTexture(half2 uv, const float3 pos, TEXTURE_OBJECT texObj, float depth);

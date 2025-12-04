@@ -4,12 +4,17 @@
 // Only compile this code when using the Metal compiler
 #if defined(PLATFORM_METAL)
 
+int getTextureIndex(half2 oldGridID) {
+    int gridX = (int)(oldGridID.x * 16.0h + 0.1h); // +0.1 for safety
+    int gridY = (int)(oldGridID.y * 16.0h + 0.1h);
+
+    return gridY * 16 + gridX;
+}
 
 
-
-half3 sampleTexture(half2 uv, float3 pos, texture2d<float, access::sample> texObj)
+half3 sampleTexture(half2 uv, float3 pos, texture2d_array<float, access::sample> texObj, float depth)
 {
-    constexpr sampler s(filter::nearest); 
+    constexpr sampler s(coord::normalized, address::repeat, filter::linear, mip_filter::linear); 
 
     const half2 texStoneID = make_half2(0.0f / 16.0f, 1.0f / 16.0f);
     const half2 texDirtID = make_half2(0.0f / 16.0f, 2.0f / 16.0f);
@@ -40,11 +45,14 @@ half3 sampleTexture(half2 uv, float3 pos, texture2d<float, access::sample> texOb
     else if(eval < 1.2f) whichBlock = texStone2ID;
     else whichBlock = texStoneID;
 
-    // Calculate final UV in the atlas
-    uv.x = ((uv.x * ((half)1.0h/16.0h))) + whichBlock.x;
-    uv.y = ((uv.y * ((half)1.0h/16.0h))) + whichBlock.y;
 
-    float4 t = texObj.sample(s, float2(uv.y, uv.x));
+    int sliceIndex = getTextureIndex(whichBlock);
+    float lod = 0.5 * log2(depth) - 6.0f;
+
+
+    // Calculate final UV in the atlasacc
+
+    float4 t = texObj.sample(s, float2(uv.y, uv.x), sliceIndex, level(lod));
     return make_half3((half)t.x, (half)t.y, (half)t.z);
 }
 

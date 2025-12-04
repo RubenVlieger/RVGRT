@@ -8,10 +8,12 @@
 #include "renderer/MetalDevice.hpp"
 
 
-static id<MTLDevice> get_metal_device() {
-    GraphicsDevice* gDevice = State::state.graphicsDevice.get();
-    if (!gDevice) throw std::runtime_error("GraphicsDevice not initialized.");
-    return static_cast<MetalDevice*>(gDevice)->GetMetalDevice();
+namespace{ 
+    id<MTLDevice> get_metal_device() {
+        GraphicsDevice* gDevice = State::state.graphicsDevice.get();
+        if (!gDevice) throw std::runtime_error("GraphicsDevice not initialized.");
+        return static_cast<MetalDevice*>(gDevice)->GetMetalDevice();
+    }
 }
 
 static id<MTLComputePipelineState> create_pso(id<MTLDevice> device, const char* kernel_name) {

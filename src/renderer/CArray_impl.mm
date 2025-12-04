@@ -7,7 +7,8 @@
 #include "renderer/GraphicsDevice.hpp"
 #include "renderer/MetalDevice.hpp"
 
-static id<MTLDevice> get_metal_device()
+namespace{ 
+id<MTLDevice> get_metal_device()
 {
     GraphicsDevice* gDevice = State::state.graphicsDevice.get();
     if (!gDevice) {
@@ -15,6 +16,7 @@ static id<MTLDevice> get_metal_device()
     }
     MetalDevice* mDevice = static_cast<MetalDevice*>(gDevice);
     return mDevice->GetMetalDevice();
+}
 }
 
 

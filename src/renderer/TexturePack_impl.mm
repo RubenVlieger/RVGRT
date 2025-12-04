@@ -11,10 +11,12 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-static id<MTLDevice> get_metal_device() {
+namespace {
+id<MTLDevice> get_metal_device() {
     GraphicsDevice* gDevice = State::state.graphicsDevice.get();
     if (!gDevice) throw std::runtime_error("Texturepack Error: GraphicsDevice not initialized.");
     return static_cast<MetalDevice*>(gDevice)->GetMetalDevice();
+}
 }
 
 
@@ -71,56 +73,70 @@ void Texturepack::releaseResources() {
 // Creates a Metal texture and uploads the pixel data to it.
 void Texturepack::uploadRGBAData(const unsigned char* rgba8, int w, int h)
 {
+    const int BLOCK_SIZE = 16;
+    int blocksX = w / BLOCK_SIZE;
+    int blocksY = h / BLOCK_SIZE;
+    int totalLayers = blocksX * blocksY;
+
     id<MTLDevice> device = get_metal_device();
 
-    // 1. Describe the texture we want to create.
-    MTLTextureDescriptor *descriptor = [MTLTextureDescriptor
-        texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm_sRGB // Use 8-bit sRGB for proper color.
-                                   width:w
-                                  height:h
-                               mipmapped:NO]; // Mipmaps can be generated later if needed.
-
-    // This texture will only be read from by shaders.
-    // Making it private ensures it's stored in the fastest VRAM.
+    // 1. Create Texture Array
+    MTLTextureDescriptor *descriptor = [[MTLTextureDescriptor alloc] init];
+    descriptor.textureType = MTLTextureType2DArray;
+    descriptor.pixelFormat = MTLPixelFormatRGBA8Unorm_sRGB;
+    descriptor.width = BLOCK_SIZE;
+    descriptor.height = BLOCK_SIZE;
+    descriptor.arrayLength = totalLayers;
+    // Calculate mip levels: log2(16) + 1 = 5
+    descriptor.mipmapLevelCount = (NSUInteger)(floor(log2((double)BLOCK_SIZE))) + 1;
     descriptor.storageMode = MTLStorageModePrivate;
-    descriptor.usage = MTLTextureUsageShaderRead;
+    descriptor.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
 
-    // 2. Create the GPU-private texture object.
     id<MTLTexture> texture = [device newTextureWithDescriptor:descriptor];
-    if (!texture) {
-        throw std::runtime_error("Failed to create MTLTFFexture.");
-    }
-    [texture setLabel:@"VoxelTextureAtlas"];
+    if (!texture) throw std::runtime_error("Failed to create Texture Array.");
+    [texture setLabel:@"VoxelTextureArray"];
 
-    // 3. Define the region of the texture to upload into (the whole thing).
-    MTLRegion region = MTLRegionMake2D(0, 0, w, h);
-    NSUInteger bytesPerRow = 4 * w; // 4 channels (R,G,B,A) * width.
-
-    // 4. Upload the data. Since the texture is private, this is done via a command buffer.
     id<MTLCommandQueue> queue = [device newCommandQueue];
     id<MTLCommandBuffer> cmdBuf = [queue commandBuffer];
     id<MTLBlitCommandEncoder> blit = [cmdBuf blitCommandEncoder];
 
-    // Create a temporary shared buffer to hold the pixel data for the transfer.
-    id<MTLBuffer> stagingBuffer = [device newBufferWithBytes:rgba8 length:bytesPerRow * h options:MTLResourceStorageModeShared];
+    // 2. Create ONE Big Staging Buffer for the entire atlas
+    // This fixes the race condition. The data is constant and won't be overwritten.
+    NSUInteger totalBytes = w * h * 4;
+    id<MTLBuffer> stagingBuffer = [device newBufferWithBytes:rgba8 
+                                                      length:totalBytes 
+                                                     options:MTLResourceStorageModeShared];
 
-    [blit copyFromBuffer:stagingBuffer
-            sourceOffset:0
-       sourceBytesPerRow:bytesPerRow
-     sourceBytesPerImage:0
-              sourceSize:MTLSizeMake(w, h, 1)
-               toTexture:texture
-        destinationSlice:0
-        destinationLevel:0
-       destinationOrigin:MTLOriginMake(0, 0, 0)];
+    // 3. Loop through layers and blit from the big buffer
+    int layerIndex = 0;
+    NSUInteger bytesPerRowInAtlas = w * 4; // Stride of the full atlas image
 
+    for (int by = 0; by < blocksY; ++by) {
+        for (int bx = 0; bx < blocksX; ++bx) {
+            
+            // Calculate where this block starts in the big linear buffer
+            // Offset = (Row * Width + Col) * BytesPerPixel
+            NSUInteger sourceOffset = (by * BLOCK_SIZE * w + bx * BLOCK_SIZE) * 4;
+
+            [blit copyFromBuffer:stagingBuffer
+                    sourceOffset:sourceOffset
+               sourceBytesPerRow:bytesPerRowInAtlas // Key: Tells Metal to skip the rest of the atlas row
+             sourceBytesPerImage:0
+                      sourceSize:MTLSizeMake(BLOCK_SIZE, BLOCK_SIZE, 1)
+                       toTexture:texture
+                destinationSlice:layerIndex
+                destinationLevel:0
+               destinationOrigin:MTLOriginMake(0, 0, 0)];
+
+            layerIndex++;
+        }
+    }
+
+    [blit generateMipmapsForTexture:texture];
     [blit endEncoding];
     [cmdBuf commit];
-    [cmdBuf waitUntilCompleted]; // Wait for upload to finish.
+    [cmdBuf waitUntilCompleted];
 
-    // 5. Store the final Metal texture handle in our class member.
-    // We use a __bridge_retained cast to transfer ownership to our C++ class.
     texObj_ = (__bridge_retained void*)texture;
-
-    std::cout << "Texturepack uploaded to private MTLTexture." << std::endl;
+    std::cout << "Texture Array uploaded correctly (Race condition fixed)." << std::endl;
 }
