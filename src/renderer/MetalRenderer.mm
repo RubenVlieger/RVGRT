@@ -7,6 +7,9 @@
 
 #include "renderer/MetalDevice.hpp"
 #include "renderer/MetalBuffer.hpp"
+
+#include "renderer/MaterialMap.hpp"
+
 #include "cumath.h"
 
 #include "Texturepack.h"
@@ -39,10 +42,22 @@ MetalRenderer::MetalRenderer(id device_id) : _texturepack()
     _psoDenoise    = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"BilateralDenoise"] error:&error];
     _psoComposite  = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"Composite"] error:&error];
 
-    if (!_psoDistApprox || !_psoGBuffer || !_psoIndirect || !_psoAccumulate || !_psoDenoise || !_psoComposite) {
+    _psoVolumetric = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"VolumetricFog"] error:&error];
+
+    _psoExposure = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"ComputeExposure"] error:&error];
+
+
+    if (!_psoDistApprox || !_psoGBuffer || !_psoIndirect || !_psoAccumulate || !_psoDenoise || !_psoComposite || !_psoVolumetric || !_psoExposure) {
         NSLog(@"FATAL: Failed to load rendering kernels. Error: %@", error);
         abort();
     }
+
+
+    float initialLum = 0.5f;
+    ExposureData expData;
+    expData.sceneLuminance = initialLum;
+    _exposureBuffer = [_device newBufferWithBytes:&expData length:sizeof(ExposureData) options:MTLResourceStorageModeShared];
+
 
     // 3. World Generation Setup
     id<MTLFunction> worldGenFunc = [lib newFunctionWithName:@"GeneratePackedWorld"];
@@ -100,6 +115,9 @@ MetalRenderer::MetalRenderer(id device_id) : _texturepack()
     
     NSLog(@"World Generation Complete.");
 
+    _materialMap.Allocate();
+    _materialMap.Generate(_voxelTexture);
+
     // 5. Generate SDF and GI structures
     _csdf.AllocateSDF();
     _csdf.GenerateSDF((__bridge void*)_voxelTexture);
@@ -122,10 +140,10 @@ MetalRenderer::MetalRenderer(id device_id) : _texturepack()
             MTLCounterSampleBufferDescriptor* desc = [[MTLCounterSampleBufferDescriptor alloc] init];
             desc.counterSet = timestampSet;
             desc.label = @"TimestampCounter";
-            desc.sampleCount = 14;
+            desc.sampleCount = 18;
             desc.storageMode = MTLStorageModePrivate;
             _counterSampleBuffer = [dev newCounterSampleBufferWithDescriptor:desc error:nil];
-            _timestampBuffer = [dev newBufferWithLength:14 * sizeof(uint64_t) options:MTLResourceStorageModeShared];
+            _timestampBuffer = [dev newBufferWithLength:18 * sizeof(uint64_t) options:MTLResourceStorageModeShared];
         }
     }
 }
@@ -187,6 +205,19 @@ void MetalRenderer::createRenderTarget(uint32_t width, uint32_t height)
     _halfDistTexture = [_device newTextureWithDescriptor:distDesc];
 
 
+    MTLTextureDescriptor *volDesc = [MTLTextureDescriptor 
+    texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float 
+                                 width:width / 2 
+                                height:height / 2 
+                             mipmapped:NO];
+    volDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
+    volDesc.storageMode = MTLStorageModePrivate;
+
+    _texVolumetric[0] = [_device newTextureWithDescriptor:volDesc];
+    ((id<MTLTexture>)_texVolumetric[0]).label = @"Volumetric_0";
+    _texVolumetric[1] = [_device newTextureWithDescriptor:volDesc];
+    ((id<MTLTexture>)_texVolumetric[1]).label = @"Volumetric_1";
+
     MTLTextureDescriptor *compDesc = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA16Float 
                                                                                         width:width 
                                                                                        height:height 
@@ -217,22 +248,8 @@ void MetalRenderer::createRenderTarget(uint32_t width, uint32_t height)
     _scalerNeedsReset = true;
 
 
-//    id<MTLCommandQueue> queue = [_device newCommandQueue];
-//    id<MTLCommandBuffer> cmdBuf = [queue commandBuffer];
-//    MTLRenderPassDescriptor* clearPass = [MTLRenderPassDescriptor renderPassDescriptor];
-//
-//    for(int i = 0; i < 2; i++) {
-//        clearPass.colorAttachments[0].texture = _texAccum[i];
-//        clearPass.colorAttachments[0].loadAction = MTLLoadActionClear;
-//        clearPass.colorAttachments[0].clearColor = MTLClearColorMake(0, 0, 0, 0);
-//        clearPass.colorAttachments[0].storeAction = MTLStoreActionStore;
-//        
-//        id<MTLRenderCommandEncoder> clearEncoder = [cmdBuf renderCommandEncoderWithDescriptor:clearPass];
-//        [clearEncoder endEncoding];
-//    }
-//    [cmdBuf commit];
-//    [cmdBuf waitUntilCompleted];
 }
+
 
 void MetalRenderer::OnResize(uint32_t newWidth, uint32_t newHeight)
 {
@@ -248,35 +265,49 @@ void MetalRenderer::OnResize(uint32_t newWidth, uint32_t newHeight)
 
 void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf, const Character& character, unsigned int frameCount)
 {
-    id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
-    encoder.label = @"Main Compute Loop";
-
-
+    // --- 1. Data Preparation ---
     int currIdx = _frameIndex % 2;
     int prevIdx = (_frameIndex + 1) % 2;
 
-    // Common Data
+    // Camera Data Setup
     CameraData camData;
     camData.position = { (float)character.position.x, (float)character.position.y, (float)character.position.z };
     camData.forward  = { (float)character.direction.x, (float)character.direction.y, (float)character.direction.z };
-    camData.right    = { character.camera.right.x, character.camera.right.y, character.camera.right.z };
-    camData.up       = { character.camera.up.x, character.camera.up.y, character.camera.up.z };
+    
+    float tanHalfFov = tan(glm::radians(character.FOV) * 0.5f);
+    float aspect = (float)State::dispWIDTH / (float)State::dispHEIGHT;
+    glm::vec3 sRight = character.camera.right * tanHalfFov * aspect;
+    glm::vec3 sUp    = character.camera.up * tanHalfFov;
+    
+    camData.right  = { sRight.x, sRight.y, sRight.z };
+    camData.up     = { sUp.x,    sUp.y,    sUp.z };
     camData.jitter = { character.jitterX, character.jitterY };
+    memcpy(&camData.unjitteredViewProjection, &character.unjitteredViewProjectionMatrix, 64);
+    memcpy(&camData.prevUnjitteredViewProjection, &character.lastRenderedViewProjectionMatrix, 64);
 
-    memcpy(&camData.unjitteredViewProjection, &character.unjitteredViewProjectionMatrix, sizeof(float) * 16);
-    memcpy(&camData.prevUnjitteredViewProjection, &character.lastRenderedViewProjectionMatrix, sizeof(float) * 16);
-
+    // Frame Data Setup (Time & Sun)
     FrameData frameData;
     frameData.sunDirection = simd_normalize(simd_make_float3(10.f, 5.f, -4.f));
-
     double time = CFAbsoluteTimeGetCurrent();
     frameData.time = (float)fmod(time, 3600.0);
+    
+    static double lastTime = time;
+    frameData.deltaTime = max((float)(time - lastTime), 0.001f);
+    lastTime = time;
+
+    // --- 2. Compute Encoding Start ---
+    id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
+    encoder.label = @"Render Pipeline";
+
+    // Helper for common grid sizes
+    MTLSize gridSizeFull = MTLSizeMake([(id<MTLTexture>)_texFinal width], [(id<MTLTexture>)_texFinal height], 1);
+    MTLSize gridSizeHalf = MTLSizeMake(gridSizeFull.width / 2, gridSizeFull.height / 2, 1);
+    MTLSize groupSize    = MTLSizeMake(16, 16, 1);
 
     // -----------------------------------------------------------
-    // PASS 0: Distance Accelerator
+    // PASS 0: Distance Accelerator (Indices 0, 1)
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:0 withBarrier:NO];
-
     [encoder pushDebugGroup:@"Pass 0: Approx"];
     [encoder setComputePipelineState:_psoDistApprox];
     [encoder setTexture:_halfDistTexture atIndex:0];
@@ -284,214 +315,195 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf, const Character& character
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
     [encoder setTexture:_voxelTexture atIndex:2];
     [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:3];
-    
-    MTLSize gridHalf = MTLSizeMake([(id<MTLTexture>)_halfDistTexture width], [(id<MTLTexture>)_halfDistTexture height], 1);
-    [encoder dispatchThreads:gridHalf threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
+    // Note: Approx kernel only needs geometry/SDF, no material data needed here.
+    [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
     [encoder popDebugGroup];
-
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:1 withBarrier:YES];
-
-    // Texture Barrier to ensure half-dist is written
+    
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
-    // PASS 1: G-Buffer & Direct Light
+    // PASS 1: G-Buffer (Indices 2, 3)
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:2 withBarrier:NO];
-
     [encoder pushDebugGroup:@"Pass 1: GBuffer"];
     [encoder setComputePipelineState:_psoGBuffer];
-    
-    // Outputs
     [encoder setTexture:_texDirectLight atIndex:0];
     [encoder setTexture:_texAlbedo atIndex:1];
     [encoder setTexture:_texNormal atIndex:2];
     [encoder setTexture:_texMotion atIndex:3];
-    [encoder setTexture:_texDepth[currIdx] atIndex:4]; // Write to CURRENT depth
-
-    // Inputs
+    [encoder setTexture:_texDepth[currIdx] atIndex:4];
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
     [encoder setTexture:_voxelTexture atIndex:5];
     [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:6];
     [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:7];
     [encoder setTexture:_halfDistTexture atIndex:8];
-
-    MTLSize gridFull = MTLSizeMake([(id<MTLTexture>)_texFinal width], [(id<MTLTexture>)_texFinal height], 1);
-    MTLSize threadGroup = MTLSizeMake(16, 16, 1);
-    [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
+    
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:9];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetBrickPoolBuffer() offset:0 atIndex:2]; 
+    
+    [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
-
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:3 withBarrier:YES];
 
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
-    // PASS 2: Indirect Bounce (Path Tracing)
+    // PASS 2: Indirect Bounce (Indices 4, 5)
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:4 withBarrier:NO];
-
     [encoder pushDebugGroup:@"Pass 2: Indirect"];
     [encoder setComputePipelineState:_psoIndirect];
-    
-    // Output
     [encoder setTexture:_texRawIndirect atIndex:0];
-    
-    // Inputs (G-Buffer)
     [encoder setTexture:_texNormal atIndex:1];
-    [encoder setTexture:_texDepth[currIdx] atIndex:2]; // Read CURRENT depth
-    
-    // Bind Global Data
+    [encoder setTexture:_texDepth[currIdx] atIndex:2];
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
     [encoder setTexture:_voxelTexture atIndex:3];
     [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:4];
     [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:5];
     
-    [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:6];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetBrickPoolBuffer() offset:0 atIndex:2]; 
+    
+    [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
-
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:5 withBarrier:YES];
 
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
-    // PASS 3: Temporal Accumulation
+    // PASS 3: Temporal Accumulation (Indices 6, 7)
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:6 withBarrier:NO];
-
     [encoder pushDebugGroup:@"Pass 3: Accumulate"];
     [encoder setComputePipelineState:_psoAccumulate];
-
-    // Output: Write to CURRENT Accum
     [encoder setTexture:_texAccum[currIdx] atIndex:0];
-
-    // Inputs
     [encoder setTexture:_texRawIndirect atIndex:1];
     [encoder setTexture:_texAccum[prevIdx] atIndex:2];
     [encoder setTexture:_texMotion atIndex:3];
     [encoder setTexture:_texDepth[currIdx] atIndex:4];
     [encoder setTexture:_texDepth[prevIdx] atIndex:5];
     [encoder setTexture:_texDirectLight atIndex:6];
-
-    [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
+    [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
-
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:7 withBarrier:YES];
-    
+
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
-    // PASS 4: Spatial Denoising
+    // PASS 4: Spatial Denoising (Indices 8, 9)
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:8 withBarrier:NO];
-
-    [encoder pushDebugGroup:@"Pass 4: Denoise Loop"];
+    [encoder pushDebugGroup:@"Pass 4: Denoise"];
     [encoder setComputePipelineState:_psoDenoise];
-
     [encoder setTexture:_texNormal atIndex:2];
     [encoder setTexture:_texDepth[currIdx] atIndex:3];
 
     id<MTLTexture> inputTex = _texAccum[currIdx];
     id<MTLTexture> outputTex = _texDenoiseTemp;
 
-    const int iterations = 3;
-   for(int i = 0; i < iterations; i++) {
-        // Double step width each time: 1, 2, 4
+    for(int i = 0; i < 3; i++) {
         int stepWidth = 1 << i; 
-        
-        [encoder setTexture:outputTex atIndex:0]; // Write
-        [encoder setTexture:inputTex atIndex:1];  // Read
+        [encoder setTexture:outputTex atIndex:0];
+        [encoder setTexture:inputTex atIndex:1];
         [encoder setBytes:&stepWidth length:sizeof(int) atIndex:0];
-        
-        MTLSize gridFull = MTLSizeMake([(id<MTLTexture>)_texFinal width], [(id<MTLTexture>)_texFinal height], 1);
-        MTLSize threadGroup = MTLSizeMake(16, 16, 1);
-        [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
-        
+        [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
         [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
         
-        // Swap textures for next pass
-        id<MTLTexture> temp = inputTex;
-        inputTex = outputTex;
-        
-        // For the final pass, we want to write into _texDenoised
-        if (i == iterations - 2) {
-            outputTex = _texDenoised; 
-        } else {
-            outputTex = temp; // Reuse the old input as the new output
-        }
+        // Swap
+        id<MTLTexture> temp = inputTex; inputTex = outputTex;
+        // Last iteration writes to final Denoised texture
+        outputTex = (i == 1) ? _texDenoised : temp; 
     }
     [encoder popDebugGroup];
-
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:9 withBarrier:YES];
-    
+
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
-    // PASS 5: Composite (Light * Albedo)
+    // PASS 5: Volumetric Fog (Indices 10, 11)
     // -----------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:10 withBarrier:NO];
+    [encoder pushDebugGroup:@"Pass 5: Volumetric"];
+    [encoder setComputePipelineState:_psoVolumetric];
+    [encoder setTexture:_texVolumetric[currIdx] atIndex:0]; 
+    [encoder setTexture:_texDepth[currIdx] atIndex:1];
+    [encoder setTexture:_texVolumetric[prevIdx] atIndex:2];
+    [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
+    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
+    [encoder setTexture:_voxelTexture atIndex:3];
+    [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:4];
+    [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize];
+    [encoder popDebugGroup];
+    if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:11 withBarrier:YES];
 
-    [encoder pushDebugGroup:@"Pass 5: Composite"];
+    [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
+
+    // -----------------------------------------------------------
+    // PASS 6: Auto-Exposure (Indices 12, 13)
+    // -----------------------------------------------------------
+    if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:12 withBarrier:NO];
+    [encoder pushDebugGroup:@"Pass 6: Exposure"];
+    [encoder setComputePipelineState:_psoExposure];
+    [encoder setBuffer:_exposureBuffer offset:0 atIndex:0];
+    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
+    [encoder setTexture:_texDirectLight atIndex:0];
+    [encoder setTexture:_texAccum[currIdx] atIndex:1]; // Use accumulated indirect
+    [encoder setTexture:_texAlbedo atIndex:2];
+    [encoder dispatchThreads:groupSize threadsPerThreadgroup:groupSize]; // Single threadgroup
+    [encoder popDebugGroup];
+    if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:13 withBarrier:YES];
+
+    // -----------------------------------------------------------
+    // PASS 7: Composite (Indices 14, 15)
+    // -----------------------------------------------------------
+    if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:14 withBarrier:NO];
+    [encoder pushDebugGroup:@"Pass 7: Composite"];
     [encoder setComputePipelineState:_psoComposite];
-
     [encoder setTexture:_texCompositeResult atIndex:0]; 
-    
     [encoder setTexture:_texDirectLight atIndex:1];
     [encoder setTexture:_texDenoised atIndex:2];
     [encoder setTexture:_texAlbedo atIndex:3];
     [encoder setTexture:_texDepth[currIdx] atIndex:4];
-
-    [encoder dispatchThreads:gridFull threadsPerThreadgroup:threadGroup];
+    [encoder setTexture:_texVolumetric[currIdx] atIndex:5];
+    [encoder setBuffer:_exposureBuffer offset:0 atIndex:0];
+    [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
+    if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:15 withBarrier:YES];
 
-    if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:11 withBarrier:YES];
-
-    // End Compute Encoder so we can start MetalFX
     [encoder endEncoding]; 
 
-
-
-// -----------------------------------------------------------
-    // PASS 6: MetalFX Temporal AA / Upscaling
     // -----------------------------------------------------------
-    
-    // 1. Profiling Start for MetalFX
-    // Use 'cmdBuf' directly since we don't have an active encoder anymore.
+    // PASS 8: MetalFX Upscaling (Indices 16, 17)
+    // -----------------------------------------------------------
     if (_supportsTimestamps) {
-        id<MTLBlitCommandEncoder> preFXBlit = [cmdBuf blitCommandEncoder];
-        [preFXBlit sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:12 withBarrier:NO];
-        [preFXBlit endEncoding];
+        id<MTLBlitCommandEncoder> preFX = [cmdBuf blitCommandEncoder];
+        [preFX sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:16 withBarrier:NO];
+        [preFX endEncoding];
     }
 
+    // Config Scaler
+    id<MTLFXTemporalScaler_Unlocked> scaler = (id<MTLFXTemporalScaler_Unlocked>)_temporalScaler;
+    scaler.motionVectorScale = simd_make_float2(-(float)State::dispWIDTH, -(float)State::dispHEIGHT);
+    scaler.jitterOffset = simd_make_float2(-character.jitterX, -character.jitterY);
     _temporalScaler.colorTexture = (id<MTLTexture>)_texCompositeResult;
     _temporalScaler.depthTexture = (id<MTLTexture>)_texDepth[currIdx];
     _temporalScaler.motionTexture = (id<MTLTexture>)_texMotion;
     _temporalScaler.outputTexture = (id<MTLTexture>)_texFinal;
-    
-    id<MTLFXTemporalScaler_Unlocked> scalerUnlocked = (id<MTLFXTemporalScaler_Unlocked>)_temporalScaler;
-    
-scalerUnlocked.motionVectorScale = simd_make_float2(-(float)State::dispWIDTH, -(float)State::dispHEIGHT);
-    scalerUnlocked.jitterOffset = simd_make_float2(-character.jitterX, -character.jitterY);
-
     _temporalScaler.reset = _scalerNeedsReset;
     _scalerNeedsReset = false;
 
-    // 3. Encode MetalFX
-    // Use 'cmdBuf' directly
     [_temporalScaler encodeToCommandBuffer:cmdBuf];
 
-    // 4. Profiling End for MetalFX
     if (_supportsTimestamps) {
-        id<MTLBlitCommandEncoder> postFXBlit = [cmdBuf blitCommandEncoder];
-       [postFXBlit sampleCountersInBuffer:_counterSampleBuffer 
-                             atSampleIndex:13 
-                               withBarrier:YES];
-
-        [postFXBlit endEncoding];
+        id<MTLBlitCommandEncoder> postFX = [cmdBuf blitCommandEncoder];
+        [postFX sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:17 withBarrier:YES];
+        [postFX endEncoding];
     }
     
-    // Update state for next frame
+    // Finalize Frame
     _frameIndex++;
     const_cast<Character&>(character).lastRenderedViewProjectionMatrix = character.unjitteredViewProjectionMatrix;
 }

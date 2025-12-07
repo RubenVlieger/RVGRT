@@ -2,9 +2,12 @@
 
 #include "renderer/Renderer.hpp"
 #include "renderer/Buffer.hpp" 
+#include "renderer/MaterialMap.hpp"
+
 #include "CArray.h"
 #include "Texturepack.h"
 #include "CoarseArray.h"
+
 
 #include <MetalFX/MetalFX.h>
 
@@ -58,6 +61,8 @@ private:
     id _psoAccumulate;      // Kernel 3
     id _psoDenoise;         // Kernel 4
     id _psoComposite;       // Kernel 5
+    id _psoVolumetric; //
+    id _psoExposure; 
 
     // screen textures
     id _texDirectLight;
@@ -69,6 +74,10 @@ private:
     id _texFinal;           // The main render target
     id _texFinalHistory[2];
     id _texDenoiseTemp;
+    id _exposureBuffer;
+
+
+    id _texVolumetric[2]; 
 
     id<MTLFXTemporalScaler> _temporalScaler;
     bool _scalerNeedsReset = true;
@@ -82,6 +91,8 @@ private:
     // acceleration data structures
     id _voxelTexture; 
     CoarseArray _csdf;
+
+    MaterialMap _materialMap;
 
     //remaining data structures
     id _noiseTexture;

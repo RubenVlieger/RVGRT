@@ -23,6 +23,12 @@ struct CameraData {
 struct FrameData {
     simd_float3 sunDirection;
     float time;
+    float deltaTime;
+};
+
+struct ExposureData {
+    float sceneLuminance; // The smoothed average luminance of the scene
+    float padding[3]; 
 };
 
 #endif

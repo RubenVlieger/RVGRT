@@ -389,7 +389,7 @@ GPU_FUNC GPU_INLINE float fbm2D(float x, float z, int octaves, float frequency, 
 // +- 14 gigaSample/second on rtx3050ti mobile
 GPU_FUNC GPU_INLINE float Evaluate( float x, float y, float z) {
 
-    const float GROUND_LEVEL = 10.0f;              // Base height of the terrain surface before noise is added. (World height is 512).
+    const float GROUND_LEVEL = 1.0f;              // Base height of the terrain surface before noise is added. (World height is 512).
     const float PLAINS_AMPLITUDE = 60.0f;           // Max height variation in 'plains' biomes.
     const float MOUNTAIN_AMPLITUDE = 400.0f;        // Max height variation in 'mountain' biomes.
     
@@ -408,7 +408,7 @@ GPU_FUNC GPU_INLINE float Evaluate( float x, float y, float z) {
     const float CAVERN_REGION_FREQ = 0.006f;     
     const float CAVERN_THRESHOLD = 0.3f;      
 
-    if(y <= 30.0f) return 100.0f;
+    if(y <= 2.0f) return 100.0f;
 
     float biome_factor = (simplex2D(x * BIOME_FREQUENCY, z * BIOME_FREQUENCY) + 1.0f) * 0.5f;
 

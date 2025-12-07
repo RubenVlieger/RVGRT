@@ -104,14 +104,14 @@
 }
 
 
-- (void)gameLoop:(NSTimer *)timer {
+- (void)gameLoop:(NSTimer *)timer 
+{
     static unsigned int globalFrameCount = 0;
 
     // Get the current time for calculating delta time
     static auto lastTime = std::chrono::steady_clock::now();
     auto currentTime = std::chrono::steady_clock::now();
     double frameTimeMs = std::chrono::duration<double, std::milli>(currentTime - lastTime).count();
-
     lastTime = currentTime;
 
     State::state.platform->deltaTime = frameTimeMs;
@@ -147,7 +147,7 @@
         blit.label = @"ResolveTimestamps";
         
         [blit resolveCounters:counterBuf 
-                      inRange:NSMakeRange(0, 14) 
+                      inRange:NSMakeRange(0, 18) 
             destinationBuffer:timestampBuf 
             destinationOffset:0];
         
@@ -175,7 +175,7 @@
 
         double msApprox = 0.0, msGBuffer = 0.0, msIndirect = 0.0;
         double msAccum = 0.0, msDenoise = 0.0, msComp = 0.0;
-        double msFX = 0.0; // <--- ADD THIS
+        double msFX = 0.0, msFog = 0.0, msExpos = 0.0; 
 
         if (timestampBuf) {
             uint64_t* stamps = (uint64_t*)timestampBuf.contents;
@@ -190,8 +190,10 @@
             msIndirect = calcMs(4, 5);
             msAccum    = calcMs(6, 7);
             msDenoise  = calcMs(8, 9);
-            msComp     = calcMs(10, 11);
-            msFX       = calcMs(12, 13); // <--- ADD THIS
+            msFog      = calcMs(10, 11); 
+            msExpos    = calcMs(12, 13);
+            msComp     = calcMs(14, 15);
+            msFX       = calcMs(16, 17); 
         }
 
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -202,13 +204,13 @@
             double seconds = (msApprox < 0.001 ? 0.001 : msApprox) / 1000.0;
             double gigaRays = (numPixels / seconds) / 1e9;
             
-            // Add msFX to total
-            double totalMs = msApprox + msGBuffer + msIndirect + msAccum + msDenoise + msComp + msFX;
+            double totalMs = msApprox + msGBuffer + msIndirect + msAccum + msDenoise + msComp + msFX + msFog;
 
             // Update string to show MFX time
             NSString* title = [NSString stringWithFormat:
-                @"RVGRT | Approx: %.2fms (%.2f Grays/s) | GBuff: %.2f | Ind: %.2f | Acc: %.2f | Den: %.2f | Cmp: %.2f | MFX: %.2f | Total: %.2fms", 
-                msApprox, gigaRays, msGBuffer, msIndirect, msAccum, msDenoise, msComp, msFX, totalMs];
+                @"RVGRT | Approx: %.2fms (%.2f Grays/s) | GBuff: %.2f | Ind: %.2f | Acc: %.2f | Den: %.2f | Fog: %.2f | Expos: %.2f | Cmp: %.2f | MFX: %.2f | Total: %.2fms", 
+                msApprox, gigaRays, msGBuffer, msIndirect, msAccum, msDenoise, msFog, msExpos, msComp, msFX, totalMs];
+            
             
             [self->_window setTitle:title];
         });

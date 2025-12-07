@@ -34,12 +34,12 @@ Character::Character()
       position(508.0f, 156.0f, 408.0f), // Start in the middle of the world
       velocity(0.0f),
       direction(0.0f, 0.0f, -1.0f),
-      yaw(std::numbers::pi_v<float>),
-      pitch(-std::numbers::pi_v<float> * 0.5f),
+      yaw(std::numbers::pi_v<float> * -0.5f),
+      pitch(-std::numbers::pi_v<float>),
       speed(0.05f),
       speedDropoff(0.92f),
       jumpSpeed(2.0f),
-      sensitivity(0.00007f),
+      sensitivity(0.00003f),
       gravityAmount(0.0f)
       
 {

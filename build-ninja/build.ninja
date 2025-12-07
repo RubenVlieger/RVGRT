@@ -44,7 +44,7 @@ cmake_ninja_workdir = /Users/rubenvlieger/Documents/RVGRT/build-ninja/
 #############################################
 # Utility command for BuildMetalShaders
 
-build BuildMetalShaders: phony CMakeFiles/BuildMetalShaders default.metallib CArray_impl.air CoarseArray_impl.air raytrace.air raytracing_function_impl.air
+build BuildMetalShaders: phony CMakeFiles/BuildMetalShaders default.metallib CArray_impl.air CoarseArray_impl.air composite_kernel.air denoise_kernel.air direct_kernel.air exposure_kernel.air indirect_bounce.air material_gen_kernel.air raytracing_function_impl.air temporal_acc_kernel.air volumetric_kernel.air
 
 # =============================================================================
 # Object build statements for EXECUTABLE target RVGRT
@@ -57,7 +57,7 @@ build RVGRT.app/Contents/Resources/default.metallib: COPY_OSX_CONTENT_FILE defau
 #############################################
 # Order-only phony target for RVGRT
 
-build cmake_object_order_depends_target_RVGRT: phony || BuildMetalShaders CArray_impl.air CoarseArray_impl.air RVGRT.app/Contents/Resources/AppIcon.icns RVGRT.app/Contents/Resources/default.metallib default.metallib raytrace.air raytracing_function_impl.air
+build cmake_object_order_depends_target_RVGRT: phony || BuildMetalShaders CArray_impl.air CoarseArray_impl.air RVGRT.app/Contents/Resources/AppIcon.icns RVGRT.app/Contents/Resources/default.metallib composite_kernel.air default.metallib denoise_kernel.air direct_kernel.air exposure_kernel.air indirect_bounce.air material_gen_kernel.air raytracing_function_impl.air temporal_acc_kernel.air volumetric_kernel.air
 
 build CMakeFiles/RVGRT.dir/src/main.cpp.o: CXX_COMPILER__RVGRT_unscanned_Debug /Users/rubenvlieger/Documents/RVGRT/src/main.cpp || cmake_object_order_depends_target_RVGRT
   CONFIG = Debug
@@ -202,6 +202,17 @@ build CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o: OBJCXX_COMPILER__RVGRT_un
   TARGET_COMPILE_PDB = CMakeFiles/RVGRT.dir/
   TARGET_PDB = RVGRT.pdb
 
+build CMakeFiles/RVGRT.dir/src/renderer/MaterialMap.mm.o: OBJCXX_COMPILER__RVGRT_unscanned_Debug /Users/rubenvlieger/Documents/RVGRT/src/renderer/MaterialMap.mm || cmake_object_order_depends_target_RVGRT
+  CONFIG = Debug
+  DEFINES = -D_DEBUG
+  DEP_FILE = CMakeFiles/RVGRT.dir/src/renderer/MaterialMap.mm.o.d
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
+  OBJECT_DIR = CMakeFiles/RVGRT.dir
+  OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/renderer
+  TARGET_COMPILE_PDB = CMakeFiles/RVGRT.dir/
+  TARGET_PDB = RVGRT.pdb
+
 build CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o: CXX_COMPILER__RVGRT_unscanned_Debug /Users/rubenvlieger/Documents/RVGRT/src/renderer/CudaRenderer_mac_stub.cpp || cmake_object_order_depends_target_RVGRT
   CONFIG = Debug
   DEFINES = -D_DEBUG
@@ -221,7 +232,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o: CXX_COMPILE
 #############################################
 # Link the executable RVGRT.app/Contents/MacOS/RVGRT
 
-build RVGRT.app/Contents/MacOS/RVGRT: CXX_EXECUTABLE_LINKER__RVGRT_Debug CMakeFiles/RVGRT.dir/src/main.cpp.o CMakeFiles/RVGRT.dir/src/State.cpp.o CMakeFiles/RVGRT.dir/src/Character.cpp.o CMakeFiles/RVGRT.dir/src/Camera.cpp.o CMakeFiles/RVGRT.dir/src/platform/macos_main.mm.o CMakeFiles/RVGRT.dir/src/platform/MacOSPlatform.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalDevice.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalRenderer.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalBuffer.mm.o CMakeFiles/RVGRT.dir/src/renderer/CArray_impl.mm.o CMakeFiles/RVGRT.dir/src/renderer/CoarseArray_impl.mm.o CMakeFiles/RVGRT.dir/src/renderer/TexturePack_impl.mm.o CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o || BuildMetalShaders
+build RVGRT.app/Contents/MacOS/RVGRT: CXX_EXECUTABLE_LINKER__RVGRT_Debug CMakeFiles/RVGRT.dir/src/main.cpp.o CMakeFiles/RVGRT.dir/src/State.cpp.o CMakeFiles/RVGRT.dir/src/Character.cpp.o CMakeFiles/RVGRT.dir/src/Camera.cpp.o CMakeFiles/RVGRT.dir/src/platform/macos_main.mm.o CMakeFiles/RVGRT.dir/src/platform/MacOSPlatform.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalDevice.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalRenderer.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalBuffer.mm.o CMakeFiles/RVGRT.dir/src/renderer/CArray_impl.mm.o CMakeFiles/RVGRT.dir/src/renderer/CoarseArray_impl.mm.o CMakeFiles/RVGRT.dir/src/renderer/TexturePack_impl.mm.o CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o CMakeFiles/RVGRT.dir/src/renderer/MaterialMap.mm.o CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o || BuildMetalShaders
   CONFIG = Debug
   FLAGS = -g -mmacosx-version-min=13.0
   LINK_FLAGS = -Wl,-search_paths_first -Wl,-headerpad_max_install_names
@@ -267,45 +278,108 @@ build CMakeFiles/BuildMetalShaders | ${cmake_ninja_workdir}CMakeFiles/BuildMetal
 #############################################
 # Custom command for default.metallib
 
-build default.metallib | ${cmake_ninja_workdir}default.metallib: CUSTOM_COMMAND CArray_impl.air CoarseArray_impl.air raytrace.air raytracing_function_impl.air
-  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metallib -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/default.metallib /Users/rubenvlieger/Documents/RVGRT/build-ninja/CArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/CoarseArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/raytrace.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/raytracing_function_impl.air
-  DESC = Creating Metal library from /Users/rubenvlieger/Documents/RVGRT/build-ninja/CArray_impl.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/CoarseArray_impl.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/raytrace.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/raytracing_function_impl.air
+build default.metallib | ${cmake_ninja_workdir}default.metallib: CUSTOM_COMMAND CArray_impl.air CoarseArray_impl.air composite_kernel.air denoise_kernel.air direct_kernel.air exposure_kernel.air indirect_bounce.air material_gen_kernel.air raytracing_function_impl.air temporal_acc_kernel.air volumetric_kernel.air
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metallib -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/default.metallib /Users/rubenvlieger/Documents/RVGRT/build-ninja/CArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/CoarseArray_impl.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/composite_kernel.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/denoise_kernel.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/direct_kernel.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/exposure_kernel.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/indirect_bounce.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/material_gen_kernel.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/raytracing_function_impl.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/temporal_acc_kernel.air /Users/rubenvlieger/Documents/RVGRT/build-ninja/volumetric_kernel.air
+  DESC = Creating Metal library from /Users/rubenvlieger/Documents/RVGRT/build-ninja/CArray_impl.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/CoarseArray_impl.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/composite_kernel.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/denoise_kernel.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/direct_kernel.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/exposure_kernel.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/indirect_bounce.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/material_gen_kernel.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/raytracing_function_impl.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/temporal_acc_kernel.air;/Users/rubenvlieger/Documents/RVGRT/build-ninja/volumetric_kernel.air
   restat = 1
 
 
 #############################################
 # Custom command for CArray_impl.air
 
-build CArray_impl.air | ${cmake_ninja_workdir}CArray_impl.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal
-  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/CArray_impl.air
-  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/CArray_impl.metal
+build CArray_impl.air | ${cmake_ninja_workdir}CArray_impl.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/CArray_impl.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/CArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/CArray_impl.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/CArray_impl.metal
   restat = 1
 
 
 #############################################
 # Custom command for CoarseArray_impl.air
 
-build CoarseArray_impl.air | ${cmake_ninja_workdir}CoarseArray_impl.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal
-  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/CoarseArray_impl.air
-  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/CoarseArray_impl.metal
+build CoarseArray_impl.air | ${cmake_ninja_workdir}CoarseArray_impl.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/CoarseArray_impl.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/CoarseArray_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/CoarseArray_impl.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/CoarseArray_impl.metal
   restat = 1
 
 
 #############################################
-# Custom command for raytrace.air
+# Custom command for composite_kernel.air
 
-build raytrace.air | ${cmake_ninja_workdir}raytrace.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal
-  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/raytrace.air
-  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytrace.metal
+build composite_kernel.air | ${cmake_ninja_workdir}composite_kernel.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/composite_kernel.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/composite_kernel.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/composite_kernel.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/composite_kernel.metal
+  restat = 1
+
+
+#############################################
+# Custom command for denoise_kernel.air
+
+build denoise_kernel.air | ${cmake_ninja_workdir}denoise_kernel.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/denoise_kernel.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/denoise_kernel.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/denoise_kernel.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/denoise_kernel.metal
+  restat = 1
+
+
+#############################################
+# Custom command for direct_kernel.air
+
+build direct_kernel.air | ${cmake_ninja_workdir}direct_kernel.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/direct_kernel.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/direct_kernel.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/direct_kernel.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/direct_kernel.metal
+  restat = 1
+
+
+#############################################
+# Custom command for exposure_kernel.air
+
+build exposure_kernel.air | ${cmake_ninja_workdir}exposure_kernel.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/exposure_kernel.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/exposure_kernel.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/exposure_kernel.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/exposure_kernel.metal
+  restat = 1
+
+
+#############################################
+# Custom command for indirect_bounce.air
+
+build indirect_bounce.air | ${cmake_ninja_workdir}indirect_bounce.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/indirect_bounce.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/indirect_bounce.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/indirect_bounce.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/indirect_bounce.metal
+  restat = 1
+
+
+#############################################
+# Custom command for material_gen_kernel.air
+
+build material_gen_kernel.air | ${cmake_ninja_workdir}material_gen_kernel.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/material_gen_kernel.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/material_gen_kernel.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/material_gen_kernel.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/material_gen_kernel.metal
   restat = 1
 
 
 #############################################
 # Custom command for raytracing_function_impl.air
 
-build raytracing_function_impl.air | ${cmake_ninja_workdir}raytracing_function_impl.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal
-  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/raytracing_function_impl.air
-  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/raytracing_function_impl.metal
+build raytracing_function_impl.air | ${cmake_ninja_workdir}raytracing_function_impl.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/raytracing_function_impl.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/raytracing_function_impl.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/raytracing_function_impl.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/raytracing_function_impl.metal
+  restat = 1
+
+
+#############################################
+# Custom command for temporal_acc_kernel.air
+
+build temporal_acc_kernel.air | ${cmake_ninja_workdir}temporal_acc_kernel.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/temporal_acc_kernel.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/temporal_acc_kernel.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/temporal_acc_kernel.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/temporal_acc_kernel.metal
+  restat = 1
+
+
+#############################################
+# Custom command for volumetric_kernel.air
+
+build volumetric_kernel.air | ${cmake_ninja_workdir}volumetric_kernel.air: CUSTOM_COMMAND /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/volumetric_kernel.metal
+  COMMAND = cd /Users/rubenvlieger/Documents/RVGRT/build-ninja && /usr/bin/xcrun metal -c -frecord-sources -gline-tables-only -I /Users/rubenvlieger/Documents/RVGRT/include /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/volumetric_kernel.metal -o /Users/rubenvlieger/Documents/RVGRT/build-ninja/volumetric_kernel.air
+  DESC = Compiling Metal shader /Users/rubenvlieger/Documents/RVGRT/src/renderer/kernels/volumetric_kernel.metal
   restat = 1
 
 # =============================================================================

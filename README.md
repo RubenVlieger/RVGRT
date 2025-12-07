@@ -16,14 +16,13 @@ This is an attempt at creating a **Minecraft-like voxel world engine**, built mo
 - A-Trous edge aware denoising of the indirect lighting 
 - Usage of the orignial Minecraft texturepack
 - Implemented shadows and reflections
+- Volumetric lighting
+- Automatic exposure
 - Usage of DLSS image upscaling for windows 
 
 
 ## To-do list:
-- Better denoising, and maybe implementing proprietery denoising (if supported on device) with DLSS and MetalFX
-- Volumetric lighting
 - Clouds
-- Automatic camera exposure which changes on amount of brightness
 - Realistic lens effects
 - A plane to fly around in
 - Ability to upload voxel scenes to render

@@ -1,0 +1,7 @@
+Target dependency graph (3 targets)
+Target 'RVGRT' in project 'Programma'
+➜ Explicit dependency on target 'BuildMetalShaders' in project 'Programma'
+➜ Explicit dependency on target 'ZERO_CHECK' in project 'Programma'
+Target 'BuildMetalShaders' in project 'Programma'
+➜ Explicit dependency on target 'ZERO_CHECK' in project 'Programma'
+Target 'ZERO_CHECK' in project 'Programma' (no dependencies)

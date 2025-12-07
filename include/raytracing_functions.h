@@ -1,5 +1,6 @@
 #include "cumath.h" 
 #include "CoarseArray.h"
+#include "renderer/ShaderTypes.h"
 class CoarseArray;
 
 struct hitInfo
@@ -10,6 +11,160 @@ struct hitInfo
     bool hit;
     int its;
 };
+
+
+// Constants for Indirection
+#define BRICK_SIZE 8
+#define BRICK_SIZE_SHIFT 3
+#define BRICK_MASK 7
+#define BRICK_VOLUME 512
+#define FLAG_CONSTANT_MAT 0x80000000
+
+// Helper to look up Material ID from the Two-Level Grid
+GPU_FUNC uint8_t getMaterialID(
+    float3 pos,
+    texture3d<uint, access::read> indirection,
+    device uchar* brickPool
+) {
+    // 1. Calculate Indirection Coordinate
+    uint3 gridPos = uint3(pos) >> BRICK_SIZE_SHIFT;
+    
+    // Bounds check (optional if logic guarantees bounds)
+    if (gridPos.x >= indirection.get_width() || 
+        gridPos.y >= indirection.get_height() || 
+        gridPos.z >= indirection.get_depth()) return 0; // Air
+
+    uint lookup = indirection.read(gridPos).r;
+
+    if (lookup == 0) return 0; // Air
+
+    if ((lookup & FLAG_CONSTANT_MAT) != 0) {
+        return (uint8_t)(lookup & 0xFF); // Return stored constant ID
+    }
+
+    uint3 localPos = uint3(pos) & BRICK_MASK;
+    // Linear Layout: z*64 + y*8 + x
+    uint localOffset = (localPos.z << 6) | (localPos.y << 3) | localPos.x;
+    
+    // Address = (BrickIndex * 512) + LocalOffset
+    uint finalAddress = (lookup * BRICK_VOLUME) + localOffset;
+    
+    return brickPool[finalAddress];
+}
+constant half3 TINT_GRASS   = half3(0.48h, 0.65h, 0.36h); 
+constant half3 TINT_FOLIAGE = half3(0.28h, 0.70h, 0.17h);
+constant half3 TINT_NONE    = half3(1.0h, 1.0h, 1.0h);
+
+GPU_FUNC half3 sampleTexture(
+    half2 uv, 
+    float3 pos, 
+    half3 normal, 
+    texture2d_array<float, access::sample> texObj, 
+    float distSq, 
+    texture3d<uint, access::read> indirection, 
+    device uchar* brickPool
+) {
+    constexpr sampler s(coord::normalized, address::repeat, filter::linear, mip_filter::linear); 
+
+    uint8_t matID = getMaterialID(floor(pos), indirection, brickPool);
+
+    // Determine Face: 0=Top, 1=Bottom, 2=Side
+    int face = (normal.y > 0.5h) ? 0 : ((normal.y < -0.5h) ? 1 : 2);
+        
+    int texIndex = TEX_STONE; 
+    half3 tint = TINT_NONE;
+
+    switch(matID) {
+        // --- TERRAIN ---
+        case MAT_GRASS:
+            if (face == 0) {       texIndex = TEX_GRASS_TOP; tint = TINT_GRASS; } 
+            else if (face == 1) {  texIndex = TEX_DIRT; }
+            else {                 texIndex = TEX_GRASS_SIDE; } // Side has overlay, hard to tint correctly in single pass, usually looks OK without tint or specific biome logic
+            break;
+
+        case MAT_DIRT:      texIndex = TEX_DIRT; break;
+        case MAT_STONE:     texIndex = TEX_STONE; break;
+        case MAT_COBBLE:    texIndex = TEX_COBBLE; break;
+        case MAT_BEDROCK:   texIndex = TEX_BEDROCK; break;
+        case MAT_SAND:      texIndex = TEX_SAND; break;
+        case MAT_GRAVEL:    texIndex = TEX_GRAVEL; break;
+        case MAT_CLAY:      texIndex = TEX_CLAY; break;
+        case MAT_SOULSAND:  texIndex = TEX_SOULSAND; break;
+        case MAT_NETHERRACK:texIndex = TEX_NETHERRACK; break;
+        case MAT_GLOWSTONE: texIndex = TEX_GLOWSTONE; break;
+
+        // --- WOOD / CONSTRUCTION ---
+        case MAT_PLANKS:    texIndex = TEX_PLANKS; break;
+        case MAT_BRICK:     texIndex = TEX_BRICK; break;
+        case MAT_MOSSY:     texIndex = TEX_MOSSY; break;
+        case MAT_OBSIDIAN:  texIndex = TEX_OBSIDIAN; break;
+        
+        case MAT_LOG:
+            if (face == 0 || face == 1) texIndex = TEX_LOG_TOP; 
+            else texIndex = TEX_LOG_SIDE;
+            break;
+
+        case MAT_LEAVES:     
+            texIndex = TEX_LEAVES; 
+            tint = TINT_FOLIAGE; 
+            break;
+
+        case MAT_GLASS:     texIndex = TEX_GLASS; break;
+        case MAT_WOOL:      texIndex = TEX_WOOL_WHITE; break; // Default to white
+        case MAT_SNOW:      texIndex = TEX_SNOW; break;
+        case MAT_ICE:       texIndex = TEX_ICE; break;
+
+        // --- ORES ---
+        case MAT_COAL_ORE:  texIndex = TEX_COAL_ORE; break;
+        case MAT_IRON_ORE:  texIndex = TEX_IRON_ORE; break;
+        case MAT_GOLD_ORE:  texIndex = TEX_GOLD_ORE; break;
+        case MAT_DIAM_ORE:  texIndex = TEX_DIAM_ORE; break;
+
+        // --- VALUABLE BLOCKS ---
+        case MAT_IRON_BLK:  texIndex = TEX_IRON_BLK; break;
+        case MAT_GOLD_BLK:  texIndex = TEX_GOLD_BLK; break;
+        case MAT_DIAM_BLK:  texIndex = TEX_DIAM_BLK; break;
+
+        // --- SPECIALS ---
+        case MAT_TNT:
+            if (face == 0) texIndex = TEX_TNT_TOP;
+            else if (face == 1) texIndex = TEX_TNT_BOT;
+            else texIndex = TEX_TNT_SIDE;
+            break;
+            
+        case MAT_SANDSTONE:
+            if (face == 0) texIndex = TEX_SANDSTONE_TOP; 
+            else if (face == 1) texIndex = TEX_SANDSTONE_BOT; 
+            else texIndex = TEX_SANDSTONE_SID; 
+            break;
+
+        case MAT_PUMPKIN:
+            if (face == 0 || face == 1) texIndex = TEX_PUMPKIN_TOP;
+            else if (face == 2) texIndex = TEX_PUMPKIN_FACE; // Assuming 'side' implies front here for simplicity
+            else texIndex = TEX_PUMPKIN_SIDE;
+            break;
+
+        case MAT_CACTUS:
+            if (face == 0) texIndex = TEX_CACTUS_TOP;
+            else if (face == 1) texIndex = TEX_CACTUS_IN;
+            else texIndex = TEX_CACTUS_SIDE;
+            break;
+
+        default: 
+            // Debug Pink
+            return half3(1.0h, 0.0h, 1.0h); 
+    }
+
+    // Sample
+    float lod = 0.5f * log2(distSq) - 6.0f;
+    half4 t = (half4)texObj.sample(s, float2(uv.x, -uv.y), texIndex, level(lod));
+    
+    // Apply tint (multiply RGB, keep Alpha)
+    return t.rgb * tint;
+}
+
+
+
 GPU_FUNC GPU_INLINE bool checkBit(uint32_t block, int x, int y, int z) {
     int bitIndex = x + (y << 2) + (z << 4);
     return (block & (1u << bitIndex)) != 0;
@@ -118,6 +273,44 @@ GPU_FUNC GPU_INLINE float getDistance(const float3 pos, TEX3D_U8_R csdf)
     return get_csdf_val(gridPos, csdf);
 #endif
 }
+
+GPU_FUNC uint hash3_to_1(int3 p) {
+    uint3 u = uint3(p);
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    return u.x ^ u.y ^ u.z;
+}
+// High-quality, fast Pseudo-Random Number Generator (PCG Hash)
+// Essential for path tracing to get "good noise" that denoises well.
+GPU_FUNC uint pcg_hash(uint seed)
+{
+    uint state = seed * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+// Float random [0, 1]
+GPU_FUNC float rand_float(thread uint& seed) {
+    seed = pcg_hash(seed);
+    return (float)seed / (float)UINT_MAX;
+}
+
+// Reconstruct World Position from Depth and Camera info
+GPU_FUNC float3 reconstructPos(float depth, float2 uv, constant const CameraData& cam) {
+    float2 ndc = uv * 2.0f - 1.0f;
+    float3 viewDir = normalize(cam.forward + ndc.x * cam.right + ndc.y * cam.up);
+    return cam.position + viewDir * depth;
+}
+
+GPU_FUNC half2 reconstructUV(float3 pos, half3 normal) {
+    float3 fpos = floor(pos);
+    half2 uv;
+    if (abs(normal.x) > 0.5h)      uv = half2(pos.y - fpos.y, pos.z - fpos.z);
+    else if (abs(normal.y) > 0.5h) uv = half2(pos.x - fpos.x, pos.z - fpos.z);
+    else                           uv = half2(pos.x - fpos.x, pos.y - fpos.y);
+    return uv;
+}
+
 
 
 
@@ -499,8 +692,7 @@ GPU_FUNC hitInfo trace(float3 camPos,
 
             float3 fpos_hit = floor3(HI.pos);
             if (mask == 0) {
-                HI.uv = make_half2(HI.pos.y - fpos_hit.y, HI.pos.z - fpos_hit.z);
-                if(step.x == -1) HI.uv.y = 1.0h - HI.uv.y;
+                HI.uv = make_half2(HI.pos.z - fpos_hit.z, HI.pos.y - fpos_hit.y);
             } else if (mask == 1) {
                 HI.uv = make_half2(HI.pos.x - fpos_hit.x, HI.pos.z - fpos_hit.z);
             } else {
@@ -514,52 +706,6 @@ GPU_FUNC hitInfo trace(float3 camPos,
     return HI;
 }
 
-
-/**
- * @brief Traces a cone through the GI data grid to gather indirect illumination.
- * @param pos The starting point of the cone (a surface point).
- * @param dir The central direction of the cone.
- * @param GIdata Pointer to the 3D grid of GI voxel data.
- * @param csdf Pointer to the CSDF for occlusion checks.
- * @return A float3 color representing the accumulated indirect light.
- */ /*
-GPU_FUNC float3 traceCone(float3 pos, const float3 dir, 
-                          TEX3D_U32_R GIdata,
-                          TEX3D_U8_R csdf)
-{
-    float3 accumulatedColor = make_float3(0.0f);
-    float accumulatedAlpha = 0.0f;
-    float currentDist = COARSENESSGI * 2.0f;
-
-    for (int i = 0; i < 20; ++i) {
-        if (accumulatedAlpha > 0.99f || currentDist > GI_SIZEX) break;
-
-        float3 currentPos = pos + dir * currentDist;
-        float sceneDist = getDistance(currentPos, csdf) * COARSENESSSDF;
-        float coneWidth = currentDist;
-
-        if (sceneDist < coneWidth) {
-            accumulatedAlpha = 1.0f;
-            continue;
-        }
-        int3 g = to_int3(floor3(currentPos / (float)COARSENESSGI));
-        
-        if (!((g.x < 0)              | (g.y < 0)                   | (g.z < 0) ||
-         ((uint64_t)g.x >= GI_SIZEX) | ((uint64_t)g.y >= GI_SIZEY) | ((uint64_t)g.z >= GI_SIZEZ)))
-        {       
-            uint32_t giSample = get_gi_val(g, GIdata);
-            
-            float3 voxelColor = make_float3((giSample&255) / 255.0f, ((giSample>>8)&255) / 255.0f, ((giSample>>16)&255) / 255.0f);
-            float voxelAlpha = ((giSample>>24)&255) / 255.0f;
-
-            float blendFactor = (1.0f - accumulatedAlpha) * voxelAlpha;
-            accumulatedColor = accumulatedColor + voxelColor * blendFactor;
-            accumulatedAlpha = accumulatedAlpha + blendFactor;
-        }
-        currentDist += fmax(COARSENESSGI, coneWidth * 0.5f);
-    }
-    return accumulatedColor;
-} */
 
 /**
  * @brief Calculates the color of the sky for a given view direction.

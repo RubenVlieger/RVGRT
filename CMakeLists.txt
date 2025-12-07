@@ -99,11 +99,14 @@ elseif(APPLE)
         src/renderer/CoarseArray_impl.mm
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
+        src/renderer/MaterialMap.mm
         ${MACOS_ICON} 
     )
     
-    file(GLOB MAC_METAL_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal")
-    
+    file(GLOB MAC_METAL_SOURCES CONFIGURE_DEPENDS 
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/kernels/*.metal"
+    )    
     set(MAC_METAL_AIR_FILES "")
     set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") 
 
