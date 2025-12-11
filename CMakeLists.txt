@@ -95,8 +95,6 @@ elseif(APPLE)
         src/renderer/MetalDevice.mm
         src/renderer/MetalRenderer.mm
         src/renderer/MetalBuffer.mm
-        src/renderer/CArray_impl.mm
-        src/renderer/CoarseArray_impl.mm
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm

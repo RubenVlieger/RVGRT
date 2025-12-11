@@ -1,4 +1,0 @@
-/Users/rubenvlieger/Documents/RVGRT/build-ninja-reldeb/CMakeFiles/BuildMetalShaders.dir
-/Users/rubenvlieger/Documents/RVGRT/build-ninja-reldeb/CMakeFiles/RVGRT.dir
-/Users/rubenvlieger/Documents/RVGRT/build-ninja-reldeb/CMakeFiles/edit_cache.dir
-/Users/rubenvlieger/Documents/RVGRT/build-ninja-reldeb/CMakeFiles/rebuild_cache.dir

@@ -1,7 +1,27 @@
 #pragma once
 
 
+#define BRICK_SIZE 8
+#define BRICK_SIZE_SHIFT 3
+#define BRICK_MASK 7
 
+// Indirection Grid Flags (32-bit uint)
+// 0 = Empty (Implicit)
+#define FLAG_SOLID_GENERIC 1 // Fully solid (optimization, e.g. bedrock)
+#define IND_OFFSET 2 // Indices start here
+
+// We map the virtual world (e.g., 2048^3) to the Indirection Grid
+// Indirection Resolution = World / 8
+#define IND_X (SIZEX >> BRICK_SIZE_SHIFT)
+#define IND_Y (SIZEY >> BRICK_SIZE_SHIFT)
+#define IND_Z (SIZEZ >> BRICK_SIZE_SHIFT)
+#define IND_SIZE (IND_X * IND_Y * IND_Z)
+
+// Packing: 1 pixel (R32Uint) holds a 4x4x2 voxel block.
+// To store an 8x8x8 brick, we need 2x2x4 pixels in the Geometry Atlas.
+#define GEO_PACK_X 4
+#define GEO_PACK_Y 4
+#define GEO_PACK_Z 2
 
 #if defined(PLATFORM_METAL)
     #define GLOBAL_CONST constant

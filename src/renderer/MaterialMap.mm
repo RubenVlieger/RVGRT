@@ -1,148 +1,231 @@
 #import "renderer/MaterialMap.hpp"
 #import "State.hpp"
 #import "renderer/MetalDevice.hpp"
-#import "cumath.h" // For SIZEX, SIZEY, SIZEZ definitions
+#import "cumath.h"
 #include <iostream>
-#include <stdexcept>
+#include <vector>
+#include <cmath>
 
-// Indirection Grid Dimensions
-// World is (2048, 512, 2048). Brick is 8.
-// Grid is (256, 64, 256).
-#define IND_X (SIZEX / 8)
-#define IND_Y (SIZEY / 8)
-#define IND_Z (SIZEZ / 8)
+// --- Constants ---
+// Geometry Atlas (R32Uint): 1 pixel = 4x4x2 voxels.
+// A brick is 8x8x8 voxels.
+// Therefore, we need 2x2x4 pixels in the atlas to represent 1 brick.
+#ifndef GEO_TEX_SCALE_X
+#define GEO_TEX_SCALE_X 2
+#define GEO_TEX_SCALE_Y 2
+#define GEO_TEX_SCALE_Z 4
+#endif
+
+// Indirection Offset (0=Air, 1=SolidGeneric, 2+=Index)
+#ifndef INDIRECTION_BASE_OFFSET
+#define INDIRECTION_BASE_OFFSET 2
+#endif
+
 
 namespace {
     id<MTLDevice> get_device() {
-        GraphicsDevice* gDevice = State::state.graphicsDevice.get();
-        if (!gDevice) throw std::runtime_error("MaterialMap: GraphicsDevice not initialized.");
-        return static_cast<MetalDevice*>(gDevice)->GetMetalDevice();
+        return static_cast<MetalDevice*>(State::state.graphicsDevice.get())->GetMetalDevice();
     }
 
-    id<MTLComputePipelineState> load_kernel(id<MTLDevice> device, NSString* name) {
-        NSError* error = nil;
-        id<MTLLibrary> lib = [device newDefaultLibrary];
-        id<MTLFunction> func = [lib newFunctionWithName:name];
-        if(!func) {
-            NSLog(@"FATAL: Could not find function '%@'. Did you compile the shader?", name);
-            abort();
-        }
-        id<MTLComputePipelineState> pso = [device newComputePipelineStateWithFunction:func error:&error];
-        if(!pso) {
-            NSLog(@"FATAL: Failed to create PSO for '%@': %@", name, error);
-            abort();
-        }
-        return pso;
+    inline uint32_t expandBits(uint32_t v) {
+        v = (v * 0x00010001u) & 0xFF0000FFu;
+        v = (v * 0x00000101u) & 0x0F00F00Fu;
+        v = (v * 0x00000011u) & 0xC30C30C3u;
+        v = (v * 0x00000005u) & 0x49249249u;
+        return v;
     }
+
+    inline uint32_t morton3D(uint32_t x, uint32_t y, uint32_t z) {
+        return expandBits(x) | (expandBits(y) << 1) | (expandBits(z) << 2);
+    }
+
+    struct BrickSortInfo {
+        uint32_t linearIndex;
+        uint32_t mortonCode;
+    };
 }
-
-MaterialMap::MaterialMap() : _indirectionTexture(nil), _brickPoolBuffer(nil), _allocCounterBuffer(nil) {
+MaterialMap::MaterialMap() : 
+    _indirectionTexture(nil), _geoBuffer(nil), _matBuffer(nil) 
+{
     _device = get_device();
-    _psoClassify = load_kernel(_device, @"MaterialMap_Classify");
-    _psoFill     = load_kernel(_device, @"MaterialMap_Fill");
+    id<MTLLibrary> lib = [_device newDefaultLibrary];
+    
+    NSError* err = nil;
+    _psoAnalyze = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"AnalyzeWorldStructure"] error:&err];
+    if(err || !_psoAnalyze) NSLog(@"Shader Load Error: %@", err);
+
+    _psoFill    = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"FillDynamicAtlases"] error:&err];
+    if(err || !_psoFill) NSLog(@"Shader Load Error: %@", err);
+    
+    _psoJFAInit   = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"JFA_Init"] error:&err];
+    if(err || !_psoJFAStep) NSLog(@"Shader Load Error: %@", err);
+
+    _psoJFAStep   = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"JFA_Step"] error:&err];
+    if(err || !_psoJFAStep) NSLog(@"Shader Load Error: %@", err);
+
+    _psoJFACommit = [_device newComputePipelineStateWithFunction:[lib newFunctionWithName:@"JFA_Commit"] error:&err];
+    if(err || !_psoJFACommit) NSLog(@"Shader Load Error: %@", err);
 }
+
 
 MaterialMap::~MaterialMap() {
     _indirectionTexture = nil;
-    _brickPoolBuffer = nil;
-    _allocCounterBuffer = nil;
+    _geoBuffer = nil;
+    _matBuffer = nil;
 }
-
-void MaterialMap::Allocate() {
-    id<MTLDevice> device = (id<MTLDevice>)_device;
-
-    // 1. Allocate Indirection Texture (3D R32Uint)
+// Helper to create 3D Texture
+id<MTLTexture> create3DTex(id<MTLDevice> dev, int w, int h, int d, MTLPixelFormat fmt, NSString* label) {
     MTLTextureDescriptor* desc = [[MTLTextureDescriptor alloc] init];
     desc.textureType = MTLTextureType3D;
-    desc.pixelFormat = MTLPixelFormatR32Uint;
-    desc.width = IND_X;
-    desc.height = IND_Y;
-    desc.depth = IND_Z;
+    desc.pixelFormat = fmt;
+    desc.width = w;
+    desc.height = h;
+    desc.depth = d;
     desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
-    desc.storageMode = MTLStorageModePrivate; // GPU only
-    
-    _indirectionTexture = [device newTextureWithDescriptor:desc];
-    [(id<MTLTexture>)_indirectionTexture setLabel:@"MaterialIndirectionGrid"];
-    
-    if(!_indirectionTexture) {
-        throw std::runtime_error("Failed to allocate Material Indirection Texture");
-    }
-
-    // 2. Allocate Brick Pool (Linear Buffer)
-    // Size = MAX_BRICKS * 8*8*8 bytes (512 bytes per brick)
-    NSUInteger poolSize = (NSUInteger)MAX_BRICKS * 512;
-    _brickPoolBuffer = [device newBufferWithLength:poolSize options:MTLResourceStorageModePrivate];
-    [(id<MTLBuffer>)_brickPoolBuffer setLabel:@"MaterialBrickPool"];
-
-    if(!_brickPoolBuffer) {
-        throw std::runtime_error("Failed to allocate Material Brick Pool (OOM?)");
-    }
-
-    // 3. Atomic Counter (Shared so CPU can reset it easily, or Private with a clear kernel)
-    // We'll use private with a clear, or shared. Shared is fine for a 4-byte buffer.
-    _allocCounterBuffer = [device newBufferWithLength:sizeof(uint32_t) options:MTLResourceStorageModeShared];
-
-    std::cout << "MaterialMap Allocated: Indirection Grid (" << IND_X << "x" << IND_Y << "x" << IND_Z 
-              << "), Brick Pool Capacity: " << MAX_BRICKS << " chunks (" << (poolSize / 1024 / 1024) << " MB)" << std::endl;
+    desc.storageMode = MTLStorageModePrivate; 
+    id<MTLTexture> tex = [dev newTextureWithDescriptor:desc];
+    tex.label = label;
+    return tex;
 }
 
-void MaterialMap::Generate(id packedVoxelTexture) {
-    if(!_indirectionTexture || !_brickPoolBuffer) Allocate();
-
-    id<MTLDevice> device = (id<MTLDevice>)_device;
-    id<MTLCommandQueue> queue = [device newCommandQueue];
-    id<MTLCommandBuffer> cmdBuf = [queue commandBuffer];
-    cmdBuf.label = @"MaterialGenerationCmds";
+void MaterialMap::GenerateDynamic() 
+{
+    id<MTLDevice> dev = (id<MTLDevice>)_device;
+    id<MTLCommandQueue> queue = [dev newCommandQueue];
     
-    // Reset Counter
-    memset([(id<MTLBuffer>)_allocCounterBuffer contents], 0, sizeof(uint32_t));
+    NSUInteger totalBricks = IND_X * IND_Y * IND_Z;
+    id<MTLBuffer> statusBuffer = [dev newBufferWithLength:totalBricks * sizeof(uint32_t) options:MTLResourceStorageModeShared];
 
-    id<MTLComputeCommandEncoder> enc = [cmdBuf computeCommandEncoder];
+    // 1. RUN ANALYSIS PASS (GPU) 
+    id<MTLCommandBuffer> cmd = [queue commandBuffer];
+    id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
+    [enc setComputePipelineState:_psoAnalyze];
+    [enc setBuffer:statusBuffer offset:0 atIndex:0];
+    [enc dispatchThreads:MTLSizeMake(IND_X, IND_Y, IND_Z) threadsPerThreadgroup:MTLSizeMake(8, 8, 4)];
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
 
-    // --- PASS 1: CLASSIFY ---
-    // Reads: Geometry Bits
-    // Writes: Indirection Texture, Atomically increments Counter
-    [enc pushDebugGroup:@"Material Classification"];
-    [enc setComputePipelineState:_psoClassify];
-    [enc setTexture:(id<MTLTexture>)packedVoxelTexture atIndex:0];
-    [enc setTexture:(id<MTLTexture>)_indirectionTexture atIndex:1];
-    [enc setBuffer:(id<MTLBuffer>)_allocCounterBuffer offset:0 atIndex:0];
+    // 2. CPU COMPACTION & MORTON SORTING 
+    uint32_t* gridData = (uint32_t*)[statusBuffer contents];
+    std::vector<BrickSortInfo> activeBricks;
+    activeBricks.reserve(totalBricks / 10);
+
+    for(size_t i = 0; i < totalBricks; i++) {
+        uint32_t status = gridData[i];
+        if (status == 2) { // Mixed
+            uint32_t z = i / (IND_X * IND_Y);
+            uint32_t rem = i % (IND_X * IND_Y);
+            uint32_t y = rem / IND_X;
+            uint32_t x = rem % IND_X;
+            uint32_t mCode = morton3D(x, y, z);
+            activeBricks.push_back({ (uint32_t)i, mCode });
+        } 
+    }
+
+    if (activeBricks.empty()) {
+        std::cout << "No active bricks found." << std::endl;
+        return;
+    }
+
+    // Sort by Morton Code
+    std::sort(activeBricks.begin(), activeBricks.end(), [](const BrickSortInfo& a, const BrickSortInfo& b) {
+        return a.mortonCode < b.mortonCode;
+    });
+
+    // =========================================================
+    // 3. ALLOCATE LINEAR BUFFERS (THE BIG CHANGE)
+    // =========================================================
+    uint32_t count = (uint32_t)activeBricks.size();
     
-    // Dispatch threads covering the Indirection Grid dimensions
-    MTLSize gridSize = MTLSizeMake(IND_X, IND_Y, IND_Z);
-    MTLSize threadGroupSize = MTLSizeMake(8, 8, 4); // Adjust based on GPU architecture
-    [enc dispatchThreads:gridSize threadsPerThreadgroup:threadGroupSize];
-    [enc popDebugGroup];
+    std::cout << "Active Bricks: " << count << " (Linear Mode)" << std::endl;
 
-    // Barrier: Ensure Indirection texture writes and Counter updates are visible
-    [enc memoryBarrierWithScope:MTLBarrierScopeTextures | MTLBarrierScopeBuffers];
+    NSUInteger geoSize = count * 16 * sizeof(uint32_t);
+    NSUInteger matSize = count * 512 * sizeof(uint8_t);
 
-    // --- PASS 2: FILL POOL ---
-    // Reads: Indirection Texture (to check if a block is mixed)
-    // Writes: Brick Pool Buffer
-    [enc pushDebugGroup:@"Material Fill"];
+    // Release old
+    _geoBuffer = nil; 
+    _matBuffer = nil;
+    _indirectionTexture = nil;
+
+    // Allocate New
+    _geoBuffer = [dev newBufferWithLength:geoSize options:MTLResourceStorageModePrivate];
+    _matBuffer = [dev newBufferWithLength:matSize options:MTLResourceStorageModePrivate];
+    ((id<MTLTexture>)_geoBuffer).label = @"GeometryPoolBuffer";
+    ((id<MTLTexture>)_matBuffer).label = @"MaterialPoolBuffer";
+
+    _indirectionTexture = create3DTex(dev, IND_X, IND_Y, IND_Z, MTLPixelFormatR32Uint, @"IndirectionGrid");
+
+    // 4. WRITE BACK SORTED INDICES
+    for(size_t i = 0; i < activeBricks.size(); ++i) {
+        uint32_t originalLinearIndex = activeBricks[i].linearIndex;
+        gridData[originalLinearIndex] = INDIRECTION_BASE_OFFSET + (uint32_t)i;
+    }
+
+    cmd = [queue commandBuffer];
+    
+    id<MTLBlitCommandEncoder> blit = [cmd blitCommandEncoder];
+    [blit copyFromBuffer:statusBuffer 
+            sourceOffset:0 
+       sourceBytesPerRow:IND_X * 4 
+     sourceBytesPerImage:IND_X * IND_Y * 4 
+              sourceSize:MTLSizeMake(IND_X, IND_Y, IND_Z) 
+               toTexture:(id<MTLTexture>)_indirectionTexture 
+        destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0, 0, 0)];
+    [blit endEncoding];
+
+    enc = [cmd computeCommandEncoder];
     [enc setComputePipelineState:_psoFill];
-    [enc setTexture:(id<MTLTexture>)_indirectionTexture atIndex:0]; // Read-only now
-    [enc setBuffer:(id<MTLBuffer>)_brickPoolBuffer offset:0 atIndex:0]; // Write output
+    [enc setTexture:(id<MTLTexture>)_indirectionTexture atIndex:0];
     
-    // We dispatch over the same grid. 
-    [enc dispatchThreads:gridSize threadsPerThreadgroup:threadGroupSize];
-    [enc popDebugGroup];
+    [enc setBuffer:_geoBuffer offset:0 atIndex:0]; // Buffer Index 0
+    [enc setBuffer:_matBuffer offset:0 atIndex:1]; // Buffer Index 1    
+    
+    [enc dispatchThreads:MTLSizeMake(IND_X, IND_Y, IND_Z) threadsPerThreadgroup:MTLSizeMake(8, 8, 4)];
+    [enc endEncoding];
+    [cmd commit];
+    [cmd waitUntilCompleted];
+
+
+    id<MTLTexture> jfaTexA = create3DTex(dev, IND_X, IND_Y, IND_Z, MTLPixelFormatR32Uint, @"JFA_A");
+    id<MTLTexture> jfaTexB = create3DTex(dev, IND_X, IND_Y, IND_Z, MTLPixelFormatR32Uint, @"JFA_B");
+
+    cmd = [queue commandBuffer];
+    enc = [cmd computeCommandEncoder];
+
+    [enc setComputePipelineState:_psoJFAInit];
+    [enc setTexture:(id<MTLTexture>)_indirectionTexture atIndex:0];
+    [enc setTexture:jfaTexA atIndex:1];
+    [enc dispatchThreads:MTLSizeMake(IND_X, IND_Y, IND_Z) threadsPerThreadgroup:MTLSizeMake(8, 8, 4)];
+
+    int step = 128;
+    id<MTLTexture> input = jfaTexA;
+    id<MTLTexture> output = jfaTexB;
+    
+    [enc setComputePipelineState:_psoJFAStep];
+    while(step >= 1) {
+        [enc setTexture:input atIndex:0];
+        [enc setTexture:output atIndex:1];
+        [enc setBytes:&step length:sizeof(int) atIndex:0];
+        [enc dispatchThreads:MTLSizeMake(IND_X, IND_Y, IND_Z) threadsPerThreadgroup:MTLSizeMake(8, 8, 4)];
+        [enc memoryBarrierWithScope:MTLBarrierScopeTextures];
+        id<MTLTexture> tmp = input; input = output; output = tmp;
+        step /= 2;
+    }
+
+    [enc setComputePipelineState:_psoJFACommit];
+    [enc setTexture:input atIndex:0];
+    [enc setTexture:(id<MTLTexture>)_indirectionTexture atIndex:1];
+    [enc dispatchThreads:MTLSizeMake(IND_X, IND_Y, IND_Z) threadsPerThreadgroup:MTLSizeMake(8, 8, 4)];
 
     [enc endEncoding];
-    [cmdBuf commit];
-    [cmdBuf waitUntilCompleted];
+    [cmd commit];
+    [cmd waitUntilCompleted];
     
-    // Debug output: How many bricks did we use?
-    uint32_t usedBricks = *(uint32_t*)[(id<MTLBuffer>)_allocCounterBuffer contents];
-    std::cout << "Material Generation Complete. Used Mixed Bricks: " << usedBricks 
-              << " / " << MAX_BRICKS << " (" << (usedBricks * 100.0f / MAX_BRICKS) << "%)" << std::endl;
+    statusBuffer = nil;
 }
 
-id MaterialMap::GetIndirectionTexture() {
-    return _indirectionTexture;
-}
-
-id MaterialMap::GetBrickPoolBuffer() {
-    return _brickPoolBuffer;
-}
+// --- GETTERS (Ensure these are present!) ---
+id MaterialMap::GetIndirectionTexture() { return _indirectionTexture; }
+id MaterialMap::GetGeoBuffer() { return _geoBuffer; }
+id MaterialMap::GetMatBuffer() { return _matBuffer; }

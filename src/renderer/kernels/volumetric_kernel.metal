@@ -34,9 +34,9 @@ kernel void VolumetricFog(
     constant const CameraData& camera [[buffer(0)]],
     constant const FrameData& frame   [[buffer(1)]],
     
-    texture3d<uint, access::read>    bitsTex [[texture(3)]],
-    texture3d<float, access::sample> csdf    [[texture(4)]],
-    
+    texture3d<uint, access::read> indirection [[texture(3)]],
+    device uint* geoPool    [[buffer(3)]],
+
     uint2 gid [[thread_position_in_grid]])
 {
     if (gid.x >= texVolumetric.get_width() || gid.y >= texVolumetric.get_height()) return;
@@ -83,7 +83,7 @@ kernel void VolumetricFog(
         // Skip shadow check for first few meters to prevent "face self-shadowing" artifacts
         bool isShadowed = false;
         if (currentT > 2.0f) { 
-             isShadowed = traceShadowAnyHitSlow(pos, frame.sunDirection, 200.0f, bitsTex, csdf);
+            isShadowed = traceShadowCoarse(pos, frame.sunDirection, indirection);
         }
 
         if (!isShadowed) {

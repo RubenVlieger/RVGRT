@@ -59,69 +59,10 @@ MetalRenderer::MetalRenderer(id device_id) : _texturepack()
     _exposureBuffer = [_device newBufferWithBytes:&expData length:sizeof(ExposureData) options:MTLResourceStorageModeShared];
 
 
-    // 3. World Generation Setup
-    id<MTLFunction> worldGenFunc = [lib newFunctionWithName:@"GeneratePackedWorld"];
-    if (!worldGenFunc) {
-        NSLog(@"FATAL: Could not find function 'GeneratePackedWorld'. Check CArray_impl.metal.");
-        abort();
-    }
-
-    _worldGenerationPSO = [_device newComputePipelineStateWithFunction:worldGenFunc error:&error];
-    if (!_worldGenerationPSO) {
-        NSLog(@"FATAL: Failed to create World Gen PSO: %@", error);
-        abort();
-    }
-
-    // Calculate dimensions
-    // SHIX is 11 -> SIZEX = 2048. Packed = 512.
-    // SHIZ is 11 -> SIZEZ = 2048. Packed = 1024 (since Z is packed 2 bits per block? No, bits are 32 per block).
-    // Let's rely on constants defined in cumath.h
-    const int packedWidth  = SIZEX / 4;
-    const int packedHeight = SIZEY / 4;
-    const int packedDepth  = SIZEZ / 2;
-
-    NSLog(@"Allocating Voxel World Texture: %dx%dx%d (R32Uint)", packedWidth, packedHeight, packedDepth);
-
-    MTLTextureDescriptor *voxelDesc = [[MTLTextureDescriptor alloc] init];
-    voxelDesc.textureType = MTLTextureType3D;
-    voxelDesc.pixelFormat = MTLPixelFormatR32Uint; 
-    voxelDesc.width = packedWidth;
-    voxelDesc.height = packedHeight;
-    voxelDesc.depth = packedDepth;
-    voxelDesc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite;
-    voxelDesc.storageMode = MTLStorageModePrivate;
-
-    _voxelTexture = [_device newTextureWithDescriptor:voxelDesc];
-    if (!_voxelTexture) {
-        NSLog(@"FATAL: Failed to allocate 3D Voxel Texture (~1GB). Out of Memory?");
-        abort();
-    }
-
-    // 4. Execute World Generation
-    id<MTLCommandQueue> queue = [_device newCommandQueue];
-    id<MTLCommandBuffer> cmdBuf = [queue commandBuffer];
-    id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
-
-    [encoder setComputePipelineState:_worldGenerationPSO]; 
-    [encoder setTexture:_voxelTexture atIndex:0];
-
-    // Dispatch
-    [encoder dispatchThreads:MTLSizeMake(packedWidth, packedHeight, packedDepth) 
-       threadsPerThreadgroup:MTLSizeMake(8, 8, 8)];
-    
-    [encoder endEncoding];
-    [cmdBuf commit];
-    [cmdBuf waitUntilCompleted];
-    
+    NSLog(@"Starting Dynamic World Generation...");
+    _materialMap.GenerateDynamic();
     NSLog(@"World Generation Complete.");
 
-    _materialMap.Allocate();
-    _materialMap.Generate(_voxelTexture);
-
-    // 5. Generate SDF and GI structures
-    _csdf.AllocateSDF();
-    _csdf.GenerateSDF((__bridge void*)_voxelTexture);
-    
     // 6. Initialize Render Targets
     createRenderTarget(State::dispWIDTH, State::dispHEIGHT);
 
@@ -313,18 +254,20 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf, const Character& character
     [encoder setTexture:_halfDistTexture atIndex:0];
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:_voxelTexture atIndex:2];
-    [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:3];
-    // Note: Approx kernel only needs geometry/SDF, no material data needed here.
+    
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:2]; 
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetGeoBuffer() offset:0 atIndex:3];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetMatBuffer() offset:0 atIndex:4];
+
     [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
     [encoder popDebugGroup];
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:1 withBarrier:YES];
     
     [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
-    // -----------------------------------------------------------
-    // PASS 1: G-Buffer (Indices 2, 3)
-    // -----------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // PASS 1: G-Buffer
+    // -----------------------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:2 withBarrier:NO];
     [encoder pushDebugGroup:@"Pass 1: GBuffer"];
     [encoder setComputePipelineState:_psoGBuffer];
@@ -333,45 +276,44 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf, const Character& character
     [encoder setTexture:_texNormal atIndex:2];
     [encoder setTexture:_texMotion atIndex:3];
     [encoder setTexture:_texDepth[currIdx] atIndex:4];
+    
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:_voxelTexture atIndex:5];
-    [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:6];
-    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:7];
-    [encoder setTexture:_halfDistTexture atIndex:8];
-    
-    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:9];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetBrickPoolBuffer() offset:0 atIndex:2]; 
-    
+
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:5];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetGeoBuffer() offset:0 atIndex:3];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetMatBuffer() offset:0 atIndex:4];
+
+    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:8]; // Atlas
+    [encoder setTexture:_halfDistTexture atIndex:9];
+
     [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:3 withBarrier:YES];
 
-    [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
-
-    // -----------------------------------------------------------
-    // PASS 2: Indirect Bounce (Indices 4, 5)
-    // -----------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // PASS 2: Indirect
+    // -----------------------------------------------------------------------
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:4 withBarrier:NO];
     [encoder pushDebugGroup:@"Pass 2: Indirect"];
     [encoder setComputePipelineState:_psoIndirect];
     [encoder setTexture:_texRawIndirect atIndex:0];
     [encoder setTexture:_texNormal atIndex:1];
     [encoder setTexture:_texDepth[currIdx] atIndex:2];
+    
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:_voxelTexture atIndex:3];
-    [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:4];
-    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:5];
+
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:3];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetGeoBuffer() offset:0 atIndex:3];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetMatBuffer() offset:0 atIndex:4];
     
-    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:6];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetBrickPoolBuffer() offset:0 atIndex:2]; 
-    
+    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:8];
+
     [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:5 withBarrier:YES];
 
-    [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
     // PASS 3: Temporal Accumulation (Indices 6, 7)
@@ -431,15 +373,17 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf, const Character& character
     [encoder setTexture:_texVolumetric[currIdx] atIndex:0]; 
     [encoder setTexture:_texDepth[currIdx] atIndex:1];
     [encoder setTexture:_texVolumetric[prevIdx] atIndex:2];
+    
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
     [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:_voxelTexture atIndex:3];
-    [encoder setTexture:(__bridge id<MTLTexture>)_csdf.getSDFTexture() atIndex:4];
+
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:3];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetGeoBuffer() offset:0 atIndex:3];
+
     [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:11 withBarrier:YES];
 
-    [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
 
     // -----------------------------------------------------------
     // PASS 6: Auto-Exposure (Indices 12, 13)
