@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 SET(APP_NAME RVGRT)
-set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum OS X deployment version")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum OS X deployment version")
 
 # Set the project languages based on the target platform
 if(WIN32)

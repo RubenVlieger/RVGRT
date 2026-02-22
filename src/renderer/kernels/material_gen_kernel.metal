@@ -5,6 +5,22 @@
 
 using namespace metal;
 
+// -----------------------------------------------------------------------------
+// HELPERS
+// -----------------------------------------------------------------------------
+
+inline uint GetLinearIndex(uint3 pos, uint sizeX, uint sizeY) {
+    return pos.x + (pos.y * sizeX) + (pos.z * sizeX * sizeY);
+}
+
+// Metal's popcount intrinsic
+inline int countbits_64(ulong v) {
+    return popcount(v);
+}
+
+// -----------------------------------------------------------------------------
+// PROCEDURAL GENERATION LOGIC
+// -----------------------------------------------------------------------------
 
 uint8_t get_procedural_material_id(float3 pos) {
     int y = (int)pos.y;
@@ -54,50 +70,153 @@ uint8_t get_procedural_material_id(float3 pos) {
     return MAT_STONE;
 }
 
+inline uint GetSectorIndex(uint3 pos, uint sx, uint sy) {
+    return pos.x + (pos.y * sx) + (pos.z * sx * sy);
+}
 
-// -----------------------------------------------------------------------------
-// KERNEL 1: ANALYSIS (Sparse Structure Detection)
-// -----------------------------------------------------------------------------
-kernel void AnalyzeWorldStructure(
-    device uint* statusGrid [[buffer(0)]], 
+
+
+kernel void XMap_AnalyzeSectors(
+    device uint64_t* resultBuffer [[buffer(0)]],
     uint3 gid [[thread_position_in_grid]])
 {
-    if (gid.x >= IND_X || gid.y >= IND_Y || gid.z >= IND_Z) return;
+    uint sx = IND_X / 4;
+    uint sy = IND_Y / 4;
+    uint sz = IND_Z / 4;
+    if (gid.x >= sx || gid.y >= sy || gid.z >= sz) return;
 
-    uint idx = (gid.z * IND_Y + gid.y) * IND_X + gid.x;
-    float3 basePos = float3(gid) * 8.0f;
+    // Linear Index
+    uint sectorIndex = GetSectorIndex(gid, sx, sy);
+    float3 sectorWorldPos = float3(gid) * 32.0f;
+    uint64_t activeBricksMask = 0;
 
-    bool seenSolid = false;
-    bool seenAir = false;
+    // We still loop here because we are deciding *allocations*, 
+    // but we sparsely sample to keep it fast.
+    for(int i = 0; i < 64; i++) {
+        int bx = i & 3;
+        int bz = (i >> 2) & 3; // FIXED: Matches XZY bit order in XBrickMap
+        int by = (i >> 4) & 3; // FIXED: Matches XZY bit order in XBrickMap
+        float3 brickPos = sectorWorldPos + float3(bx, by, bz) * 8.0f;
 
-    // 1. Check Corners
-    float v0 = Evaluate(basePos.x, basePos.y, basePos.z);
-    if(v0 > 0.0f) seenSolid = true; else seenAir = true;
-
-    float v1 = Evaluate(basePos.x + 7, basePos.y + 7, basePos.z + 7);
-    if(v1 > 0.0f) seenSolid = true; else seenAir = true;
-
-    if(seenSolid && seenAir) { statusGrid[idx] = 2; return; }
-
-    // 2. Linear scan
-    for(int z = 0; z < 8; z++) {
-        for(int y = 0; y < 8; y++) {
-            for(int x = 0; x < 8; x++) {
-                if ((x==0 && y==0 && z==0) || (x==7 && y==7 && z==7)) continue;
-
-                float val = Evaluate(basePos.x + x, basePos.y + y, basePos.z + z);
-                
-                if (val > 0.0f) seenSolid = true; 
-                else seenAir = true;
-
-                if (seenSolid && seenAir) {
-                    statusGrid[idx] = 2; // Mixed
-                    return; 
+        // Robust Heuristic: Check a 3x3x3 grid within the 8x8x8 brick
+        bool active = false;
+        for(int dz = 0; dz < 8; dz += 3) {
+            for(int dy = 0; dy < 8; dy += 3) {
+                for(int dx = 0; dx < 8; dx += 3) {
+                    if (Evaluate(brickPos.x + dx, brickPos.y + dy, brickPos.z + dz) > 0.0f) {
+                        active = true;
+                        break;
+                    }
                 }
+                if(active) break;
             }
+            if(active) break;
         }
+        
+        if (active) activeBricksMask |= (1UL << i);
     }
-    statusGrid[idx] = seenSolid ? 1 : 0;
+    resultBuffer[sectorIndex] = activeBricksMask;
+}
+
+// =================================================================================
+// KERNEL 2: PARALLEL FILL (Fine Pass)
+// Dispatched as: Groups = TotalActiveSubBricks, Threads = 64 per Group
+// =================================================================================
+kernel void XMap_FillBricks(
+    device BrickWorkItem* workList    [[buffer(0)]],
+    device SectorInfo* sectorBuffer   [[buffer(1)]],
+    device uint64_t* occupancyBuffer  [[buffer(2)]],
+    device uchar* dataBuffer          [[buffer(3)]],
+    
+    // Group ID tells us which 4x4x4 Sub-Brick we are processing
+    uint groupID [[threadgroup_position_in_grid]], 
+    
+    // Thread ID tells us which Voxel (0..63) inside that sub-brick
+    uint threadID [[thread_position_in_threadgroup]]
+) {
+    // 1. Identify Work
+    uint workItemIndex = groupID / 8;
+    uint subBrickIndex = groupID % 8;
+    
+    BrickWorkItem item = workList[workItemIndex];
+    
+    // 2. Determine Sector and Brick Coordinates
+    uint sx = IND_X / 4;
+    uint sy = IND_Y / 4;
+    // uint sz = IND_Z / 4; unused for decoding
+    
+    // Decode Sector Position
+    uint s_rem = item.sectorIndex;
+    uint s_x = s_rem % sx;
+    s_rem /= sx;
+    uint s_y = s_rem % sy;
+    uint s_z = s_rem / sy; 
+    
+    float3 sectorPos = float3(s_x, s_y, s_z) * 32.0f;
+    
+    // Decode Brick Position (0..63) -> (0..3, 0..3, 0..3)
+    uint b_x = item.localBrickIndex & 3;
+    uint b_z = (item.localBrickIndex >> 2) & 3;
+    uint b_y = (item.localBrickIndex >> 4) & 3;
+    
+    float3 brickPos = sectorPos + float3(b_x, b_y, b_z) * 8.0f;
+    
+    // Decode Sub-Brick Position (0..7) -> (0..1, 0..1, 0..1)
+    uint sb_x = subBrickIndex & 1;
+    uint sb_z = (subBrickIndex >> 1) & 1;
+    uint sb_y = (subBrickIndex >> 2) & 1;
+    
+    float3 subBrickPos = brickPos + float3(sb_x, sb_y, sb_z) * 4.0f;
+    
+    // Decode Voxel Position (0..63) -> (0..3, 0..3, 0..3)
+    uint v_x = threadID & 3;
+    uint v_z = (threadID >> 2) & 3;
+    uint v_y = (threadID >> 4) & 3;
+    
+    float3 voxelPos = subBrickPos + float3(v_x, v_y, v_z);
+    
+    // 3. Evaluate Procedural Terrain
+    float density = Evaluate(voxelPos.x, voxelPos.y, voxelPos.z);
+    bool isSolid = density > 0.0f;
+    
+    // 4. Generate Mask using Shared Memory Atomics    
+    threadgroup atomic_uint groupMaskHigh;
+    threadgroup atomic_uint groupMaskLow;
+    
+    if (threadID == 0) {
+        atomic_store_explicit(&groupMaskHigh, 0, memory_order_relaxed);
+        atomic_store_explicit(&groupMaskLow, 0, memory_order_relaxed);
+    }
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    
+    if (isSolid) {
+        if (threadID < 32) {
+            atomic_fetch_or_explicit(&groupMaskLow, (1u << threadID), memory_order_relaxed);
+        } else {
+            atomic_fetch_or_explicit(&groupMaskHigh, (1u << (threadID - 32)), memory_order_relaxed);
+        }
+        
+        // 5. Write Data
+        uint8_t matID = get_procedural_material_id(voxelPos);
+        
+        // Calculate linear offset in the Data Buffer
+        uint finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID;
+        dataBuffer[finalDataIdx] = matID;
+    } else {
+        uint finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID;
+        dataBuffer[finalDataIdx] = 0;
+    }
+    
+    threadgroup_barrier(mem_flags::mem_threadgroup);
+    
+    // 6. Write Mask to Global Memory
+    if (threadID == 0) {
+        uint low = atomic_load_explicit(&groupMaskLow, memory_order_relaxed);
+        uint high = atomic_load_explicit(&groupMaskHigh, memory_order_relaxed);
+        uint64_t fullMask = (uint64_t(high) << 32) | uint64_t(low);
+        
+        occupancyBuffer[item.occupancyOffset + subBrickIndex] = fullMask;
+    }
 }
 
 

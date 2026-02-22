@@ -31,4 +31,31 @@ struct ExposureData {
     float padding[3]; 
 };
 
+#define BRICK_SIZE 8
+#define SECTOR_SIZE 32 // 4 bricks * 8 voxels
+
+
+struct SectorInfo {
+    // Offset into the Brick Arrays (Occupancy and Data)
+    // We store the INDEX of the brick, not byte offset.
+    uint32_t baseBrickIndex; 
+    
+    uint32_t padding; // Align to 8 bytes for the uint64 following
+    
+    // Mask of which 8x8x8 bricks exist in this 32x32x32 sector.
+    // 64 bits = 4x4x4 bricks.
+    uint64_t brickMask; 
+};
+
+// Struct to tell the GPU which brick to generate
+struct BrickWorkItem {
+    uint32_t sectorIndex;      // Index into the Sector Buffer
+    uint32_t localBrickIndex;  // 0..63 inside that sector
+    uint32_t occupancyOffset;  // Global offset into Occupancy Buffer (index, not byte)
+    uint32_t dataOffset;       // Global offset into Data Buffer (index, not byte)
+};
+
+
+
+
 #endif

@@ -1,59 +1,82 @@
-{    
 
+{
     "version": "0.2.0",
     "configurations": [
-    {
-        "name": "(lldb) Attach",
-        "type": "cppdbg",
-        "request": "attach",
-        "program": "enter program name, for example ${workspaceFolder}/a.out",
-        "MIMode": "lldb"
-    },
-    {
-        "name": "CUDA C/C++: build and debug active file",
-        "type": "cppdbg",
-        "request": "launch",
-        "program": "${fileDirname}/${fileBasenameNoExtension}",
-        "args": [],
-        "stopAtEntry": false,
-        "cwd": "${workspaceFolder}/build/Debug",
-        "environment": [],
-        "externalConsole": false,
-        "setupCommands": [
-            {
-            "description": "Enable pretty-printing for gdb",
-            "text": "-enable-pretty-printing",
-            "ignoreFailures": true
-            }
-        ],
-        "preLaunchTask": "CUDA C/C++: BUILD active file",
-        "miDebuggerPath": "/usr/local/cuda/bin/cuda-gdb"
-        },
         {
-            "name": "C/C++: g++.exe build and debug active file",
-            "type": "cppdbg",
+            "name": "Debug RVGRT (CodeLLDB)",
+            "type": "lldb",
             "request": "launch",
-            "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
+            // IMPORTANT: Point this to the actual executable inside the .app bundle
+            "program": "${workspaceFolder}/build-ninja-debug/RVGRT.app/Contents/MacOS/RVGRT",
             "args": [],
-            "stopAtEntry": false,
-            "cwd": "${fileDirname}",
-            "environment": [],
-            "externalConsole": false,
-            "MIMode": "gdb",
-            "miDebuggerPath": "C:\\mingw64\\bin\\gdb.exe",
-            "setupCommands": [
-                {
-                    "description": "Enable pretty-printing for gdb",
-                    "text": "-enable-pretty-printing",
-                    "ignoreFailures": true
-                },
-                {
-                    "description": "Set Disassembly Flavor to Intel",
-                    "text": "-gdb-set disassembly-flavor intel",
-                    "ignoreFailures": true
-                }
-            ],
-            "preLaunchTask": "C/C++: g++.exe build active file"
+            "cwd": "${workspaceFolder}",
+            "env": {
+                // These help catch GPU command buffer errors early
+                "METAL_DEVICE_WRAPPER_TYPE": "1",
+                "MTL_SHADER_VALIDATION": "1"
+            },
+            // If you don't have a build task set up, remove this line:
+            // "preLaunchTask": "Build" 
         }
     ]
 }
+
+// {    
+
+//     "version": "0.2.0",
+//     "configurations": [
+//     {
+//         "name": "(lldb) Attach",
+//         "type": "cppdbg",
+//         "request": "attach",
+//         "program": "enter program name, for example ${workspaceFolder}/a.out",
+//         "MIMode": "lldb"
+//     },
+//     {
+//         "name": "CUDA C/C++: build and debug active file",
+//         "type": "cppdbg",
+//         "request": "launch",
+//         "program": "${fileDirname}/${fileBasenameNoExtension}",
+//         "args": [],
+//         "stopAtEntry": false,
+//         "cwd": "${workspaceFolder}/build/Debug",
+//         "environment": [],
+//         "externalConsole": false,
+//         "setupCommands": [
+//             {
+//             "description": "Enable pretty-printing for gdb",
+//             "text": "-enable-pretty-printing",
+//             "ignoreFailures": true
+//             }
+//         ],
+//         "preLaunchTask": "CUDA C/C++: BUILD active file",
+//         "miDebuggerPath": "/usr/local/cuda/bin/cuda-gdb"
+//         },
+//         {
+//             "name": "C/C++: g++.exe build and debug active file",
+//             "type": "cppdbg",
+//             "request": "launch",
+//             "program": "${fileDirname}\\${fileBasenameNoExtension}.exe",
+//             "args": [],
+//             "stopAtEntry": false,
+//             "cwd": "${fileDirname}",
+//             "environment": [],
+//             "externalConsole": false,
+//             "MIMode": "gdb",
+//             "miDebuggerPath": "C:\\mingw64\\bin\\gdb.exe",
+//             "setupCommands": [
+//                 {
+//                     "description": "Enable pretty-printing for gdb",
+//                     "text": "-enable-pretty-printing",
+//                     "ignoreFailures": true
+//                 },
+//                 {
+//                     "description": "Set Disassembly Flavor to Intel",
+//                     "text": "-gdb-set disassembly-flavor intel",
+//                     "ignoreFailures": true
+//                 }
+//             ],
+//             "preLaunchTask": "C/C++: g++.exe build active file"
+//         }
+//     ]
+// }

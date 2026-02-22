@@ -81,7 +81,12 @@ kernel void TemporalAccumulation(
 
     // 5. Sample History
     constexpr sampler sLinear(filter::linear);
+
     float3 historyRGB = texHistory.sample(sLinear, prevUV).rgb;
+    if (isnan(historyRGB.x) || isnan(historyRGB.y) || isnan(historyRGB.z))
+        historyRGB = currentRGB;
+
+    //float3 historyRGB = texHistory.sample(sLinear, prevUV).rgb;
     float3 historyYCoCg = RGBToYCoCg(historyRGB);
 
     // 6. CLIP History to Box

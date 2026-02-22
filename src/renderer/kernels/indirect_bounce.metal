@@ -16,8 +16,9 @@ kernel void IndirectBounce(
     texture2d_array<float, access::sample>  textureAtlas[[texture(8)]],
 
     texture3d<uint, access::read> indirection [[texture(3)]],
-    device uint* geoPool    [[buffer(3)]],
-    device uchar* matPool   [[buffer(4)]], 
+    device SectorInfo* sectorBuffer           [[buffer(3)]],
+    device ulong* occupancyBuffer             [[buffer(4)]],
+    device uchar* dataBuffer                  [[buffer(5)]], 
 
     uint2 gid [[thread_position_in_grid]])
 {
@@ -38,6 +39,12 @@ kernel void IndirectBounce(
 
     // Orthonormal Basis
     float3 N = (float3)normal;
+    if (dot(N, N) < 0.5f) {
+        // Degenerate normal — output a small ambient value to avoid NaN in history
+        texRawIndirect.write(float4(0.02f, 0.02f, 0.02f, 1.0f), gid);
+        return;
+    }
+
     float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
     float3 Tangent = normalize(cross(N, helper));
     float3 Bitangent = cross(N, Tangent);
@@ -52,17 +59,17 @@ kernel void IndirectBounce(
     float3 rayDir = normalize(localDir.x * Tangent + localDir.y * N + localDir.z * Bitangent);
 
     // Bounce Trace
-    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, geoPool);
+    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
     
     half3 incomingLight = half3(0.0h);
 
     if (hit.hit) 
     {   
 
-        bool isShadowed = traceShadow(hit.pos + (float3)hit.normal * 0.01f, frame.sunDirection, 1000.0f, indirection, geoPool);
+        bool isShadowed = traceShadow(hit.pos + (float3)hit.normal * 0.01f, frame.sunDirection, 1000.0f, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
         
         float distSq = (depth * depth) + dot(hit.pos - pos, hit.pos - pos); 
-        half3 bouncedAlbedo = sampleTexture(hit.uv, hit.pos, hit.normal, textureAtlas, distSq, indirection, matPool);
+        half3 bouncedAlbedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, distSq);
         
         half NdotL = max(dot(hit.normal, (half3)frame.sunDirection), 0.0h);
         half3 directLightAtHit = c_sunColor * NdotL * (isShadowed ? 0.0h : 1.0h); 

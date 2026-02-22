@@ -99,10 +99,10 @@ kernel void JFA_Commit(
         float3 seedPos = float3(unpackCoord(packedSeed));
         float3 myPos = float3(gid);
 
-        int3 diff = abs(int3(seedPos) - int3(myPos));
-        int chebDist = max(max(diff.x, diff.y), diff.z);
+        //int3 diff = abs(int3(seedPos) - int3(myPos));
+        float dist = length(seedPos - myPos);//(int)sqrtf((float)(diff.x * diff.x + diff.y * diff.y + diff.z * diff.z));
         
-        uint distByte = min((uint)chebDist, 255u);
+        uint distByte = min((uint)dist, 255u);
         
         // Pack into top 8 bits
         // Preserve lower 24 bits (though they should be 0 for empty cells)

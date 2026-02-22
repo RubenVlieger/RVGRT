@@ -16,8 +16,9 @@ kernel void GBufferAndDirectLight(
     constant const FrameData& frame   [[buffer(1)]],
 
     texture3d<uint, access::read> indirection [[texture(5)]],
-    device uint* geoPool    [[buffer(3)]],
-    device uchar* matPool   [[buffer(4)]], 
+    device SectorInfo* sectorBuffer           [[buffer(3)]],
+    device ulong* occupancyBuffer             [[buffer(4)]],
+    device uchar* dataBuffer                  [[buffer(5)]], 
     
     texture2d_array<float, access::sample>  textureAtlas[[texture(8)]],
 
@@ -39,7 +40,7 @@ kernel void GBufferAndDirectLight(
     float startDist = halfDistTex.sample(sLinear, uv).r;
     
 
-    hitInfo hit = trace(camera.position + dir * startDist, dir, indirection, geoPool);
+    hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
 
     float depth = 100000.0f;
     half3 irradiance = half3(0.0h);
@@ -70,7 +71,7 @@ kernel void GBufferAndDirectLight(
         if (isWater) 
         {
             // Water logic mostly unchanged, just update trace/shadow calls
-            albedo = half3(0.04h, 0.1h, 0.25h); 
+            albedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, depth * depth); //half3(0.04h, 0.1h, 0.25h); 
             float nx = fbm3D(hit.pos.x, hit.pos.z, frame.time, 3, 0.06f, 2.0f, 0.6f);
             float ny = fbm3D(hit.pos.z, hit.pos.x, frame.time + 112.0f, 3, 0.06f, 2.0f, 0.6f);
             half3 distNormal = normalize(normal + half3(half(nx)*0.1h, 0.0h, half(ny)*0.1h));
@@ -78,16 +79,16 @@ kernel void GBufferAndDirectLight(
             float3 reflDir = reflect(dir, (float3)distNormal);
             
             // Reflection Trace
-            hitInfo reflHit = trace(hit.pos, reflDir, indirection, geoPool);
+            hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
             
             half3 reflectColor;
             if (reflHit.hit) {
                 float distSq = dot(reflHit.pos - hit.pos, reflHit.pos - hit.pos);
                 // Sample Material
-                half3 rAlbedo = sampleTexture(reflHit.uv, reflHit.pos, reflHit.normal, textureAtlas, distSq, indirection, matPool);
+                half3 rAlbedo = sampleTexture(reflHit.uv, reflHit.matID, reflHit.normal, textureAtlas, distSq);
                 
                 // Reflection Shadow
-                bool rShadow = traceShadow(reflHit.pos + (float3)reflHit.normal * 0.01f, frame.sunDirection, 1000.0f, indirection, geoPool);
+                bool rShadow = traceShadow(reflHit.pos + (float3)reflHit.normal * 0.01f, frame.sunDirection, 1000.0f, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
                 reflectColor = rAlbedo * (rShadow ? 0.05h : (half3)c_sunColor);
             } else {
                 reflectColor = sampleSky(reflDir, frame.sunDirection);
@@ -102,7 +103,7 @@ kernel void GBufferAndDirectLight(
             half fresnel = 0.02h + (0.98h) * pow(1.0h - NdotV, 5.0h);
             
             // Water Self Shadow
-            bool waterShadow = traceShadow(hit.pos, frame.sunDirection, 1000.0f, indirection, geoPool);
+            bool waterShadow = traceShadow(reflHit.pos, frame.sunDirection, 2000.0f, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
             
             irradiance = (reflectColor * fresnel) + (c_sunColor * specular * (waterShadow ? 0.0h : 1.0h));
             irradiance /= (albedo + 0.001h); // Cancel out albedo mult later
@@ -110,9 +111,10 @@ kernel void GBufferAndDirectLight(
         else 
         {            
             // Standard Solid Block
-            albedo = sampleTexture(hit.uv, hit.pos, hit.normal, textureAtlas, depth * depth, indirection, matPool);
+            albedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, depth * depth);
+
             
-            bool isShadowed = traceShadow(hit.pos + (float3)normal * 0.005f, frame.sunDirection, 2000.0f, indirection, geoPool);
+            bool isShadowed = traceShadow(hit.pos + (float3)normal * 0.005f, frame.sunDirection, 2000.0f, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
             
             half NdotL = max(dot(normal, (half3)frame.sunDirection), 0.0h);
             irradiance = c_sunColor * NdotL * (isShadowed ? 0.02h : 1.0h);

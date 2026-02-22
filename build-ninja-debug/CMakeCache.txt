@@ -151,7 +151,7 @@ CMAKE_OBJDUMP:FILEPATH=/usr/bin/objdump
 CMAKE_OSX_ARCHITECTURES:STRING=
 
 //Minimum OS X deployment version
-CMAKE_OSX_DEPLOYMENT_TARGET:STRING=13.0
+CMAKE_OSX_DEPLOYMENT_TARGET:STRING=14.0
 
 //The product will be built against the headers and libraries located
 // inside the indicated SDK.

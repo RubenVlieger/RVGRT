@@ -35,7 +35,8 @@ kernel void VolumetricFog(
     constant const FrameData& frame   [[buffer(1)]],
     
     texture3d<uint, access::read> indirection [[texture(3)]],
-    device uint* geoPool    [[buffer(3)]],
+    device SectorInfo* sectorBuffer           [[buffer(3)]],
+    device ulong* occupancyBuffer             [[buffer(4)]],
 
     uint2 gid [[thread_position_in_grid]])
 {
@@ -83,7 +84,7 @@ kernel void VolumetricFog(
         // Skip shadow check for first few meters to prevent "face self-shadowing" artifacts
         bool isShadowed = false;
         if (currentT > 2.0f) { 
-            isShadowed = traceShadowCoarse(pos, frame.sunDirection, indirection);
+            isShadowed = traceShadow(pos, frame.sunDirection, 500.0f, indirection, sectorBuffer, occupancyBuffer, 0);
         }
 
         if (!isShadowed) {

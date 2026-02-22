@@ -63,7 +63,7 @@ build CMakeFiles/RVGRT.dir/src/main.cpp.o: CXX_COMPILER__RVGRT_unscanned_Debug /
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/main.cpp.o.d
-  FLAGS = -g -std=gnu++20 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++20 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src
@@ -74,7 +74,7 @@ build CMakeFiles/RVGRT.dir/src/State.cpp.o: CXX_COMPILER__RVGRT_unscanned_Debug 
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/State.cpp.o.d
-  FLAGS = -g -std=gnu++20 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++20 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src
@@ -85,7 +85,7 @@ build CMakeFiles/RVGRT.dir/src/Character.cpp.o: CXX_COMPILER__RVGRT_unscanned_De
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/Character.cpp.o.d
-  FLAGS = -g -std=gnu++20 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++20 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src
@@ -96,7 +96,7 @@ build CMakeFiles/RVGRT.dir/src/Camera.cpp.o: CXX_COMPILER__RVGRT_unscanned_Debug
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/Camera.cpp.o.d
-  FLAGS = -g -std=gnu++20 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++20 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src
@@ -107,7 +107,7 @@ build CMakeFiles/RVGRT.dir/src/platform/macos_main.mm.o: OBJCXX_COMPILER__RVGRT_
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/platform/macos_main.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/platform
@@ -118,7 +118,7 @@ build CMakeFiles/RVGRT.dir/src/platform/MacOSPlatform.mm.o: OBJCXX_COMPILER__RVG
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/platform/MacOSPlatform.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/platform
@@ -129,7 +129,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/MetalDevice.mm.o: OBJCXX_COMPILER__RVGRT
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/renderer/MetalDevice.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/renderer
@@ -140,7 +140,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/MetalRenderer.mm.o: OBJCXX_COMPILER__RVG
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/renderer/MetalRenderer.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/renderer
@@ -151,7 +151,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/MetalBuffer.mm.o: OBJCXX_COMPILER__RVGRT
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/renderer/MetalBuffer.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/renderer
@@ -162,7 +162,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/TexturePack_impl.mm.o: OBJCXX_COMPILER__
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/renderer/TexturePack_impl.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/renderer
@@ -173,7 +173,7 @@ build CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o: OBJCXX_COMPILER__RVGRT_un
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/platform
@@ -184,7 +184,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/MaterialMap.mm.o: OBJCXX_COMPILER__RVGRT
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/renderer/MaterialMap.mm.o.d
-  FLAGS = -g -std=gnu++17 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++17 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/renderer
@@ -195,7 +195,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o: CXX_COMPILE
   CONFIG = Debug
   DEFINES = -D_DEBUG
   DEP_FILE = CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o.d
-  FLAGS = -g -std=gnu++20 -mmacosx-version-min=13.0 -fobjc-arc
+  FLAGS = -g -std=gnu++20 -mmacosx-version-min=14.0 -fobjc-arc
   INCLUDES = -I/Users/rubenvlieger/Documents/RVGRT/include
   OBJECT_DIR = CMakeFiles/RVGRT.dir
   OBJECT_FILE_DIR = CMakeFiles/RVGRT.dir/src/renderer
@@ -212,7 +212,7 @@ build CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o: CXX_COMPILE
 
 build RVGRT.app/Contents/MacOS/RVGRT: CXX_EXECUTABLE_LINKER__RVGRT_Debug CMakeFiles/RVGRT.dir/src/main.cpp.o CMakeFiles/RVGRT.dir/src/State.cpp.o CMakeFiles/RVGRT.dir/src/Character.cpp.o CMakeFiles/RVGRT.dir/src/Camera.cpp.o CMakeFiles/RVGRT.dir/src/platform/macos_main.mm.o CMakeFiles/RVGRT.dir/src/platform/MacOSPlatform.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalDevice.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalRenderer.mm.o CMakeFiles/RVGRT.dir/src/renderer/MetalBuffer.mm.o CMakeFiles/RVGRT.dir/src/renderer/TexturePack_impl.mm.o CMakeFiles/RVGRT.dir/src/platform/GameView.mm.o CMakeFiles/RVGRT.dir/src/renderer/MaterialMap.mm.o CMakeFiles/RVGRT.dir/src/renderer/CudaRenderer_mac_stub.cpp.o || BuildMetalShaders
   CONFIG = Debug
-  FLAGS = -g -mmacosx-version-min=13.0
+  FLAGS = -g -mmacosx-version-min=14.0
   LINK_FLAGS = -Wl,-search_paths_first -Wl,-headerpad_max_install_names
   LINK_LIBRARIES = -framework Cocoa  -framework Metal  -framework MetalKit  -framework QuartzCore  -framework MetalFX
   OBJECT_DIR = CMakeFiles/RVGRT.dir
