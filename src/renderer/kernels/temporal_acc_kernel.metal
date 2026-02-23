@@ -39,8 +39,18 @@ kernel void TemporalAccumulation(
     if (gid.x >= texAccum.get_width() || gid.y >= texAccum.get_height()) return;
 
     // 1. Read Current Frame Color (Direct + Indirect)
-    float3 currentRGB = texDirect.read(gid).rgb + texRawIndirect.read(gid).rgb;
+    float3 currentDirect = texDirect.read(gid).rgb;
+    float3 currentIndirect = texRawIndirect.read(gid).rgb;
+    float3 currentRGB = currentDirect + currentIndirect;
     
+    if (any(isnan(currentDirect)) || any(isinf(currentDirect))) {
+        texAccum.write(float4(1.0, 0.0, 1.0, 1.0), gid); // Magenta for direct NaN
+        return;
+    }
+    if (any(isnan(currentIndirect)) || any(isinf(currentIndirect))) {
+        texAccum.write(float4(0.0, 1.0, 1.0, 1.0), gid); // Cyan for indirect NaN
+        return;
+    }    
     // 2. Motion and UVs
     float2 motion = texMotion.read(gid).xy;
     float velMag = length(motion);

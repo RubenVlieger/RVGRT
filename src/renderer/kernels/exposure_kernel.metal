@@ -92,8 +92,8 @@ kernel void ComputeExposure(
         float currentSceneLum = exp(avgLogLum);
         
         // Clamp extreme values (prevent complete black or infinity)
-        currentSceneLum = clamp(currentSceneLum, 2.5f, 60.0f);
-        
+        currentSceneLum = clamp(currentSceneLum, 0.01f, 60.0f);
+
         // Temporal Adaptation (Eye Adaptation)
         // Lerp between previous frame luminance and current target
         // Dark to Bright adapts faster than Bright to Dark (usually)
