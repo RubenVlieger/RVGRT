@@ -239,28 +239,13 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
   // Clip ray to world AABB
   float3 startPos = ClipRayToAABB(rayPos, safeDir, invDir, worldMin, worldMax);
 
-  float3 tStart;
-  tStart.x =
-      ((safeDir.x >= 0 ? 1.0f : 0.0f) - (startPos.x - floor(startPos.x))) *
-      invDir.x;
-  tStart.y =
-      ((safeDir.y >= 0 ? 1.0f : 0.0f) - (startPos.y - floor(startPos.y))) *
-      invDir.y;
-  tStart.z =
-      ((safeDir.z >= 0 ? 1.0f : 0.0f) - (startPos.z - floor(startPos.z))) *
-      invDir.z;
-
-  float3 currPos = startPos + safeDir * 0.001f;
-  float3 sideDist = float3(0.0f);
-  float3 worldOriginF = floor(startPos);
+  int3 voxelPos = int3(floor(startPos));
 
   // Traversal loop
   int maxIters = 512;
 
   for (int i = 0; i < maxIters; ++i) {
     hit.its++;
-
-    int3 voxelPos = int3(floor(currPos));
 
     // Bounds check (using loaded region)
     if (float(voxelPos.x) < worldMin.x || float(voxelPos.y) < worldMin.y ||
@@ -270,6 +255,7 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
     }
 
     uint8_t matID = 0;
+    int3 originalVoxelPos = voxelPos;
 
     bool stepped = GetStepPos(voxelPos, safeDir, indirection, sectors,
                               occupancy, data, sectorMasks, worldOrigin, matID);
@@ -309,13 +295,38 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
       return hit;
     }
 
-    float3 alignedF = float3(voxelPos) - worldOriginF;
-    sideDist.x = tStart.x + alignedF.x * invDir.x;
-    sideDist.y = tStart.y + alignedF.y * invDir.y;
-    sideDist.z = tStart.z + alignedF.z * invDir.z;
+    float3 nextBoundary;
+    nextBoundary.x = (safeDir.x >= 0) ? (float(voxelPos.x) + 1.0f) : float(voxelPos.x);
+    nextBoundary.y = (safeDir.y >= 0) ? (float(voxelPos.y) + 1.0f) : float(voxelPos.y);
+    nextBoundary.z = (safeDir.z >= 0) ? (float(voxelPos.z) + 1.0f) : float(voxelPos.z);
 
-    float tmin = min(min(sideDist.x, sideDist.y), sideDist.z) + 0.001f;
-    currPos = startPos + tmin * safeDir;
+    float3 tMax;
+    tMax.x = (nextBoundary.x - startPos.x) * invDir.x;
+    tMax.y = (nextBoundary.y - startPos.y) * invDir.y;
+    tMax.z = (nextBoundary.z - startPos.z) * invDir.z;
+
+    float tmin = min(min(tMax.x, tMax.y), tMax.z);
+
+    int3 nextVoxelPos;
+    nextVoxelPos.x = int(floor(startPos.x + tmin * safeDir.x));
+    nextVoxelPos.y = int(floor(startPos.y + tmin * safeDir.y));
+    nextVoxelPos.z = int(floor(startPos.z + tmin * safeDir.z));
+
+    // Clamping to avoid backwards evaluation drift from float precision limits
+    nextVoxelPos.x = (safeDir.x >= 0) ? max(nextVoxelPos.x, originalVoxelPos.x) : min(nextVoxelPos.x, originalVoxelPos.x);
+    nextVoxelPos.y = (safeDir.y >= 0) ? max(nextVoxelPos.y, originalVoxelPos.y) : min(nextVoxelPos.y, originalVoxelPos.y);
+    nextVoxelPos.z = (safeDir.z >= 0) ? max(nextVoxelPos.z, originalVoxelPos.z) : min(nextVoxelPos.z, originalVoxelPos.z);
+
+    // Explicitly step the exact integer crossed boundary
+    if (tMax.x <= tMax.y && tMax.x <= tMax.z) {
+        nextVoxelPos.x = voxelPos.x + (safeDir.x >= 0 ? 1 : -1);
+    } else if (tMax.y <= tMax.z) {
+        nextVoxelPos.y = voxelPos.y + (safeDir.y >= 0 ? 1 : -1);
+    } else {
+        nextVoxelPos.z = voxelPos.z + (safeDir.z >= 0 ? 1 : -1);
+    }
+
+    voxelPos = nextVoxelPos;
   }
 
   return hit;
@@ -341,25 +352,10 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
 
   float3 startPos = ClipRayToAABB(rayPos, safeDir, invDir, worldMin, worldMax);
 
-  float3 tStart;
-  tStart.x =
-      ((safeDir.x >= 0 ? 1.0f : 0.0f) - (startPos.x - floor(startPos.x))) *
-      invDir.x;
-  tStart.y =
-      ((safeDir.y >= 0 ? 1.0f : 0.0f) - (startPos.y - floor(startPos.y))) *
-      invDir.y;
-  tStart.z =
-      ((safeDir.z >= 0 ? 1.0f : 0.0f) - (startPos.z - floor(startPos.z))) *
-      invDir.z;
-
-  float3 currPos = startPos + safeDir * 0.001f;
-  float3 sideDist = float3(0.0f);
-  float3 worldOriginF = floor(startPos);
-
+  int3 voxelPos = int3(floor(startPos));
   float maxDistSq = maxDist * maxDist;
 
   for (int i = 0; i < maxIters; ++i) {
-    int3 voxelPos = int3(floor(currPos));
 
     // Bounds check
     if (float(voxelPos.x) < worldMin.x || float(voxelPos.y) < worldMin.y ||
@@ -369,6 +365,7 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
     }
 
     uint8_t matID = 0;
+    int3 originalVoxelPos = voxelPos;
 
     bool stepped = GetStepPos(voxelPos, safeDir, indirection, sectors,
                               occupancy, data, sectorMasks, worldOrigin, matID);
@@ -382,13 +379,36 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
       return false;
     }
 
-    float3 alignedF = float3(voxelPos) - worldOriginF;
-    sideDist.x = tStart.x + alignedF.x * invDir.x;
-    sideDist.y = tStart.y + alignedF.y * invDir.y;
-    sideDist.z = tStart.z + alignedF.z * invDir.z;
+    float3 nextBoundary;
+    nextBoundary.x = (safeDir.x >= 0) ? (float(voxelPos.x) + 1.0f) : float(voxelPos.x);
+    nextBoundary.y = (safeDir.y >= 0) ? (float(voxelPos.y) + 1.0f) : float(voxelPos.y);
+    nextBoundary.z = (safeDir.z >= 0) ? (float(voxelPos.z) + 1.0f) : float(voxelPos.z);
 
-    float tmin = min(min(sideDist.x, sideDist.y), sideDist.z) + 0.001f;
-    currPos = startPos + tmin * safeDir;
+    float3 tMax;
+    tMax.x = (nextBoundary.x - startPos.x) * invDir.x;
+    tMax.y = (nextBoundary.y - startPos.y) * invDir.y;
+    tMax.z = (nextBoundary.z - startPos.z) * invDir.z;
+
+    float tmin = min(min(tMax.x, tMax.y), tMax.z);
+
+    int3 nextVoxelPos;
+    nextVoxelPos.x = int(floor(startPos.x + tmin * safeDir.x));
+    nextVoxelPos.y = int(floor(startPos.y + tmin * safeDir.y));
+    nextVoxelPos.z = int(floor(startPos.z + tmin * safeDir.z));
+
+    nextVoxelPos.x = (safeDir.x >= 0) ? max(nextVoxelPos.x, originalVoxelPos.x) : min(nextVoxelPos.x, originalVoxelPos.x);
+    nextVoxelPos.y = (safeDir.y >= 0) ? max(nextVoxelPos.y, originalVoxelPos.y) : min(nextVoxelPos.y, originalVoxelPos.y);
+    nextVoxelPos.z = (safeDir.z >= 0) ? max(nextVoxelPos.z, originalVoxelPos.z) : min(nextVoxelPos.z, originalVoxelPos.z);
+
+    if (tMax.x <= tMax.y && tMax.x <= tMax.z) {
+        nextVoxelPos.x = voxelPos.x + (safeDir.x >= 0 ? 1 : -1);
+    } else if (tMax.y <= tMax.z) {
+        nextVoxelPos.y = voxelPos.y + (safeDir.y >= 0 ? 1 : -1);
+    } else {
+        nextVoxelPos.z = voxelPos.z + (safeDir.z >= 0 ? 1 : -1);
+    }
+
+    voxelPos = nextVoxelPos;
   }
 
   return false;

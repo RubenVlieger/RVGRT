@@ -66,12 +66,11 @@ kernel void IndirectBounce(
 
     if (hit.hit) 
     {   
-
         // Indirect bounce shadow: relatively short range and we can afford fewer iterations.
         bool isShadowed = traceShadow(hit.pos + (float3)hit.normal * 0.01f,
                                       frame.sunDirection,
-                                      1000.0f,
-                                      96,
+                                      2000.0f,
+                                      64,
                                       indirection,
                                       sectorBuffer,
                                       occupancyBuffer,
