@@ -37,6 +37,7 @@ kernel void VolumetricFog(
     texture3d<uint, access::read> indirection [[texture(3)]],
     device SectorInfo* sectorBuffer           [[buffer(3)]],
     device ulong* occupancyBuffer             [[buffer(4)]],
+    device ulong* sectorMaskBuffer            [[buffer(6)]],
 
     uint2 gid [[thread_position_in_grid]])
 {
@@ -65,7 +66,7 @@ kernel void VolumetricFog(
     // Use IGN for dithering. It produces a checkerboard pattern that TAA resolves perfectly.
     float dither = InterleavedGradientNoise(float2(gid) + float2(frame.time * 5.588f));
     
-    const int STEPS = 16; 
+    const int STEPS = 10; 
     float stepSize = rayLength / float(STEPS);
     float currentT = stepSize * dither; 
     
@@ -83,8 +84,20 @@ kernel void VolumetricFog(
         
         // Skip shadow check for first few meters to prevent "face self-shadowing" artifacts
         bool isShadowed = false;
-        if (currentT > 2.0f) { 
-            isShadowed = traceShadow(pos, frame.sunDirection, 500.0f, indirection, sectorBuffer, occupancyBuffer, 0);
+        // If the sun is almost behind the view ray, the phase term is very small;
+        // in that case we can safely skip the expensive shadow query.
+        // Also skip for very far samples where fog contribution is negligible.
+        if (currentT > 2.0f && currentT < 200.0f && phase > 0.04f) { 
+            // Volumetric shadows: shorter max distance and fewer traversal iterations.
+            isShadowed = traceShadow(pos,
+                                     frame.sunDirection,
+                                     500.0f,
+                                     48,
+                                     indirection,
+                                     sectorBuffer,
+                                     occupancyBuffer,
+                                     0,
+                                     sectorMaskBuffer);
         }
 
         if (!isShadowed) {

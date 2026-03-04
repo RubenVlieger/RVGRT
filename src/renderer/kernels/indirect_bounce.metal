@@ -18,7 +18,8 @@ kernel void IndirectBounce(
     texture3d<uint, access::read> indirection [[texture(3)]],
     device SectorInfo* sectorBuffer           [[buffer(3)]],
     device ulong* occupancyBuffer             [[buffer(4)]],
-    device uchar* dataBuffer                  [[buffer(5)]], 
+    device uchar* dataBuffer                  [[buffer(5)]],
+    device ulong* sectorMaskBuffer            [[buffer(6)]],
 
     uint2 gid [[thread_position_in_grid]])
 {
@@ -59,14 +60,23 @@ kernel void IndirectBounce(
     float3 rayDir = normalize(localDir.x * Tangent + localDir.y * N + localDir.z * Bitangent);
 
     // Bounce Trace
-    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
+    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer);
     
     half3 incomingLight = half3(0.0h);
 
     if (hit.hit) 
     {   
 
-        bool isShadowed = traceShadow(hit.pos + (float3)hit.normal * 0.01f, frame.sunDirection, 1000.0f, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
+        // Indirect bounce shadow: relatively short range and we can afford fewer iterations.
+        bool isShadowed = traceShadow(hit.pos + (float3)hit.normal * 0.01f,
+                                      frame.sunDirection,
+                                      1000.0f,
+                                      96,
+                                      indirection,
+                                      sectorBuffer,
+                                      occupancyBuffer,
+                                      dataBuffer,
+                                      sectorMaskBuffer);
         
         float distSq = (depth * depth) + dot(hit.pos - pos, hit.pos - pos); 
         half3 bouncedAlbedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, distSq);

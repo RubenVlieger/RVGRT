@@ -137,7 +137,7 @@ kernel void Composite(
     // Standard Exposure Formula:
     // Middle Grey (0.18 or 0.5 depending on calibration) / Average Luminance
     // We adjust the key value (1.0f) to taste.
-    float exposureScale = 1.4f / (max(avgLum, 0.001f));
+    float exposureScale = 0.15f / (max(avgLum, 0.001f));
     
     linearColor *= exposureScale;
 

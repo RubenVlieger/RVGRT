@@ -1,7 +1,6 @@
 #pragma once
 
 #include "ShaderTypes.h"
-#include "raytracing_functions.h"
 #include "renderer/ShaderTypes.h"
 #include "renderer/hitInfo.h"
 #include "tables.h"
@@ -9,30 +8,47 @@
 
 using namespace metal;
 
-// =================================================================================
-// LOW-LEVEL HELPERS
-// =================================================================================
-
-// Linear Index for 4x4x4 blocks (XZY order)
-// Maps (0..3, 0..3, 0..3) -> 0..63
 inline uint GetLinearIndex4(uint3 p) {
   return (p.x & 3) + ((p.z & 3) << 2) + ((p.y & 3) << 4);
 }
 
-// 64-bit Population Count (Metal Intrinsic wrapper)
-inline int popcnt64(ulong mask) { return popcount(mask); }
-
-// Create a mask of bits lower than the given index (for prefix sum calculation)
-inline ulong GetLowerMask(int index) {
-  // If index is 0, we want 0. If index is 63, we want bits 0-62.
-  // 1UL << 64 is undefined behavior, so handle carefully if needed,
-  // but index is always < 64 here.
-  return (1UL << index) - 1UL;
+// Cheaper approximation of 64-bit bit tests.
+inline bool BitTestHalf64(ulong value, uint shift, uint mask) {
+  uint low = shift < 32 ? uint(value) : uint(value >> 32);
+  return (low >> (shift & 31) & mask) != 0;
 }
 
-// -----------------------------------------------------------------------------
+inline int GetIsotropicLOD(ulong mask, uint idx) {
+  if (mask == 0) {
+    return 4;
+  }
+  uint currHalf = idx < 32 ? uint(mask) : uint(mask >> 32);
+  if ((currHalf >> (idx & 0x0Au) & 0x00330033u) == 0) {
+    return 2;
+  }
+  return 1;
+}
+
+// 64-bit Population Count
+inline int popcnt64(ulong mask) { return popcount(mask); }
+
+// Prefix popcount: count bits set below the given index
+inline uint prefix_popcnt64(ulong mask, uint width) {
+  uint lo = uint(mask);
+  uint count = 0;
+
+  if (width >= 32) {
+    count = popcount(lo);
+    lo = uint(mask >> 32);
+  }
+  uint m = 1u << (width & 31u);
+  count += popcount(lo & (m - 1u));
+  return count;
+}
+
+// =================================================================================
 // GEOMETRY INTERSECTIONS
-// -----------------------------------------------------------------------------
+// =================================================================================
 
 // Robust Ray-AABB intersection. Returns the entry point clamped to the box.
 inline float3 ClipRayToAABB(float3 origin, float3 dir, float3 invDir,
@@ -45,190 +61,149 @@ inline float3 ClipRayToAABB(float3 origin, float3 dir, float3 invDir,
   float tNear = max(max(tmin.x, tmin.y), tmin.z);
   float tFar = min(min(tmax.x, tmax.y), tmax.z);
 
-  // If inside or intersecting
   if (tNear <= tFar && tFar > 0) {
-    // We move just barely inside the box
     return origin + dir * max(tNear, 0.0f);
   }
   return origin;
 }
 
-// Parametric Alignment: Advances the current integer coordinate to the next
-// cell boundary along the ray direction by computing intersections with the
-// cell's AABB.
-inline void StepEmptyCell(thread int3 &ipos, float3 rayPos, float3 invDir,
-                          float3 dir, int cellSize) {
-  int3 cellStart = ipos & ~(cellSize - 1);
-  int3 cellEnd = cellStart + cellSize;
-
-  float3 tMax;
-  tMax.x = (dir.x > 0.0f)
-               ? (cellEnd.x - rayPos.x) * invDir.x
-               : ((dir.x < 0.0f) ? (cellStart.x - rayPos.x) * invDir.x : 1e20f);
-  tMax.y = (dir.y > 0.0f)
-               ? (cellEnd.y - rayPos.y) * invDir.y
-               : ((dir.y < 0.0f) ? (cellStart.y - rayPos.y) * invDir.y : 1e20f);
-  tMax.z = (dir.z > 0.0f)
-               ? (cellEnd.z - rayPos.z) * invDir.z
-               : ((dir.z < 0.0f) ? (cellStart.z - rayPos.z) * invDir.z : 1e20f);
-
-  // Directional spatial epsilons
-  // Pushes coordinates strictly past the grid boundary so floor() snaps to the
-  // correct voxel
-  float3 eps;
-  eps.x = (dir.x > 1e-6f) ? 1e-4f : ((dir.x < -1e-6f) ? -1e-4f : 0.0f);
-  eps.y = (dir.y > 1e-6f) ? 1e-4f : ((dir.y < -1e-6f) ? -1e-4f : 0.0f);
-  eps.z = (dir.z > 1e-6f) ? 1e-4f : ((dir.z < -1e-6f) ? -1e-4f : 0.0f);
-
-  if (tMax.x < tMax.y && tMax.x < tMax.z) {
-    ipos.x = (dir.x > 0.0f) ? cellEnd.x : cellStart.x - 1;
-    ipos.y = int(floor(rayPos.y + tMax.x * dir.y + eps.y));
-    ipos.z = int(floor(rayPos.z + tMax.x * dir.z + eps.z));
-  } else if (tMax.y < tMax.z) {
-    ipos.y = (dir.y > 0.0f) ? cellEnd.y : cellStart.y - 1;
-    ipos.x = int(floor(rayPos.x + tMax.y * dir.x + eps.x));
-    ipos.z = int(floor(rayPos.z + tMax.y * dir.z + eps.z));
-  } else {
-    ipos.z = (dir.z > 0.0f) ? cellEnd.z : cellStart.z - 1;
-    ipos.x = int(floor(rayPos.x + tMax.z * dir.x + eps.x));
-    ipos.y = int(floor(rayPos.y + tMax.z * dir.y + eps.y));
-  }
+// Aligns ipos to the cell boundary in the direction the ray is travelling.
+// For positive direction: align to upper boundary (ipos | cellMask)
+// For negative direction: align to lower boundary (ipos & ~cellMask)
+// This is MUCH cheaper than parametric StepPastCell (pure integer ops).
+inline void AlignToCellBoundaries(thread int3 &ipos, float3 dir, int lod) {
+  int cellMask = lod - 1;
+  ipos.x = (dir.x < 0) ? (ipos.x & ~cellMask) : (ipos.x | cellMask);
+  ipos.y = (dir.y < 0) ? (ipos.y & ~cellMask) : (ipos.y | cellMask);
+  ipos.z = (dir.z < 0) ? (ipos.z & ~cellMask) : (ipos.z | cellMask);
 }
-
-// =================================================================================
-// CORE BIT-SCANNING STEPPER
-// =================================================================================
 
 /**
  * Checks the hierarchy at the current voxel position `ipos`.
- * If empty, advances `ipos` by the size of the empty region (1, 8, or 32).
- * If solid, returns true and fills `outMatID`.
+ * If a voxel is found, returns false (hit candidate) and fills outMatID.
+ * If empty, aligns `ipos` to the cell boundary using AlignToCellBoundaries.
+ * Returns true if empty (stepped), false if solid (hit).
+ *
+ * The outer ray-march loop handles actual position advancement.
  */
-inline bool GetStepPos(thread int3 &ipos, float3 rayPos, float3 invDir,
-                       float3 dir, texture3d<uint, access::read> indirection,
+inline bool GetStepPos(thread int3 &ipos, float3 dir,
+                       texture3d<uint, access::read> indirection,
                        device SectorInfo *sectors, device ulong *occupancy,
-                       device uchar *data, thread uint8_t &outMatID) {
-  // Guard: Negative coordinates wrap to huge uint values — catch early
+                       device uchar *data, device ulong *sectorMasks,
+                       thread uint8_t &outMatID) {
+  // Guard: Negative coordinates
   if (ipos.x < 0 || ipos.y < 0 || ipos.z < 0) {
-    ipos += int3(sign(dir) * 32.0f);
-    return false;
+    AlignToCellBoundaries(ipos, dir, 32);
+    return true;
   }
 
   uint3 pos = uint3(ipos);
 
-  // 1. Level 1: Sector (32x32x32)
-  uint3 sectorPos = pos >> 5; // Divide by 32
+  // --- Level 1: Sector lookup (32x32x32) ---
+  uint3 sectorPos = pos >> 5;
 
-  if (sectorPos.x >= indirection.get_width() ||
-      sectorPos.y >= indirection.get_height() ||
-      sectorPos.z >= indirection.get_depth()) {
-    // Escaped world bounds
-    ipos += int3(dir * 32.0f);
-    return false;
+  uint indW = indirection.get_width();
+  uint indH = indirection.get_height();
+  uint indD = indirection.get_depth();
+
+  if (sectorPos.x >= indW || sectorPos.y >= indH || sectorPos.z >= indD) {
+    AlignToCellBoundaries(ipos, dir, 32);
+    return true;
   }
 
   uint sectorIndex = indirection.read(sectorPos).r;
 
-  // Empty Sector? Skip 32.
+  // Empty sector? Check super-sector mask for bigger skip.
   if (sectorIndex == 0) {
-    int3 prevPos = ipos;
-    StepEmptyCell(ipos, rayPos, invDir, dir, 32);
-    // Stuck detection: if ipos didn't change, force advance
-    if (ipos.x == prevPos.x && ipos.y == prevPos.y && ipos.z == prevPos.z) {
-      ipos.x += (dir.x > 0.0f) ? 32 : ((dir.x < 0.0f) ? -32 : 0);
-      ipos.y += (dir.y > 0.0f) ? 32 : ((dir.y < 0.0f) ? -32 : 0);
-      ipos.z += (dir.z > 0.0f) ? 32 : ((dir.z < 0.0f) ? -32 : 0);
+#if 0 // Sector masks disabled for testing
+    if (sectorMasks != nullptr) {
+      uint3 superPos = sectorPos >> 2; // 4x4x4 sectors per super-sector
+      uint superSectorsX = (indW + 3) / 4;
+      uint superSectorsZ = (indD + 3) / 4;
+      uint superIdx = superPos.x + superPos.z * superSectorsX +
+                       superPos.y * superSectorsX * superSectorsZ;
+
+      ulong superMask = sectorMasks[superIdx];
+
+      uint3 localSector = sectorPos & 3;
+      uint localIdx = GetLinearIndex4(localSector);
+
+      uint dirOctant = (dir.x >= 0 ? 1u : 0u) + (dir.y >= 0 ? 2u : 0u) +
+                        (dir.z >= 0 ? 4u : 0u);
+      ulong maskedSuper =
+          superMask & RayMaskOptimizationLUT[localIdx + dirOctant * 64];
+      int superLod = GetIsotropicLOD(maskedSuper, localIdx);
+
+      // Scale: each super-sector cell = 32 voxels
+      AlignToCellBoundaries(ipos, dir, superLod * 32);
+    } else {
+      AlignToCellBoundaries(ipos, dir, 32);
     }
-    return false;
+#else
+    AlignToCellBoundaries(ipos, dir, 32);
+#endif
+    return true;
   }
 
-  // Load Sector Data
-  // Note: Indirection is 1-based.
+  // Load sector data (1-based indexing)
   SectorInfo sec = sectors[sectorIndex];
-  uint64_t brickMask = sec.brickMask; // Which 8^3 bricks exist?
+  uint64_t brickMask = sec.brickMask;
 
-  // 2. Level 2: Brick (8x8x8)
-  // Get coordinate within the sector (0..3)
-  uint3 brickRel = (pos >> 3) & 3;
+  // --- Level 2: Brick lookup (8x8x8) ---
+  uint3 brickRel = (pos >> 3) & 3; // position within sector's 4x4x4 brick grid
   uint brickLinearIdx = GetLinearIndex4(brickRel);
 
-  // Is the Brick Bit set?
-  if ((brickMask >> brickLinearIdx) & 1) {
+  // Ray direction octant for LUT (positive dir = 1 bit)
+  uint dirOctant =
+      (dir.x >= 0 ? 1u : 0u) + (dir.y >= 0 ? 2u : 0u) + (dir.z >= 0 ? 4u : 0u);
 
-    // Brick Exists. We need to check sub-bricks (4x4x4).
+  if (BitTestHalf64(brickMask, brickLinearIdx, 1)) {
+    // Brick exists — drill down to voxel level
 
-    // Calculate offset into Occupancy Buffer.
-    // We count how many set bits are *before* our current brick index.
-    ulong maskPre = GetLowerMask(brickLinearIdx);
-    int packedBrickOffset = popcnt64(brickMask & maskPre);
-
-    // Base index for this brick's 8 uint64 masks
+    // Calculate which brick this is in the packed array
+    uint packedBrickOffset = prefix_popcnt64(brickMask, brickLinearIdx);
     uint64_t occIndexBase = (sec.baseBrickIndex + packedBrickOffset) * 8;
 
-    // 3. Level 3: Sub-Brick (4x4x4)
-    // A brick (8^3) has 8 sub-bricks (4^3).
-    // Get sub-brick coordinate (0..1) within brick
+    // --- Level 3: Sub-brick (4x4x4) occupancy mask ---
     uint3 subPos = (pos >> 2) & 1;
-    uint subIdx =
-        subPos.x + (subPos.z * 2) + (subPos.y * 4); // XZY order for sub-chunks
+    uint subIdx = subPos.x + (subPos.z * 2) + (subPos.y * 4); // XZY order
 
     ulong voxMask = occupancy[occIndexBase + subIdx];
 
-    // --- BIT SCAN OPTIMIZATION ---
-    // We assume the ray is moving. We mask out voxels "behind" us or
-    // irrelevant to the ray direction using the LUT.
-    // Ray Octant: x<0=1, y<0=2, z<0=4
-    uint dirOctant =
-        (dir.x < 0 ? 1 : 0) + (dir.y < 0 ? 2 : 0) + (dir.z < 0 ? 4 : 0);
-
-    // 4. Level 4: Voxel (1x1x1)
-    uint3 vRel = pos & 3; // Coordinate within 4x4x4 sub-brick
+    // --- Level 4: Voxel (1x1x1) ---
+    uint3 vRel = pos & 3;
     uint vIdx = GetLinearIndex4(vRel);
 
-    // Check if the SPECIFIC voxel we are in is solid
-    if ((voxMask >> vIdx) & 1) {
-      // HIT!
-      // Calculate data offset:
-      // (Base + BrickOffset) * 512 bytes + (SubBrickIndex * 64) + VoxelIndex
+    // Check if this specific voxel is solid
+    if (BitTestHalf64(voxMask, vIdx, 1)) {
+      // HIT! Read material data.
       if (data != nullptr) {
         uint dataIdx = (sec.baseBrickIndex + packedBrickOffset) * 512 +
                        (subIdx * 64) + vIdx;
         outMatID = data[dataIdx];
       } else {
-        outMatID = 1; // Default valid MatID for shadow queries
+        outMatID = 1;
       }
-      return true;
+      return false; // Hit
     }
 
-    // We are in a solid brick, but an empty voxel.
-    // Step 1 voxel, with stuck detection.
-    {
-      int3 prevPos = ipos;
-      StepEmptyCell(ipos, rayPos, invDir, dir, 1);
-      // Stuck detection: if ipos didn't change, force advance by 1
-      if (ipos.x == prevPos.x && ipos.y == prevPos.y && ipos.z == prevPos.z) {
-        float3 ad = abs(dir);
-        if (ad.x >= ad.y && ad.x >= ad.z)
-          ipos.x += (dir.x > 0.0f) ? 1 : -1;
-        else if (ad.y >= ad.z)
-          ipos.y += (dir.y > 0.0f) ? 1 : -1;
-        else
-          ipos.z += (dir.z > 0.0f) ? 1 : -1;
-      }
-    }
-    return false;
+    // Empty voxel inside a solid brick.
+    // Apply ray mask LUT and determine LOD for skip distance.
+    ulong maskedOcc = voxMask & RayMaskOptimizationLUT[vIdx + dirOctant * 64];
+    int lod = GetIsotropicLOD(maskedOcc, vIdx);
+
+    AlignToCellBoundaries(ipos, dir, lod); // 1, 2, or 4 voxels
+    return true;
 
   } else {
-    // Empty Brick? Skip 8.
-    int3 prevPos = ipos;
-    StepEmptyCell(ipos, rayPos, invDir, dir, 8);
-    // Stuck detection: if ipos didn't change, force advance
-    if (ipos.x == prevPos.x && ipos.y == prevPos.y && ipos.z == prevPos.z) {
-      ipos.x += (dir.x > 0.0f) ? 8 : ((dir.x < 0.0f) ? -8 : 0);
-      ipos.y += (dir.y > 0.0f) ? 8 : ((dir.y < 0.0f) ? -8 : 0);
-      ipos.z += (dir.z > 0.0f) ? 8 : ((dir.z < 0.0f) ? -8 : 0);
-    }
-    return false;
+    // Empty brick. Apply ray mask LUT at brick scale and determine LOD.
+    ulong maskedBrick =
+        brickMask & RayMaskOptimizationLUT[brickLinearIdx + dirOctant * 64];
+    int lod = GetIsotropicLOD(maskedBrick, brickLinearIdx);
+
+    // Scale by brick size (8 voxels per brick)
+    AlignToCellBoundaries(ipos, dir, lod * 8); // 8, 16, or 32 voxels
+    return true;
   }
 }
 
@@ -239,64 +214,79 @@ inline bool GetStepPos(thread int3 &ipos, float3 rayPos, float3 invDir,
 inline hitInfo trace(float3 rayPos, float3 rayDir,
                      texture3d<uint, access::read> indirection,
                      device SectorInfo *sectors, device ulong *occupancy,
-                     device uchar *data) {
+                     device uchar *data, device ulong *sectorMasks) {
   hitInfo hit;
   hit.hit = false;
   hit.normal = half3(0, 1, 0);
   hit.its = 0;
 
-  // 1. Setup Parametric Variables
-  float3 safeDir;
-  safeDir.x = (abs(rayDir.x) < 1e-8f)
-                  ? (sign(rayDir.x) == 0 ? 1e-8f : sign(rayDir.x) * 1e-8f)
-                  : rayDir.x;
-  safeDir.y = (abs(rayDir.y) < 1e-8f)
-                  ? (sign(rayDir.y) == 0 ? 1e-8f : sign(rayDir.y) * 1e-8f)
-                  : rayDir.y;
-  safeDir.z = (abs(rayDir.z) < 1e-8f)
-                  ? (sign(rayDir.z) == 0 ? 1e-8f : sign(rayDir.z) * 1e-8f)
-                  : rayDir.z;
+  // Safe direction: avoid division by zero
+  float3 safeDir = rayDir;
+  safeDir.x = (abs(safeDir.x) < 1e-8f) ? copysign(1e-8f, safeDir.x) : safeDir.x;
+  safeDir.y = (abs(safeDir.y) < 1e-8f) ? copysign(1e-8f, safeDir.y) : safeDir.y;
+  safeDir.z = (abs(safeDir.z) < 1e-8f) ? copysign(1e-8f, safeDir.z) : safeDir.z;
   float3 invDir = 1.0f / safeDir;
 
-  // Define World Bounds (e.g., 2048^3) based on Indirection Size
+  // World bounds from indirection texture
   float3 worldSize = float3(indirection.get_width(), indirection.get_height(),
                             indirection.get_depth()) *
                      32.0f;
 
-  // Move Ray to Bounding Box
-  float3 startPos = ClipRayToAABB(rayPos, rayDir, invDir, float3(0), worldSize);
+  // Clip ray to world AABB
+  float3 startPos =
+      ClipRayToAABB(rayPos, safeDir, invDir, float3(0), worldSize);
 
-  // Bias: Nudge slightly inside to prevent Z-fighting at boundaries
-  // We maintain 'voxelPos' as our integer coordinate tracker
-  int3 voxelPos = int3(floor(startPos + rayDir * 0.001f));
+  // tStart = distance from rayPos to the entry face of the first voxel
+  float3 tStart;
+  tStart.x =
+      ((safeDir.x >= 0 ? 1.0f : 0.0f) - (startPos.x - floor(startPos.x))) *
+      invDir.x;
+  tStart.y =
+      ((safeDir.y >= 0 ? 1.0f : 0.0f) - (startPos.y - floor(startPos.y))) *
+      invDir.y;
+  tStart.z =
+      ((safeDir.z >= 0 ? 1.0f : 0.0f) - (startPos.z - floor(startPos.z))) *
+      invDir.z;
 
-  // 2. Traversal Loop
-  int maxIters = 512; // Safety break
+  float3 currPos = startPos + safeDir * 0.001f;
+  float3 sideDist = float3(0.0f);
+  float3 worldOrigin = floor(startPos); // Integer reference for tStart math
+
+  // Traversal loop
+  int maxIters = 512;
 
   for (int i = 0; i < maxIters; ++i) {
     hit.its++;
 
+    int3 voxelPos = int3(floor(currPos));
+
+    // Bounds check
+    if (voxelPos.x < 0 || voxelPos.y < 0 || voxelPos.z < 0 ||
+        voxelPos.x >= int(worldSize.x) || voxelPos.y >= int(worldSize.y) ||
+        voxelPos.z >= int(worldSize.z)) {
+      break;
+    }
+
     uint8_t matID = 0;
 
-    // This function advances voxelPos if empty, or returns true if solid
-    bool isHit = GetStepPos(voxelPos, rayPos, invDir, rayDir, indirection,
-                            sectors, occupancy, data, matID);
+    bool stepped = GetStepPos(voxelPos, safeDir, indirection, sectors,
+                              occupancy, data, sectorMasks, matID);
 
-    if (isHit) {
+    if (!stepped) {
+      // Hit a solid voxel — compute hit info from sideDist
       hit.hit = true;
 
-      // Re-calculate precise T intersection for the specific voxel we found
+      // Determine which axis face was crossed
+      // Use sideDist to determine the entry face
       float3 cellMin = float3(voxelPos);
       float3 t0 = (cellMin - rayPos) * invDir;
       float3 t1 = (cellMin + 1.0f - rayPos) * invDir;
-      float3 tmax_v = max(t0, t1);
       float3 tmin_v = min(t0, t1);
       float tEntry = max(max(tmin_v.x, tmin_v.y), tmin_v.z);
 
       hit.pos = rayPos + rayDir * tEntry;
 
-      // Calculate Normal based on dominant axis of entry
-      // (Standard DDA-style normal logic)
+      // Normal from dominant axis of entry
       float3 center = cellMin + 0.5f;
       float3 d = hit.pos - center;
       float3 ad = abs(d);
@@ -308,7 +298,7 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
       else
         hit.normal = half3(0, 0, sign(d.z));
 
-      // Fast UV (Planar Projection) mapping
+      // UV mapping
       float3 fpos = floor(hit.pos);
       float3 localPos = hit.pos - fpos;
       if (abs(hit.normal.x) > 0.5h)
@@ -318,20 +308,20 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
       else
         hit.uv = half2(localPos.x, localPos.y);
 
-      // Store Material ID in the color channel for now (or separate field)
-      // Storing as half3 for compatibility with existing codebase
-      // hit.color = half3((float)matID / 255.0f, 0, 0);
       hit.matID = matID;
-
       return hit;
     }
 
-    // Bounds check
-    if (voxelPos.x < 0 || voxelPos.y < 0 || voxelPos.z < 0 ||
-        voxelPos.x >= worldSize.x || voxelPos.y >= worldSize.y ||
-        voxelPos.z >= worldSize.z) {
-      break;
-    }
+    // Ray-march advancement: compute sideDist from aligned position
+    // voxelPos has been aligned to cell boundaries by GetStepPos
+    // Must use floor(startPos) as reference — tStart is defined relative to it
+    float3 alignedF = float3(voxelPos) - worldOrigin;
+    sideDist.x = tStart.x + alignedF.x * invDir.x;
+    sideDist.y = tStart.y + alignedF.y * invDir.y;
+    sideDist.z = tStart.z + alignedF.z * invDir.z;
+
+    float tmin = min(min(sideDist.x, sideDist.y), sideDist.z) + 0.001f;
+    currPos = startPos + tmin * safeDir;
   }
 
   return hit;
@@ -339,58 +329,89 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
 
 // Optimized Shadow Trace (Boolean)
 inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
-                        texture3d<uint, access::read> indirection,
+                        int maxIters, texture3d<uint, access::read> indirection,
                         device SectorInfo *sectors, device ulong *occupancy,
-                        device uchar *data) {
-  float3 safeDir;
-  safeDir.x = (abs(rayDir.x) < 1e-8f)
-                  ? (sign(rayDir.x) == 0 ? 1e-8f : sign(rayDir.x) * 1e-8f)
-                  : rayDir.x;
-  safeDir.y = (abs(rayDir.y) < 1e-8f)
-                  ? (sign(rayDir.y) == 0 ? 1e-8f : sign(rayDir.y) * 1e-8f)
-                  : rayDir.y;
-  safeDir.z = (abs(rayDir.z) < 1e-8f)
-                  ? (sign(rayDir.z) == 0 ? 1e-8f : sign(rayDir.z) * 1e-8f)
-                  : rayDir.z;
+                        device uchar *data, device ulong *sectorMasks) {
+  float3 safeDir = rayDir;
+  safeDir.x = (abs(safeDir.x) < 1e-8f) ? copysign(1e-8f, safeDir.x) : safeDir.x;
+  safeDir.y = (abs(safeDir.y) < 1e-8f) ? copysign(1e-8f, safeDir.y) : safeDir.y;
+  safeDir.z = (abs(safeDir.z) < 1e-8f) ? copysign(1e-8f, safeDir.z) : safeDir.z;
   float3 invDir = 1.0f / safeDir;
+
   float3 worldSize = float3(indirection.get_width(), indirection.get_height(),
                             indirection.get_depth()) *
                      32.0f;
 
-  // Only clip start, we don't need exact entry point if inside
-  float3 startPos = ClipRayToAABB(rayPos, rayDir, invDir, float3(0), worldSize);
+  float3 startPos =
+      ClipRayToAABB(rayPos, safeDir, invDir, float3(0), worldSize);
 
-  int3 voxelPos = int3(floor(startPos + rayDir * 0.001f));
+  float3 tStart;
+  tStart.x =
+      ((safeDir.x >= 0 ? 1.0f : 0.0f) - (startPos.x - floor(startPos.x))) *
+      invDir.x;
+  tStart.y =
+      ((safeDir.y >= 0 ? 1.0f : 0.0f) - (startPos.y - floor(startPos.y))) *
+      invDir.y;
+  tStart.z =
+      ((safeDir.z >= 0 ? 1.0f : 0.0f) - (startPos.z - floor(startPos.z))) *
+      invDir.z;
 
-  // Distance tracking
-  float currentDist = 0.0f;
-  float3 initialPos = rayPos;
+  float3 currPos = startPos + safeDir * 0.001f;
+  float3 sideDist = float3(0.0f);
+  float3 worldOrigin = floor(startPos); // Integer reference for tStart math
 
-  for (int i = 0; i < 256; ++i) {
-    uint8_t matID = 0;
+  float maxDistSq = maxDist * maxDist;
 
-    // Check current position
-    if (GetStepPos(voxelPos, rayPos, invDir, rayDir, indirection, sectors,
-                   occupancy, data, matID)) {
-      return true; // Hit anything opaque
-    }
+  for (int i = 0; i < maxIters; ++i) {
+    int3 voxelPos = int3(floor(currPos));
 
-    // Update distance check
-    // (Approximation using Manhattan distance or just check bounds)
-    // For accurate distance cap, we'd need to track T values,
-    // but for shadows, checking world bounds is usually enough.
+    // Bounds check
     if (voxelPos.x < 0 || voxelPos.y < 0 || voxelPos.z < 0 ||
-        voxelPos.x >= worldSize.x || voxelPos.y >= worldSize.y ||
-        voxelPos.z >= worldSize.z) {
+        voxelPos.x >= int(worldSize.x) || voxelPos.y >= int(worldSize.y) ||
+        voxelPos.z >= int(worldSize.z)) {
       return false;
     }
 
-    // Optional: Exact distance check
-    // float3 cellMin = float3(voxelPos);
-    // float3 t0 = (cellMin - initialPos) * invDir;
-    // float tCurrent = max(max(t0.x, t0.y), t0.z);
-    // if (tCurrent > maxDist) return false;
+    uint8_t matID = 0;
+
+    bool stepped = GetStepPos(voxelPos, safeDir, indirection, sectors,
+                              occupancy, data, sectorMasks, matID);
+
+    if (!stepped) {
+      return true; // Hit occluder
+    }
+
+    // Distance cap
+    float3 diff = float3(voxelPos) + 0.5f - rayPos;
+    if (dot(diff, diff) > maxDistSq) {
+      return false;
+    }
+
+    // Ray-march advancement
+    // Must use floor(startPos) as reference — tStart is defined relative to it
+    float3 alignedF = float3(voxelPos) - worldOrigin;
+    sideDist.x = tStart.x + alignedF.x * invDir.x;
+    sideDist.y = tStart.y + alignedF.y * invDir.y;
+    sideDist.z = tStart.z + alignedF.z * invDir.z;
+
+    float tmin = min(min(sideDist.x, sideDist.y), sideDist.z) + 0.001f;
+    currPos = startPos + tmin * safeDir;
   }
 
   return false;
+}
+
+inline hitInfo trace(float3 rayPos, float3 rayDir,
+                     texture3d<uint, access::read> indirection,
+                     device SectorInfo *sectors, device ulong *occupancy,
+                     device uchar *data) {
+  return trace(rayPos, rayDir, indirection, sectors, occupancy, data, nullptr);
+}
+
+inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
+                        int maxIters, texture3d<uint, access::read> indirection,
+                        device SectorInfo *sectors, device ulong *occupancy,
+                        device uchar *data) {
+  return traceShadow(rayPos, rayDir, maxDist, maxIters, indirection, sectors,
+                     occupancy, data, nullptr);
 }

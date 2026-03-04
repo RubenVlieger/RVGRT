@@ -200,10 +200,10 @@ kernel void XMap_FillBricks(
         uint8_t matID = get_procedural_material_id(voxelPos);
         
         // Calculate linear offset in the Data Buffer
-        uint finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID;
+        uint64_t finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID;
         dataBuffer[finalDataIdx] = matID;
     } else {
-        uint finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID;
+        uint64_t finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID;
         dataBuffer[finalDataIdx] = 0;
     }
     
@@ -261,10 +261,10 @@ kernel void FillDynamicAtlases(
     // In the uint buffer, this is 16 uints.
     // We cast to ulong* for easier writing.
     device ulong* geoPool64 = (device ulong*)geoPool;
-    uint geoBaseIdx = brickIdx * 8; 
+    uint64_t geoBaseIdx = (uint64_t)brickIdx * 8; 
 
     // Material: 512 bytes per brick
-    uint matBaseIdx = brickIdx * 512;
+    uint64_t matBaseIdx = (uint64_t)brickIdx * 512;
 
     float3 worldBase = float3(gid) * 8.0f;
 

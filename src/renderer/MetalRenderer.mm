@@ -344,6 +344,9 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer()
               offset:0
              atIndex:5];
+  [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
+              offset:0
+             atIndex:6];
 
   [encoder dispatchThreads:gridSizeHalf
       threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
@@ -388,6 +391,9 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer()
               offset:0
              atIndex:5];
+  [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
+              offset:0
+             atIndex:6];
 
   // Assets & Helpers
   [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject()
@@ -432,6 +438,9 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer()
               offset:0
              atIndex:5];
+  [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
+              offset:0
+             atIndex:6];
 
   // Assets
   [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject()
@@ -546,6 +555,9 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer()
               offset:0
              atIndex:4];
+  [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
+              offset:0
+             atIndex:6];
 
   [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize];
   [encoder popDebugGroup];

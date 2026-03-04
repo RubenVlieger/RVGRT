@@ -14,7 +14,8 @@ kernel void distApproximationKernel(
     texture3d<uint, access::read> indirection [[texture(2)]],
     device SectorInfo* sectorBuffer           [[buffer(3)]],
     device ulong* occupancyBuffer             [[buffer(4)]],
-    device uchar* dataBuffer                  [[buffer(5)]],    
+    device uchar* dataBuffer                  [[buffer(5)]],
+    device ulong* sectorMaskBuffer            [[buffer(6)]],
      
     uint2 gid [[thread_position_in_grid]])
 {
@@ -26,7 +27,7 @@ kernel void distApproximationKernel(
     float2 ndc = uv * 2.0f - 1.0f; 
     float3 dir = normalize(camera.forward + ndc.x * camera.right + ndc.y * camera.up);
 
-    hitInfo hit = trace(camera.position, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer);
+    hitInfo hit = trace(camera.position, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer);
     
     float dist = hit.hit ? length(hit.pos - camera.position) : 5000.0f;
     
