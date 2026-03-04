@@ -41,7 +41,7 @@ kernel void GBufferAndDirectLight(
     float startDist = halfDistTex.sample(sLinear, uv).r;
     
 
-    hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer);
+    hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
 
     float depth = 100000.0f;
     half3 irradiance = half3(0.0h);
@@ -80,7 +80,7 @@ kernel void GBufferAndDirectLight(
             float3 reflDir = reflect(dir, (float3)distNormal);
             
             // Reflection Trace
-            hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer);
+            hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
             
             half3 reflectColor;
             if (reflHit.hit) {
@@ -97,7 +97,8 @@ kernel void GBufferAndDirectLight(
                                            sectorBuffer,
                                            occupancyBuffer,
                                            dataBuffer,
-                                           sectorMaskBuffer);
+                                           sectorMaskBuffer,
+                                           frame.worldOrigin);
                 reflectColor = rAlbedo * (rShadow ? 0.05h : (half3)c_sunColor);
             } else {
                 reflectColor = sampleSky(reflDir, frame.sunDirection);
@@ -120,7 +121,8 @@ kernel void GBufferAndDirectLight(
                                            sectorBuffer,
                                            occupancyBuffer,
                                            dataBuffer,
-                                           sectorMaskBuffer);
+                                           sectorMaskBuffer,
+                                           frame.worldOrigin);
             
             irradiance = (reflectColor * fresnel) + (c_sunColor * specular * (waterShadow ? 0.0h : 1.0h));
             irradiance /= (albedo + 0.001h); // Cancel out albedo mult later
@@ -139,7 +141,8 @@ kernel void GBufferAndDirectLight(
                                           sectorBuffer,
                                           occupancyBuffer,
                                           dataBuffer,
-                                          sectorMaskBuffer);
+                                          sectorMaskBuffer,
+                                          frame.worldOrigin);
             
             half NdotL = max(dot(normal, (half3)frame.sunDirection), 0.0h);
             irradiance = c_sunColor * NdotL * (isShadowed ? 0.02h : 1.0h);

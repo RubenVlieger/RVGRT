@@ -27,7 +27,7 @@ kernel void distApproximationKernel(
     float2 ndc = uv * 2.0f - 1.0f; 
     float3 dir = normalize(camera.forward + ndc.x * camera.right + ndc.y * camera.up);
 
-    hitInfo hit = trace(camera.position, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer);
+    hitInfo hit = trace(camera.position, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
     
     float dist = hit.hit ? length(hit.pos - camera.position) : 5000.0f;
     

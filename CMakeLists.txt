@@ -98,6 +98,7 @@ elseif(APPLE)
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm
+        src/renderer/BrickPool.mm
         ${MACOS_ICON} 
     )
     

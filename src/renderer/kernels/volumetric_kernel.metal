@@ -97,7 +97,8 @@ kernel void VolumetricFog(
                                      sectorBuffer,
                                      occupancyBuffer,
                                      0,
-                                     sectorMaskBuffer);
+                                     sectorMaskBuffer,
+                                     frame.worldOrigin);
         }
 
         if (!isShadowed) {

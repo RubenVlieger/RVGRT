@@ -60,7 +60,7 @@ kernel void IndirectBounce(
     float3 rayDir = normalize(localDir.x * Tangent + localDir.y * N + localDir.z * Bitangent);
 
     // Bounce Trace
-    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer);
+    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
     
     half3 incomingLight = half3(0.0h);
 
@@ -76,7 +76,8 @@ kernel void IndirectBounce(
                                       sectorBuffer,
                                       occupancyBuffer,
                                       dataBuffer,
-                                      sectorMaskBuffer);
+                                      sectorMaskBuffer,
+                                      frame.worldOrigin);
         
         float distSq = (depth * depth) + dot(hit.pos - pos, hit.pos - pos); 
         half3 bouncedAlbedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, distSq);

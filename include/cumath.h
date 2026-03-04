@@ -648,9 +648,9 @@ GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {
 
 #if defined(PLATFORM_METAL)
 // For MSL, use #define to ensure these are expanded as compile-time literals
-#define SHIX 13
+#define SHIX 12
 #define SHIY 9
-#define SHIZ 13
+#define SHIZ 12
 #define MODX ((1u << SHIX) - 1u)
 #define MODY ((1u << SHIY) - 1u)
 #define MODZ ((1u << SHIZ) - 1u)
@@ -660,9 +660,9 @@ GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {
 #define BYTESIZE (SIZEX * SIZEY * SIZEZ / 8u)
 #else
 // For C++/CUDA, constexpr is typesafe and preferred
-constexpr uint64_t SHIX = 13;
+constexpr uint64_t SHIX = 12;
 constexpr uint64_t SHIY = 9;
-constexpr uint64_t SHIZ = 13;
+constexpr uint64_t SHIZ = 12;
 constexpr uint64_t MODX = (1ULL << SHIX) - 1;
 constexpr uint64_t MODY = (1ULL << SHIY) - 1;
 constexpr uint64_t MODZ = (1ULL << SHIZ) - 1;

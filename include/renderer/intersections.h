@@ -68,9 +68,6 @@ inline float3 ClipRayToAABB(float3 origin, float3 dir, float3 invDir,
 }
 
 // Aligns ipos to the cell boundary in the direction the ray is travelling.
-// For positive direction: align to upper boundary (ipos | cellMask)
-// For negative direction: align to lower boundary (ipos & ~cellMask)
-// This is MUCH cheaper than parametric StepPastCell (pure integer ops).
 inline void AlignToCellBoundaries(thread int3 &ipos, float3 dir, int lod) {
   int cellMask = lod - 1;
   ipos.x = (dir.x < 0) ? (ipos.x & ~cellMask) : (ipos.x | cellMask);
@@ -80,98 +77,104 @@ inline void AlignToCellBoundaries(thread int3 &ipos, float3 dir, int lod) {
 
 /**
  * Checks the hierarchy at the current voxel position `ipos`.
- * If a voxel is found, returns false (hit candidate) and fills outMatID.
- * If empty, aligns `ipos` to the cell boundary using AlignToCellBoundaries.
- * Returns true if empty (stepped), false if solid (hit).
+ * Supports toroidal wrapping via worldOrigin and LOD sectors.
  *
- * The outer ray-march loop handles actual position advancement.
+ * worldOrigin: world-space sector coordinate of indirection cell (0,0,0).
+ *              Voxel at world position `v` maps to indirection cell
+ *              `(v/32 - worldOrigin) mod indirectionSize`.
  */
 inline bool GetStepPos(thread int3 &ipos, float3 dir,
                        texture3d<uint, access::read> indirection,
                        device SectorInfo *sectors, device ulong *occupancy,
                        device uchar *data, device ulong *sectorMasks,
-                       thread uint8_t &outMatID) {
-  // Guard: Negative coordinates
-  if (ipos.x < 0 || ipos.y < 0 || ipos.z < 0) {
+                       int3 worldOrigin, thread uint8_t &outMatID) {
+  // Y bounds check (height is hard-limited)
+  if (ipos.y < 0 || ipos.y >= int(SIZEY)) {
     AlignToCellBoundaries(ipos, dir, 32);
     return true;
   }
 
-  uint3 pos = uint3(ipos);
+  uint3 pos = uint3(ipos.x, ipos.y, ipos.z);
 
   // --- Level 1: Sector lookup (32x32x32) ---
-  uint3 sectorPos = pos >> 5;
+  // World sector position
+  int3 worldSector = int3(ipos.x >> 5, ipos.y >> 5, ipos.z >> 5);
 
+  // Toroidal wrapping: convert world sector to indirection cell
   uint indW = indirection.get_width();
   uint indH = indirection.get_height();
   uint indD = indirection.get_depth();
 
-  if (sectorPos.x >= indW || sectorPos.y >= indH || sectorPos.z >= indD) {
+  // Wrap to indirection texture coordinates
+  int3 relSector = worldSector - worldOrigin;
+
+  // Check if within the loaded region
+  if (relSector.x < 0 || relSector.x >= int(indW) || relSector.y < 0 ||
+      relSector.y >= int(indH) || relSector.z < 0 || relSector.z >= int(indD)) {
+    // Outside loaded region — treat as air
     AlignToCellBoundaries(ipos, dir, 32);
     return true;
   }
 
+  // Evaluate positive modulo for toroidal wrap lookup in the 3D texture
+  uint wx = (worldSector.x % int(indW) + int(indW)) % int(indW);
+  uint wy = (worldSector.y % int(indH) + int(indH)) % int(indH);
+  uint wz = (worldSector.z % int(indD) + int(indD)) % int(indD);
+  uint3 sectorPos = uint3(wx, wy, wz);
   uint sectorIndex = indirection.read(sectorPos).r;
 
-  // Empty sector? Check super-sector mask for bigger skip.
-  if (sectorIndex == 0) {
-#if 0 // Sector masks disabled for testing
-    if (sectorMasks != nullptr) {
-      uint3 superPos = sectorPos >> 2; // 4x4x4 sectors per super-sector
-      uint superSectorsX = (indW + 3) / 4;
-      uint superSectorsZ = (indD + 3) / 4;
-      uint superIdx = superPos.x + superPos.z * superSectorsX +
-                       superPos.y * superSectorsX * superSectorsZ;
-
-      ulong superMask = sectorMasks[superIdx];
-
-      uint3 localSector = sectorPos & 3;
-      uint localIdx = GetLinearIndex4(localSector);
-
-      uint dirOctant = (dir.x >= 0 ? 1u : 0u) + (dir.y >= 0 ? 2u : 0u) +
-                        (dir.z >= 0 ? 4u : 0u);
-      ulong maskedSuper =
-          superMask & RayMaskOptimizationLUT[localIdx + dirOctant * 64];
-      int superLod = GetIsotropicLOD(maskedSuper, localIdx);
-
-      // Scale: each super-sector cell = 32 voxels
-      AlignToCellBoundaries(ipos, dir, superLod * 32);
-    } else {
-      AlignToCellBoundaries(ipos, dir, 32);
-    }
-#else
+  // Empty sector
+  if (sectorIndex == SECTOR_HANDLE_EMPTY) {
     AlignToCellBoundaries(ipos, dir, 32);
-#endif
     return true;
   }
 
-  // Load sector data (1-based indexing)
+  // Load sector data
   SectorInfo sec = sectors[sectorIndex];
   uint64_t brickMask = sec.brickMask;
 
   // --- Level 2: Brick lookup (8x8x8) ---
-  uint3 brickRel = (pos >> 3) & 3; // position within sector's 4x4x4 brick grid
+  uint3 localPos =
+      uint3(uint(ipos.x) & 31u, uint(ipos.y) & 31u, uint(ipos.z) & 31u);
+  uint3 brickRel =
+      (localPos >> 3) & 3; // position within sector's 4x4x4 brick grid
   uint brickLinearIdx = GetLinearIndex4(brickRel);
 
-  // Ray direction octant for LUT (positive dir = 1 bit)
+  // Ray direction octant for LUT
   uint dirOctant =
       (dir.x >= 0 ? 1u : 0u) + (dir.y >= 0 ? 2u : 0u) + (dir.z >= 0 ? 4u : 0u);
 
+  // --- LOD SECTOR HANDLING ---
+  if (sec.flags == SECTOR_FLAG_LOD) {
+    // LOD: brickMask tells us which 8x8x8 bricks are solid/air
+    if (BitTestHalf64(brickMask, brickLinearIdx, 1)) {
+      // LOD brick is "solid" — return a hit with generic stone material
+      outMatID = MAT_STONE;
+      return false; // Hit
+    } else {
+      // LOD brick is "air" — skip using ray mask LUT
+      ulong maskedBrick =
+          brickMask & RayMaskOptimizationLUT[brickLinearIdx + dirOctant * 64];
+      int lod = GetIsotropicLOD(maskedBrick, brickLinearIdx);
+      AlignToCellBoundaries(ipos, dir, lod * 8);
+      return true;
+    }
+  }
+
+  // --- FULL DETAIL PATH ---
   if (BitTestHalf64(brickMask, brickLinearIdx, 1)) {
     // Brick exists — drill down to voxel level
-
-    // Calculate which brick this is in the packed array
     uint packedBrickOffset = prefix_popcnt64(brickMask, brickLinearIdx);
     uint64_t occIndexBase = (sec.baseBrickIndex + packedBrickOffset) * 8;
 
     // --- Level 3: Sub-brick (4x4x4) occupancy mask ---
-    uint3 subPos = (pos >> 2) & 1;
+    uint3 subPos = (localPos >> 2) & 1;
     uint subIdx = subPos.x + (subPos.z * 2) + (subPos.y * 4); // XZY order
 
     ulong voxMask = occupancy[occIndexBase + subIdx];
 
     // --- Level 4: Voxel (1x1x1) ---
-    uint3 vRel = pos & 3;
+    uint3 vRel = localPos & 3;
     uint vIdx = GetLinearIndex4(vRel);
 
     // Check if this specific voxel is solid
@@ -188,33 +191,32 @@ inline bool GetStepPos(thread int3 &ipos, float3 dir,
     }
 
     // Empty voxel inside a solid brick.
-    // Apply ray mask LUT and determine LOD for skip distance.
     ulong maskedOcc = voxMask & RayMaskOptimizationLUT[vIdx + dirOctant * 64];
     int lod = GetIsotropicLOD(maskedOcc, vIdx);
 
-    AlignToCellBoundaries(ipos, dir, lod); // 1, 2, or 4 voxels
+    AlignToCellBoundaries(ipos, dir, lod);
     return true;
 
   } else {
-    // Empty brick. Apply ray mask LUT at brick scale and determine LOD.
+    // Empty brick. Apply ray mask LUT at brick scale.
     ulong maskedBrick =
         brickMask & RayMaskOptimizationLUT[brickLinearIdx + dirOctant * 64];
     int lod = GetIsotropicLOD(maskedBrick, brickLinearIdx);
 
-    // Scale by brick size (8 voxels per brick)
-    AlignToCellBoundaries(ipos, dir, lod * 8); // 8, 16, or 32 voxels
+    AlignToCellBoundaries(ipos, dir, lod * 8);
     return true;
   }
 }
 
 // =================================================================================
-// MAIN TRACE FUNCTIONS
+// MAIN TRACE FUNCTIONS (with worldOrigin for streaming)
 // =================================================================================
 
 inline hitInfo trace(float3 rayPos, float3 rayDir,
                      texture3d<uint, access::read> indirection,
                      device SectorInfo *sectors, device ulong *occupancy,
-                     device uchar *data, device ulong *sectorMasks) {
+                     device uchar *data, device ulong *sectorMasks,
+                     int3 worldOrigin) {
   hitInfo hit;
   hit.hit = false;
   hit.normal = half3(0, 1, 0);
@@ -227,16 +229,16 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
   safeDir.z = (abs(safeDir.z) < 1e-8f) ? copysign(1e-8f, safeDir.z) : safeDir.z;
   float3 invDir = 1.0f / safeDir;
 
-  // World bounds from indirection texture
-  float3 worldSize = float3(indirection.get_width(), indirection.get_height(),
-                            indirection.get_depth()) *
-                     32.0f;
+  // World bounds: defined by the loaded region around the world origin
+  float3 worldMin = float3(worldOrigin) * 32.0f;
+  float3 worldMax = float3(worldOrigin.x + int(indirection.get_width()),
+                           worldOrigin.y + int(indirection.get_height()),
+                           worldOrigin.z + int(indirection.get_depth())) *
+                    32.0f;
 
   // Clip ray to world AABB
-  float3 startPos =
-      ClipRayToAABB(rayPos, safeDir, invDir, float3(0), worldSize);
+  float3 startPos = ClipRayToAABB(rayPos, safeDir, invDir, worldMin, worldMax);
 
-  // tStart = distance from rayPos to the entry face of the first voxel
   float3 tStart;
   tStart.x =
       ((safeDir.x >= 0 ? 1.0f : 0.0f) - (startPos.x - floor(startPos.x))) *
@@ -250,7 +252,7 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
 
   float3 currPos = startPos + safeDir * 0.001f;
   float3 sideDist = float3(0.0f);
-  float3 worldOrigin = floor(startPos); // Integer reference for tStart math
+  float3 worldOriginF = floor(startPos);
 
   // Traversal loop
   int maxIters = 512;
@@ -260,24 +262,21 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
 
     int3 voxelPos = int3(floor(currPos));
 
-    // Bounds check
-    if (voxelPos.x < 0 || voxelPos.y < 0 || voxelPos.z < 0 ||
-        voxelPos.x >= int(worldSize.x) || voxelPos.y >= int(worldSize.y) ||
-        voxelPos.z >= int(worldSize.z)) {
+    // Bounds check (using loaded region)
+    if (float(voxelPos.x) < worldMin.x || float(voxelPos.y) < worldMin.y ||
+        float(voxelPos.z) < worldMin.z || float(voxelPos.x) >= worldMax.x ||
+        float(voxelPos.y) >= worldMax.y || float(voxelPos.z) >= worldMax.z) {
       break;
     }
 
     uint8_t matID = 0;
 
     bool stepped = GetStepPos(voxelPos, safeDir, indirection, sectors,
-                              occupancy, data, sectorMasks, matID);
+                              occupancy, data, sectorMasks, worldOrigin, matID);
 
     if (!stepped) {
-      // Hit a solid voxel — compute hit info from sideDist
       hit.hit = true;
 
-      // Determine which axis face was crossed
-      // Use sideDist to determine the entry face
       float3 cellMin = float3(voxelPos);
       float3 t0 = (cellMin - rayPos) * invDir;
       float3 t1 = (cellMin + 1.0f - rayPos) * invDir;
@@ -286,7 +285,6 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
 
       hit.pos = rayPos + rayDir * tEntry;
 
-      // Normal from dominant axis of entry
       float3 center = cellMin + 0.5f;
       float3 d = hit.pos - center;
       float3 ad = abs(d);
@@ -298,7 +296,6 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
       else
         hit.normal = half3(0, 0, sign(d.z));
 
-      // UV mapping
       float3 fpos = floor(hit.pos);
       float3 localPos = hit.pos - fpos;
       if (abs(hit.normal.x) > 0.5h)
@@ -312,10 +309,7 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
       return hit;
     }
 
-    // Ray-march advancement: compute sideDist from aligned position
-    // voxelPos has been aligned to cell boundaries by GetStepPos
-    // Must use floor(startPos) as reference — tStart is defined relative to it
-    float3 alignedF = float3(voxelPos) - worldOrigin;
+    float3 alignedF = float3(voxelPos) - worldOriginF;
     sideDist.x = tStart.x + alignedF.x * invDir.x;
     sideDist.y = tStart.y + alignedF.y * invDir.y;
     sideDist.z = tStart.z + alignedF.z * invDir.z;
@@ -327,23 +321,25 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
   return hit;
 }
 
-// Optimized Shadow Trace (Boolean)
+// Optimized Shadow Trace (Boolean) with worldOrigin
 inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
                         int maxIters, texture3d<uint, access::read> indirection,
                         device SectorInfo *sectors, device ulong *occupancy,
-                        device uchar *data, device ulong *sectorMasks) {
+                        device uchar *data, device ulong *sectorMasks,
+                        int3 worldOrigin) {
   float3 safeDir = rayDir;
   safeDir.x = (abs(safeDir.x) < 1e-8f) ? copysign(1e-8f, safeDir.x) : safeDir.x;
   safeDir.y = (abs(safeDir.y) < 1e-8f) ? copysign(1e-8f, safeDir.y) : safeDir.y;
   safeDir.z = (abs(safeDir.z) < 1e-8f) ? copysign(1e-8f, safeDir.z) : safeDir.z;
   float3 invDir = 1.0f / safeDir;
 
-  float3 worldSize = float3(indirection.get_width(), indirection.get_height(),
-                            indirection.get_depth()) *
-                     32.0f;
+  float3 worldMin = float3(worldOrigin) * 32.0f;
+  float3 worldMax = float3(worldOrigin.x + int(indirection.get_width()),
+                           worldOrigin.y + int(indirection.get_height()),
+                           worldOrigin.z + int(indirection.get_depth())) *
+                    32.0f;
 
-  float3 startPos =
-      ClipRayToAABB(rayPos, safeDir, invDir, float3(0), worldSize);
+  float3 startPos = ClipRayToAABB(rayPos, safeDir, invDir, worldMin, worldMax);
 
   float3 tStart;
   tStart.x =
@@ -358,7 +354,7 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
 
   float3 currPos = startPos + safeDir * 0.001f;
   float3 sideDist = float3(0.0f);
-  float3 worldOrigin = floor(startPos); // Integer reference for tStart math
+  float3 worldOriginF = floor(startPos);
 
   float maxDistSq = maxDist * maxDist;
 
@@ -366,30 +362,27 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
     int3 voxelPos = int3(floor(currPos));
 
     // Bounds check
-    if (voxelPos.x < 0 || voxelPos.y < 0 || voxelPos.z < 0 ||
-        voxelPos.x >= int(worldSize.x) || voxelPos.y >= int(worldSize.y) ||
-        voxelPos.z >= int(worldSize.z)) {
+    if (float(voxelPos.x) < worldMin.x || float(voxelPos.y) < worldMin.y ||
+        float(voxelPos.z) < worldMin.z || float(voxelPos.x) >= worldMax.x ||
+        float(voxelPos.y) >= worldMax.y || float(voxelPos.z) >= worldMax.z) {
       return false;
     }
 
     uint8_t matID = 0;
 
     bool stepped = GetStepPos(voxelPos, safeDir, indirection, sectors,
-                              occupancy, data, sectorMasks, matID);
+                              occupancy, data, sectorMasks, worldOrigin, matID);
 
     if (!stepped) {
       return true; // Hit occluder
     }
 
-    // Distance cap
     float3 diff = float3(voxelPos) + 0.5f - rayPos;
     if (dot(diff, diff) > maxDistSq) {
       return false;
     }
 
-    // Ray-march advancement
-    // Must use floor(startPos) as reference — tStart is defined relative to it
-    float3 alignedF = float3(voxelPos) - worldOrigin;
+    float3 alignedF = float3(voxelPos) - worldOriginF;
     sideDist.x = tStart.x + alignedF.x * invDir.x;
     sideDist.y = tStart.y + alignedF.y * invDir.y;
     sideDist.z = tStart.z + alignedF.z * invDir.z;
@@ -401,11 +394,29 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
   return false;
 }
 
+// Legacy overloads (without worldOrigin — default to origin 0,0,0)
+inline hitInfo trace(float3 rayPos, float3 rayDir,
+                     texture3d<uint, access::read> indirection,
+                     device SectorInfo *sectors, device ulong *occupancy,
+                     device uchar *data, device ulong *sectorMasks) {
+  return trace(rayPos, rayDir, indirection, sectors, occupancy, data,
+               sectorMasks, int3(0));
+}
+
 inline hitInfo trace(float3 rayPos, float3 rayDir,
                      texture3d<uint, access::read> indirection,
                      device SectorInfo *sectors, device ulong *occupancy,
                      device uchar *data) {
-  return trace(rayPos, rayDir, indirection, sectors, occupancy, data, nullptr);
+  return trace(rayPos, rayDir, indirection, sectors, occupancy, data, nullptr,
+               int3(0));
+}
+
+inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
+                        int maxIters, texture3d<uint, access::read> indirection,
+                        device SectorInfo *sectors, device ulong *occupancy,
+                        device uchar *data, device ulong *sectorMasks) {
+  return traceShadow(rayPos, rayDir, maxDist, maxIters, indirection, sectors,
+                     occupancy, data, sectorMasks, int3(0));
 }
 
 inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
@@ -413,5 +424,5 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
                         device SectorInfo *sectors, device ulong *occupancy,
                         device uchar *data) {
   return traceShadow(rayPos, rayDir, maxDist, maxIters, indirection, sectors,
-                     occupancy, data, nullptr);
+                     occupancy, data, nullptr, int3(0));
 }

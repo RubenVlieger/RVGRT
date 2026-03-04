@@ -24,6 +24,10 @@ struct FrameData {
   simd_float3 sunDirection;
   float time;
   float deltaTime;
+
+  // World origin for toroidal wrapping (world-space coord of indirection cell
+  // (0,0,0))
+  simd_int3 worldOrigin;
 };
 
 struct ExposureData {
@@ -34,17 +38,51 @@ struct ExposureData {
 #define BRICK_SIZE 8
 #define SECTOR_SIZE 32 // 4 bricks * 8 voxels
 
+// =========================================================
+// Streaming Configuration
+// =========================================================
+
+// Brick pool capacity — how many 8x8x8 bricks can exist simultaneously.
+// Each brick uses 576 bytes (64 occupancy + 512 data).
+// At 8M bricks: ~4.4GB total.
+#define BRICK_POOL_CAPACITY (8 * 1024 * 1024)
+
+// Maximum number of sectors that can be active simultaneously.
+// Must be >= the total cells in the indirection texture.
+// 256 * 16 * 256 = 1,048,576 sectors.
+#define MAX_ACTIVE_SECTORS (256 * 16 * 256)
+
+// Radius (in sectors) within which full-detail bricks are generated.
+// 125 sectors * 32 voxels = 4000 blocks.
+#define DETAIL_RADIUS_SECTORS 125
+
+// =========================================================
+// Sector Handle Sentinel Values
+// Stored in the indirection 3D texture (R32Uint).
+// =========================================================
+// 0 = empty (no geometry, not yet loaded or truly empty)
+#define SECTOR_HANDLE_EMPTY 0u
+// 0xFFFFFFFE = LOD solid (all bricks treated as solid based on brickMask, no
+// brick data)
+#define SECTOR_HANDLE_LOD 0xFFFFFFFEu
+// Valid sector handles: 1..0xFFFFFFFD (index into SectorBuffer)
+
 struct SectorInfo {
   // Offset into the Brick Arrays (Occupancy and Data)
   // We store the INDEX of the brick, not byte offset.
   uint32_t baseBrickIndex;
 
-  uint32_t padding; // Align to 8 bytes for the uint64 following
+  // Flags: 0 = full detail, 1 = LOD (brickMask only, no brick data allocated)
+  uint32_t flags;
 
   // Mask of which 8x8x8 bricks exist in this 32x32x32 sector.
   // 64 bits = 4x4x4 bricks.
   uint64_t brickMask;
 };
+
+// Flag values for SectorInfo.flags
+#define SECTOR_FLAG_DETAIL 0u
+#define SECTOR_FLAG_LOD 1u
 
 // Struct to tell the GPU which brick to generate
 struct BrickWorkItem {
@@ -53,6 +91,14 @@ struct BrickWorkItem {
   uint64_t
       occupancyOffset; // Global offset into Occupancy Buffer (index, not byte)
   uint64_t dataOffset; // Global offset into Data Buffer (index, not byte)
+};
+
+// Struct for incremental sector analysis work-list
+struct SectorWorkItem {
+  int32_t worldX; // World-space sector coordinate
+  int32_t worldY;
+  int32_t worldZ;
+  uint32_t wrappedIdx; // Linear index in the indirection texture (wrapped)
 };
 
 #endif
