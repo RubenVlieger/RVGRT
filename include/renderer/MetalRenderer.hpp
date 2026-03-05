@@ -4,10 +4,7 @@
 #include "renderer/Buffer.hpp" 
 #include "renderer/MaterialMap.hpp"
 
-#include "CArray.h"
 #include "Texturepack.h"
-#include "CoarseArray.h"
-
 
 #include <MetalFX/MetalFX.h>
 
@@ -53,7 +50,6 @@ private:
     id _device;
 
     // --- Pipeline State Objects ---
-    id _worldGenerationPSO; 
 
     id _psoDistApprox;      // Kernel 0
     id _psoGBuffer;         // Kernel 1
@@ -87,10 +83,6 @@ private:
     id _texAccum[2];        // [0] = current, [1] = history (swaps every frame)
     
     id _halfDistTexture;
-
-    // acceleration data structures
-    id _voxelTexture; 
-    CoarseArray _csdf;
 
     MaterialMap _materialMap;
 

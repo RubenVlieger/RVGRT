@@ -137,7 +137,7 @@ kernel void Composite(
     // Standard Exposure Formula:
     // Middle Grey (0.18 or 0.5 depending on calibration) / Average Luminance
     // We adjust the key value (1.0f) to taste.
-    float exposureScale = 1.4f / (max(avgLum, 0.001f));
+    float exposureScale = 0.15f / (max(avgLum, 0.001f));
     
     linearColor *= exposureScale;
 
@@ -151,100 +151,4 @@ kernel void Composite(
     float3 finalColor = LinearToSRGB(toneMapped);
 
     texFinal.write(float4(finalColor, 1.0f), gid);
-}
-
-kernel void distApproximationKernel( //1,5 gigaray per second
-    texture2d<float, access::write> distTex [[texture(0)]],
-    constant const CameraData& camera [[buffer(0)]],
-    constant const FrameData& frame [[buffer(1)]],
-    
-    texture3d<uint, access::read> bitsTex [[texture(2)]],
-    texture3d<float, access::sample> csdf [[texture(3)]], 
-    uint2 gid [[thread_position_in_grid]])
-{
-    uint width = distTex.get_width();
-    uint height = distTex.get_height();
-    
-    if (gid.x >= width || gid.y >= height) return;
-
-    float2 uv = (float2(gid) + 0.5f) / float2(width, height);
-    float2 ndc = uv * 2.0f - 1.0f; 
-    float3 dir = normalize(camera.forward + ndc.x * camera.right + ndc.y * camera.up);
-
-    // Move to start distance
-    float3 currentPos = camera.position;
-
-    // Precompute DDA constants (invariant for the ray)
-    const float3 deltaDist = make_float3(
-        abs(dir.x) > 1e-5f ? abs(1.0f / dir.x) : 1.0e30f,
-        abs(dir.y) > 1e-5f ? abs(1.0f / dir.y) : 1.0e30f,
-        abs(dir.z) > 1e-5f ? abs(1.0f / dir.z) : 1.0e30f
-    );
-
-    const int3 step = make_int3(
-        dir.x > 0.0f ? 1 : -1,
-        dir.y > 0.0f ? 1 : -1,
-        dir.z > 0.0f ? 1 : -1
-    );
-
-    for (int majorIteration = 0; majorIteration < 10; majorIteration++)
-    {
-        currentPos = approximateCSDF(currentPos, dir, csdf);
-
-        float3 fpos = floor3(currentPos);
-        int3 ipos = to_int3(currentPos);
-        
-        float3 tMax;
-        tMax.x = ((step.x > 0) ? (fpos.x + 1.0f - currentPos.x) : (currentPos.x - fpos.x)) * deltaDist.x;
-        tMax.y = ((step.y > 0) ? (fpos.y + 1.0f - currentPos.y) : (currentPos.y - fpos.y)) * deltaDist.y;
-        tMax.z = ((step.z > 0) ? (fpos.z + 1.0f - currentPos.z) : (currentPos.z - fpos.z)) * deltaDist.z;
-
-        int mask = -1;
-        float distTraveledInDDA = 0.0f;
-        bool hitFound = false;
-
-        for (int i = 0; i < 8; i++) 
-        {            
-            if (ipos.x < 0 || ipos.y < 0 || ipos.z < 0 || 
-                ipos.x >= (int)SIZEX || ipos.y >= (int)SIZEY || ipos.z >= (int)SIZEZ) {
-                majorIteration = 10;
-                i = 10;
-                break;
-            }
-
-            if (IsSolid(ipos, bitsTex)) 
-            {
-                float tVal = 0.0f;
-                if (mask == 0) {
-                    tVal = tMax.x - deltaDist.x;
-                } else if (mask == 1) {
-                    tVal = tMax.y - deltaDist.y;
-                } else {
-                    tVal = tMax.z - deltaDist.z;
-                }
-                distTex.write(float4(length(currentPos + dir * tVal - camera.position), 0, 0, 0), gid);
-                return;
-            }
-            
-            if (tMax.x < tMax.y) {
-                if (tMax.x < tMax.z) { 
-                    distTraveledInDDA = tMax.x;
-                    tMax.x += deltaDist.x; ipos.x += step.x; mask = 0; 
-                } else { 
-                    distTraveledInDDA = tMax.z;
-                    tMax.z += deltaDist.z; ipos.z += step.z; mask = 2; 
-                }
-            } else {
-                if (tMax.y < tMax.z) { 
-                    distTraveledInDDA = tMax.y;
-                    tMax.y += deltaDist.y; ipos.y += step.y; mask = 1; 
-                } else { 
-                    distTraveledInDDA = tMax.z;
-                    tMax.z += deltaDist.z; ipos.z += step.z; mask = 2; 
-                }
-            }
-        }
-        currentPos += dir * (distTraveledInDDA + 0.0001f);
-    }        
-    distTex.write(float4(HALF_MAX, 0, 0, 1), gid);
 }

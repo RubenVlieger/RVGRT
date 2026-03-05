@@ -1,13 +1,13 @@
 cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 SET(APP_NAME RVGRT)
-set(CMAKE_OSX_DEPLOYMENT_TARGET "13.0" CACHE STRING "Minimum OS X deployment version")
+set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum OS X deployment version")
 
 # Set the project languages based on the target platform
 if(WIN32)
-    project(Programma C CXX CUDA)
+    project(RVGRT C CXX CUDA)
 else()
-    project(Programma C CXX OBJCXX)
+    project(RVGRT C CXX OBJCXX)
 endif()
 
 message("Project name: " ${CMAKE_PROJECT_NAME})
@@ -95,11 +95,10 @@ elseif(APPLE)
         src/renderer/MetalDevice.mm
         src/renderer/MetalRenderer.mm
         src/renderer/MetalBuffer.mm
-        src/renderer/CArray_impl.mm
-        src/renderer/CoarseArray_impl.mm
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm
+        src/renderer/BrickPool.mm
         ${MACOS_ICON} 
     )
     
@@ -158,6 +157,10 @@ elseif(APPLE)
         "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
         "${MAC_METAL_LIBRARY_SRC}" 
     )
+    add_custom_command(TARGET ${APP_NAME} POST_BUILD
+    COMMAND xattr -cr "$<TARGET_BUNDLE_DIR:${APP_NAME}>"
+    COMMENT "Stripping extended attributes to prevent CodeSign detritus error"
+)
 
     add_dependencies(${APP_NAME} BuildMetalShaders)
 
@@ -172,6 +175,10 @@ elseif(APPLE)
         MACOSX_BUNDLE_BUNDLE_VERSION "1"
         PRODUCT_BUNDLE_IDENTIFIER "com.rvgrt.voxelengine"
         RESOURCE "${MAC_METAL_LIBRARY_SRC}"
+
+        XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "-"
+        XCODE_ATTRIBUTE_DEVELOPMENT_TEAM ""
+        XCODE_ATTRIBUTE_CODE_SIGN_STYLE "Manual"
     )
     target_link_libraries(${APP_NAME} PRIVATE
         "-framework Cocoa"

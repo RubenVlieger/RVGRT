@@ -1,56 +1,145 @@
 #pragma once
 
-#include <cstdint>
-
 #ifdef __OBJC__
 #import <Metal/Metal.h>
 #else
-typedef void* id;
+typedef void *id;
 #endif
 
+#include "renderer/BrickPool.hpp"
+#include "renderer/ShaderTypes.h"
+#include <cstdint>
+#include <mutex>
+#include <simd/simd.h>
+#include <vector>
+
+/**
+ * MaterialMap — Manages the voxel world with streaming and LOD.
+ *
+ * Owns:
+ *   - Indirection 3D texture (toroidal, wraps around camera)
+ *   - SectorInfo buffer (per-sector metadata)
+ *   - BrickPool (occupancy + data buffers)
+ *   - Super-sector mask buffer
+ *
+ * Call UpdateStreaming() each frame with the camera position.
+ * Returns true if new sectors were loaded (caller should reset temporal
+ * accumulation).
+ */
 class MaterialMap {
 public:
-    MaterialMap();
-    ~MaterialMap();
+  MaterialMap();
+  ~MaterialMap();
 
-    // Allocates the Indirection Texture and the Brick Pool Buffer
-    void Allocate();
+  /// Initial world generation around spawn point.
+  void GenerateDynamic();
 
-    // Runs the GPU generation logic. 
-    // Requires the packed voxel geometry texture (R32Uint) as input.
-    void Generate(id packedVoxelTexture);
+  /// Per-frame streaming update. Returns true if any sectors changed.
+  bool UpdateStreaming(simd_float3 cameraPos);
 
-    // Getters for binding to the Render Loop
-    id GetIndirectionTexture();
-    id GetBrickPoolBuffer();
+  // Getters for rendering bindings
+  id GetIndirectionTexture();
+  id GetSectorBuffer();
+  id GetOccupancyBuffer();
+  id GetDataBuffer();
+  id GetSectorMaskBuffer();
+
+  /// Get the world origin (world-space coordinate of indirection cell (0,0,0))
+  simd_int3 GetWorldOrigin() const { return _worldOrigin; }
 
 private:
-    id _device;
+  id _device;
 
-    // 1. Indirection Grid: 3D Texture (R32Uint)
-    // Stores: 
-    //   0 -> Air
-    //   0x8000XXXX -> Constant Material ID (e.g., Stone)
-    //   0x0000XXXX -> Index into Brick Pool
-    id _indirectionTexture;
+  // --- GPU Resources ---
+  // L1: 3D Texture (R32Uint). Value = sector handle (index into SectorBuffer)
+  id _indirectionTexture;
 
-    // 2. Brick Pool: Linear Buffer (Raw Bytes)
-    // Stores dense 8x8x8 blocks for mixed areas.
-    // Size = MaxBricks * 512 bytes.
-    id _brickPoolBuffer;
+  // L2: Buffer of SectorInfo structs
+  id _sectorBuffer;
 
-    // 3. Atomic Counter
-    // Used by shaders to allocate next available slot in Brick Pool
-    id _allocCounterBuffer;
+  // L3+L4: Brick data (owned by BrickPool)
+  BrickPool _brickPool;
 
-    // Compute Pipelines
-    id _psoClassify; // Pass 1: Analyze geometry, reserve space
-    id _psoFill;     // Pass 2: Calculate noise, fill reserved space
+  // Super-sector masks: one uint64_t per 4x4x4 group of sectors
+  id _sectorMaskBuffer;
 
-    // Constants
-    const uint32_t BRICK_SIZE = 8;
-    
-    // Estimate: 2 million mixed chunks max (~1GB VRAM). 
-    // Adjust based on your memory budget.
-    const uint32_t MAX_BRICKS = 2 * 1024 * 100; 
+  // --- Compute Pipelines ---
+  id _psoAnalyze;          // Analyze sectors (determine brick activity)
+  id _psoFill;             // Fill brick data (occupancy + materials)
+  id _psoAnalyzeLOD;       // LOD analysis (16 samples per brick for solid/air)
+  id _psoAnalyzeStreaming; // Async streaming analysis of sectors
+
+  // --- Async Compute Results ---
+  struct AsyncResult {
+    SectorWorkItem item;
+    uint64_t brickMask;
+  };
+  std::mutex _asyncResultsMutex;
+  std::vector<AsyncResult> _asyncResults;
+
+  // --- Streaming State ---
+  simd_int3 _worldOrigin; // World-space coordinate of indirection cell (0,0,0)
+  simd_int3 _lastCameraSector; // Camera's sector position at last update
+  bool _firstUpdate;
+
+  // Indirection dimensions
+  int _indW, _indH, _indD;
+
+  // Per-sector tracking (indexed by wrapped indirection linear index)
+  struct SectorState {
+    int32_t worldX, worldY, worldZ; // World-space sector this slot represents
+    uint32_t sectorHandle;  // Handle in sector buffer (1-based, 0 = unused)
+    uint32_t brickPoolBase; // Base index in brick pool
+    uint32_t brickCount;    // Number of allocated bricks
+    bool isLoaded;
+    bool isLOD;       // True = LOD (brickMask only, no data)
+    bool isAnalyzing; // True if GPU analysis is currently pending
+  };
+  std::vector<SectorState> _sectorStates;
+
+  // Sector buffer management
+  uint32_t _nextSectorHandle;
+  std::vector<uint32_t> _freeSectorHandles;
+  std::vector<SectorInfo>
+      _sectorInfoCPU; // CPU mirror of sector buffer (for updates)
+  std::vector<uint32_t> _indirectionCPU; // CPU mirror of indirection texture
+
+  // Command queue for async generation
+  id _commandQueue;
+
+  // --- Internal Methods ---
+
+  /// Convert world sector position to wrapped indirection coordinates
+  void WorldToWrapped(int wx, int wy, int wz, int &ix, int &iy, int &iz) const;
+
+  /// Get linear index from wrapped coordinates
+  int WrappedToLinear(int ix, int iy, int iz) const;
+
+  /// Load a sector at world position. If isLOD, only generate brickMask.
+  void LoadSector(int wx, int wy, int wz, bool isLOD,
+                  std::vector<BrickWorkItem> &workList);
+
+  /// Unload the sector at wrapped position
+  void UnloadSector(int ix, int iy, int iz);
+
+  /// Allocate a sector handle
+  uint32_t AllocSectorHandle();
+
+  /// Free a sector handle
+  void FreeSectorHandle(uint32_t handle);
+
+  /// Upload indirection texture for given wrapped coords
+  void UploadIndirectionCell(int ix, int iy, int iz, uint32_t value);
+
+  /// Upload a single SectorInfo to the GPU buffer
+  void UploadSectorInfo(uint32_t handle, const SectorInfo &info);
+
+  /// Generate full-detail bricks for a batch of sectors
+  void GenerateDetailBatch(const std::vector<SectorWorkItem> &sectors);
+
+  /// Generate LOD brickMasks for a batch of sectors
+  void GenerateLODBatch(const std::vector<SectorWorkItem> &sectors);
+
+  /// Rebuild super-sector masks for affected regions
+  void RebuildSectorMasks();
 };
