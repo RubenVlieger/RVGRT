@@ -80,8 +80,7 @@ The heart of the performance lies in `intersections.h` (included by `.metal` ker
 
 ## 6. Guidelines & Constraints for LLMs
 1. **Never Break the GPU/CPU Boundary:** If you alter a struct in `ShaderTypes.h` (e.g., adding a float to `CameraData` or `FrameData`), be extremely mindful of alignment and padding (16-byte boundaries) since Metal and C++ must interpret the raw bytes identically.
-2. **Minimize Divergence in Shaders:** In `.metal` files, keep thread divergence low. Avoid branching `if/else` inside massive loops when possible, utilizing mathematical step functions or LUTs.
-3. **Apple Silicon is UMA:** Unified Memory Architecture means macOS doesn't physically copy buffers from RAM to VRAM in shared mode. However, you must respect `MTLResourceStorageModePrivate` for textures the CPU never touches (e.g., intermediate GBuffer textures).
-4. **Performance is King:** Because path tracing is inherently slow, if you suggest a feature (e.g., glass refraction), implement it as cheaply as possible (e.g., screen space or a single extra trace) rather than exploding the ray count.
+2. **Minimize Divergence in Shaders:** In `.metal` files, keep thread divergence low.
+3. **Performance is King:** Because path tracing is inherently slow, if you suggest a feature (e.g., glass refraction), implement it as cheaply as possible (single extra trace) rather than exploding the ray count.
 
 Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`.

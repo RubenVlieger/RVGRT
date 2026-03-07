@@ -3,6 +3,8 @@
 #include "raytracing_functions.h"  
 #include "renderer/ShaderTypes.h"
 #include "TerrainGeneration.h"
+#include "renderer/shader_settings.h"
+
 using namespace metal;
 
 
@@ -12,7 +14,6 @@ inline float InterleavedGradientNoise(float2 pos) {
 }
 
 // =================================================================================
-// HELPER: Henyey-Greenstein Phase Function
 // Controls the "halo" around the sun (anisotropy).
 // g = 0 (isotropic), g near 1 (strong forward scattering/god rays)
 // =================================================================================
@@ -24,7 +25,7 @@ inline float phaseFunction(float3 viewDir, float3 lightDir, float g) {
 
 
 // =================================================================================
-// KERNEL: Volumetric Fog (Half Resolution)
+// KERNEL: Volumetric Fog
 // =================================================================================
 kernel void VolumetricFog(
     texture2d<float, access::write> texVolumetric [[texture(0)]], 
@@ -43,6 +44,7 @@ kernel void VolumetricFog(
 {
     if (gid.x >= texVolumetric.get_width() || gid.y >= texVolumetric.get_height()) return;
 
+#if VOLUMETRIC_FOG
     // --- 1. SETUP ---
     uint2 fullResCoord = gid * 2;
     if (fullResCoord.x >= texDepth.get_width()) fullResCoord.x = texDepth.get_width() - 1;
@@ -51,8 +53,8 @@ kernel void VolumetricFog(
     float depth = texDepth.read(fullResCoord).r;
     float2 uv = (float2(gid) + 0.5f) / float2(texVolumetric.get_width(), texVolumetric.get_height());
 
-    // Clamp depth to fog distance (300 blocks)
-    float fogMaxDist = 300.0f; 
+    // Clamp depth to fog distance
+    float fogMaxDist = VOLUMETRIC_MAXDIST; 
     float clampedDepth = min(depth, fogMaxDist);
     
     float3 endPos = reconstructPos(clampedDepth, uv, camera);
@@ -66,16 +68,16 @@ kernel void VolumetricFog(
     // Use IGN for dithering. It produces a checkerboard pattern that TAA resolves perfectly.
     float dither = InterleavedGradientNoise(float2(gid) + float2(frame.time * 5.588f));
     
-    const int STEPS = 10; 
+    const int STEPS = VOLUMETRIC_STEPS; 
     float stepSize = rayLength / float(STEPS);
     float currentT = stepSize * dither; 
     
     float3 accumulatedLight = float3(0.0f);
     float accumulatedTransmittance = 1.0f;
     
-    const float density = 0.005f; 
-    const float3 fogColor = float3(0.6f, 0.7f, 0.8f); 
-    const float anisotropy = 0.6f; 
+    const float density = FOG_DENSITY; 
+    const float3 fogColor = float3(FOG_COLOR); 
+    const float anisotropy = FOG_ANISOTROPY; 
     float phase = phaseFunction(rayDir, frame.sunDirection, anisotropy);
     float3 sunColor = float3(c_sunColor);
 
@@ -89,16 +91,20 @@ kernel void VolumetricFog(
         // Also skip for very far samples where fog contribution is negligible.
         if (currentT > 2.0f && currentT < 200.0f && phase > 0.04f) { 
             // Volumetric shadows: shorter max distance and fewer traversal iterations.
+#if SHADOWS
             isShadowed = traceShadow(pos,
                                      frame.sunDirection,
-                                     500.0f,
-                                     48,
+                                     VOLUMETRIC_SHADOW_MAXDIST,
+                                     VOLUMETRIC_SHADOW_STEPS,
                                      indirection,
                                      sectorBuffer,
                                      occupancyBuffer,
                                      0,
                                      sectorMaskBuffer,
                                      frame.worldOrigin);
+#else
+            isShadowed = false;
+#endif
         }
 
         if (!isShadowed) {
@@ -147,6 +153,9 @@ kernel void VolumetricFog(
 
     float3 result = mix(accumulatedLight, history, blendFactor);
     texVolumetric.write(float4(result, 1.0f), gid);
+#else
+    texVolumetric.write(float4(0.0f), gid);
+#endif
 }
 
 

@@ -3,6 +3,8 @@
 #include "raytracing_functions.h"  
 #include "renderer/ShaderTypes.h"
 #include "TerrainGeneration.h"
+#include "renderer/shader_settings.h"
+
 using namespace metal;
 
 kernel void GBufferAndDirectLight(
@@ -80,29 +82,43 @@ kernel void GBufferAndDirectLight(
             float3 reflDir = reflect(dir, (float3)distNormal);
             
             // Reflection Trace
+#if REFLECTIONS
             hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
+#else
+            hitInfo reflHit;
+            reflHit.hit = false;
+            reflHit.pos = hit.pos;
+#endif
             
             half3 reflectColor;
+#if REFLECTIONS
             if (reflHit.hit) {
                 float distSq = dot(reflHit.pos - hit.pos, reflHit.pos - hit.pos);
                 // Sample Material
                 half3 rAlbedo = sampleTexture(reflHit.uv, reflHit.matID, reflHit.normal, textureAtlas, distSq);
                 
                 // Reflection Shadow
+#if SHADOWS
                 bool rShadow = traceShadow(reflHit.pos + (float3)reflHit.normal * 0.01f,
                                            frame.sunDirection,
-                                           1000.0f,
-                                           128,
+                                           REFLECTION_SHADOW_MAXDIST,
+                                           REFLECTION_SHADOW_STEPS,
                                            indirection,
                                            sectorBuffer,
                                            occupancyBuffer,
                                            dataBuffer,
                                            sectorMaskBuffer,
                                            frame.worldOrigin);
+#else
+                bool rShadow = false;
+#endif
                 reflectColor = rAlbedo * (rShadow ? 0.05h : (half3)c_sunColor);
             } else {
                 reflectColor = sampleSky(reflDir, frame.sunDirection);
             }
+#else
+            reflectColor = sampleSky(reflDir, frame.sunDirection);
+#endif
             
             // Fresnel / Specular
             float3 viewDir = -dir;
@@ -113,16 +129,20 @@ kernel void GBufferAndDirectLight(
             half fresnel = 0.02h + (0.98h) * pow(1.0h - NdotV, 5.0h);
             
             // Water Self Shadow
+#if SHADOWS
             bool waterShadow = traceShadow(reflHit.pos,
                                            frame.sunDirection,
-                                           2000.0f,
-                                           192,
+                                           WATER_SHADOW_MAXDIST,
+                                           WATER_SHADOW_STEPS,
                                            indirection,
                                            sectorBuffer,
                                            occupancyBuffer,
                                            dataBuffer,
                                            sectorMaskBuffer,
                                            frame.worldOrigin);
+#else
+            bool waterShadow = false;
+#endif
             
             irradiance = (reflectColor * fresnel) + (c_sunColor * specular * (waterShadow ? 0.0h : 1.0h));
             irradiance /= (albedo + 0.001h); // Cancel out albedo mult later
@@ -133,16 +153,20 @@ kernel void GBufferAndDirectLight(
             albedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, depth * depth);
 
             
+#if SHADOWS
             bool isShadowed = traceShadow(hit.pos + (float3)normal * 0.005f,
                                           frame.sunDirection,
-                                          2000.0f,
-                                          160,
+                                          SHADOW_MAXDIST,
+                                          SHADOW_STEPS,
                                           indirection,
                                           sectorBuffer,
                                           occupancyBuffer,
                                           dataBuffer,
                                           sectorMaskBuffer,
                                           frame.worldOrigin);
+#else
+            bool isShadowed = false;
+#endif
             
             half NdotL = max(dot(normal, (half3)frame.sunDirection), 0.0h);
             irradiance = c_sunColor * NdotL * (isShadowed ? 0.02h : 1.0h);
