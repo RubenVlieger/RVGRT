@@ -1,37 +1,41 @@
-# 🟩 Voxel World Engine (WIP)
+# 🟩 Voxel World Engine
 
-This is an attempt at creating a **Minecraft-like voxel world engine**, built mostly with CUDA and Metal for accelerated rendering, in a mostly cross platform way with a big shared codebase. This is a platform which allows me to try certain algorithms and datastructures and optimization techniques for realtime rendering.  
+This is an attempt at creating a **Minecraft-like voxel world engine**, built mostly with CUDA and Metal (in this dev phase only Metal supported!) for accelerated rendering, in a mostly cross platform way with a shared codebase. This is a platform which allows me to try certain algorithms and datastructures and optimization techniques for realtime rendering.  
 
 ---
 
 ## Features (so far)
 - Procedural voxel world generation.
-- CUDA + DirectX 12 interop for GPU-accelerated rendering.
+- Either Metal + Metal Compute or CUDA + DirectX 12 interop for GPU-accelerated rendering.
 - GPU accelerated world generation
-- GPU accelerated signed distance field (SDF) creation and usage
-- Lower resolution estimation of primary ray distance.
-- Hybrid based voxel raytracing algorithm: consisting of distance estimation (SDF accelerated) and DDA for precise hits and normals. 
-- Path tracing approach with multiple samples per pixel, which produces global illumination
-- Deferred rendering pipeline consisting of multiple kernels
-- A-Trous edge aware denoising of the indirect lighting 
-- Usage of the orignial Minecraft texturepack
-- Implemented shadows and reflections
-- Volumetric lighting
+- Realistic shadows and reflections
+- Realistic volumetric lighting
+- Color grading
 - Automatic exposure
-- Usage of DLSS image upscaling for windows 
+- Usage of DLSS image upscaling for windows and MetalFX upscaling on Mac
+- 3 Level grid sparse data structure chosen for storing material ID's and accelerated rendering
+- Lower resolution estimation of primary ray distance.
+- Path tracing approach for with indirect lighting with multiple samples per pixel, which produces global illumination and realistic results
+- Procedurally generated world, where new sections are swapped in memory as you fly around 
+- Deferred rendering pipeline consisting of multiple kernels
+- A-Trous edge aware denoising of the noisy indirect lighting 
+- A-Trous edge aware denoising of noisy volumetric lighting data
+- Usage of the orignial Minecraft texturepack
+
 
 
 ## To-do list:
+- Character model, and multiplayer support
 - Clouds
 - Realistic lens effects
 - A plane to fly around in
 - Ability to upload voxel scenes to render
 - Ability to walk around and possibly interact with the world
-- A compact and fast data structure for storing materialID's
+
 
 
 ## Requirements
-- **OS**: Windows, and MacOS
+- **OS**: MacOS or Windows
 - **Graphics**: Discrete GPU with >4gb video memory recommended   
 
 
