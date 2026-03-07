@@ -4,6 +4,7 @@
 #include "platform/Platform.hpp"
 #include "util.hpp"
 #include <numbers>
+#include <cmath>
 
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -17,8 +18,10 @@ float halton(int index, int base) {
   }
   return r * 0.5f;
 }
+
 Character::Character()
-    : viewMatrix(1.0f), projectionMatrix(1.0f), viewProjectionMatrix(1.0f),
+    : walkPhase(0.0f), walkSwingAmount(0.0f),
+      viewMatrix(1.0f), projectionMatrix(1.0f), viewProjectionMatrix(1.0f),
       unjitteredViewProjectionMatrix(1.0f),
       prevUnjitteredViewProjectionMatrix(1.0f),
       inverseViewProjectionMatrix(1.0f), prevViewProjectionMatrix(1.0f),
@@ -29,25 +32,21 @@ Character::Character()
       yaw(std::numbers::pi_v<float> * -0.5f), pitch(-std::numbers::pi_v<float>),
       speed(0.05f), speedDropoff(0.92f), jumpSpeed(2.0f), sensitivity(0.00003f),
       gravityAmount(0.0f)
-
 {
   lastRenderedViewProjectionMatrix = glm::mat4(1.0f);
-  // Constructor body can be empty if all initialization is done above
 }
 
 glm::dvec3 calcDirfromSphere(double pitch, double yaw) {
   const float pih = std::numbers::pi_v<float> * 0.5f;
-  glm::vec4 sins =
-      (glm::vec4(sin(yaw), sin(yaw + pih), sin(pitch), sin(pitch + pih)));
-  return normalize(
-      glm::vec3(-sins[0] * -sins[3], -sins[2], -sins[1] * sins[3]));
+  glm::vec4 sins = glm::vec4(sin(yaw), sin(yaw + pih), sin(pitch), sin(pitch + pih));
+  return normalize(glm::vec3(-sins[0] * -sins[3], -sins[2], -sins[1] * sins[3]));
 }
 
 void Character::Update(unsigned int frameCount) {
-  // Get the platform pointer from the global state
   Platform *platform = State::state.platform.get();
   if (!platform)
     return; // Guard against calls before platform is initialized
+    
   prevViewProjectionMatrix = viewProjectionMatrix;
   prevUnjitteredViewProjectionMatrix = unjitteredViewProjectionMatrix;
 
@@ -59,12 +58,11 @@ void Character::Update(unsigned int frameCount) {
                          (platform->IsKeyDown('S') ? -1.0f : 0.0f)) *
                 speed;
 
-  if (platform->IsKeyDown(0x38)) {
+  if (platform->IsKeyDown(0x38)) { // Shift modifier
     inputs *= 0.3f;
   }
 
   if (!lockMouse) {
-    // Access members through the platform pointer
     float deltayaw = platform->deltaXMouse.exchange(0) * sensitivity *
                      platform->deltaTime * FOV;
     float deltapitch = platform->deltaYMouse.exchange(0) * sensitivity *
@@ -83,6 +81,7 @@ void Character::Update(unsigned int frameCount) {
     direction = calcDirfromSphere(pitch, yaw);
   }
 
+  // Calculate movement
   velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) +
               inputs.z * (vec3)direction;
   velocity *= speedDropoff;
@@ -123,14 +122,129 @@ void Character::Update(unsigned int frameCount) {
 
   platform->deltaXMouse.store(0);
   platform->deltaYMouse.store(0);
-  // std::cout << direction.x << " " << direction.y << " " << direction.z
-  //           << std::endl;
+
+  // Update Walk Animation Phase
+  vec2 horizontalVelocity = vec2(velocity.x, velocity.z);
+  float currentSpeed = length(horizontalVelocity);
+  
+  // A typical moving speed gives currentSpeed ~ 0.3 to 0.6
+  float targetSwing = glm::clamp(currentSpeed * 2.0f, 0.0f, 1.0f);
+  
+  // Smoothly interpolate walkSwingAmount
+  walkSwingAmount = glm::mix(walkSwingAmount, targetSwing, platform->deltaTime * 10.0f);
+
+  // Advance the walk phase based on how fast the character is moving
+  walkPhase += currentSpeed * platform->deltaTime * 25.0f; // Multiplier tuned for visual cadence
+  
+  // Keep the phase bounded to avoid floating point precision issues over time
+  walkPhase = fmod(walkPhase, std::numbers::pi_v<float> * 2.0f);
+
+  // Re-build all the body part matrices for the animation frame
+  UpdateTransformations();
 }
 
 bool Character::IsKeyDown(char keycode) {
-  // Access IsKeyDown via the platform pointer
   if (State::state.platform) {
     return State::state.platform->IsKeyDown(keycode);
   }
   return false;
+}
+
+static glm::mat4 BuildPartMatrix(glm::vec3 basePosition, float baseYaw,
+                                 glm::vec3 hingeOffset, glm::vec3 partCenterOffset,
+                                 glm::vec3 partSize, float pitchLocal) {
+    glm::mat4 m(1.0f);
+    
+    // 1. Position in world
+    m = glm::translate(m, basePosition);
+    
+    // 2. Base Character Yaw (orient whole character body towards camera direction)
+    // Positive right-handed rotation around Y faces -Z towards the calculated bodyYaw direction
+    m = glm::rotate(m, baseYaw, glm::vec3(0.0f, 1.0f, 0.0f));
+    
+    // 3. Move relative to the hinge of this part
+    m = glm::translate(m, hingeOffset);
+    
+    // 4. Apply hinge rotation (walk animation or head pitch)
+    if (pitchLocal != 0.0f) {
+        m = glm::rotate(m, pitchLocal, glm::vec3(1.0f, 0.0f, 0.0f));
+    }
+    
+    // 5. Offset internal center relative to the hinge
+    m = glm::translate(m, partCenterOffset);
+    
+    // 6. Scale out to the required AABB size
+    m = glm::scale(m, partSize);
+
+    return m;
+}
+
+void Character::UpdateTransformations() {
+    // Determine horizontal facing direction for the whole body 
+    // -Z is forward in this coordinate system.
+    float bodyYaw = std::atan2(direction.x, -direction.z);
+    
+    // Calculate head pitch decoupled from the global pitch state var
+    float headPitch = (float)std::asin(direction.y);
+    
+    // 'position' represents the camera/eye level. In our 2.0 tall character, eyes are at ~1.62.
+    glm::vec3 feetPosition = position - glm::vec3(0.0f, 1.62f, 0.0f);
+
+    // Max swing rotation ~45 degrees (0.8 radians) scaled by our current momentum.
+    float swingAngle = sin(walkPhase) * 0.8f * walkSwingAmount;
+    
+    // Overall Character Bounding Box (for coarse culling)
+    glm::mat4 bboxMat = glm::translate(glm::mat4(1.0f), feetPosition + glm::vec3(0.0f, 1.0f, 0.0f));
+    bboxMat = glm::rotate(bboxMat, bodyYaw, glm::vec3(0.0f, 1.0f, 0.0f));
+    bboxMat = glm::scale(bboxMat, glm::vec3(1.2f, 2.2f, 1.2f));
+    boundingBox.modelMatrix = bboxMat;
+    boundingBox.inverseModelMatrix = glm::inverse(bboxMat);
+
+    // Head (Hinges at the bottom of the head, y=1.5)
+    head.modelMatrix = BuildPartMatrix(feetPosition, bodyYaw, 
+                                       glm::vec3(0.0f, 1.5f, 0.0f), 
+                                       glm::vec3(0.0f, 0.25f, 0.0f), 
+                                       glm::vec3(0.5f, 0.5f, 0.5f), 
+                                       headPitch);
+    head.inverseModelMatrix = glm::inverse(head.modelMatrix);
+
+    // Trunk (No independent swing, just body yaw)
+    trunk.modelMatrix = BuildPartMatrix(feetPosition, bodyYaw, 
+                                        glm::vec3(0.0f, 1.5f, 0.0f), 
+                                        glm::vec3(0.0f, -0.375f, 0.0f), 
+                                        glm::vec3(0.5f, 0.75f, 0.25f), 
+                                        0.0f);
+    trunk.inverseModelMatrix = glm::inverse(trunk.modelMatrix);
+
+    // Left Arm (Opposite swing to left leg logic)
+    leftArm.modelMatrix = BuildPartMatrix(feetPosition, bodyYaw, 
+                                          glm::vec3(-0.375f, 1.5f, 0.0f), 
+                                          glm::vec3(0.0f, -0.375f, 0.0f), 
+                                          glm::vec3(0.25f, 0.75f, 0.25f), 
+                                          -swingAngle);
+    leftArm.inverseModelMatrix = glm::inverse(leftArm.modelMatrix);
+
+    // Right Arm
+    rightArm.modelMatrix = BuildPartMatrix(feetPosition, bodyYaw, 
+                                           glm::vec3(0.375f, 1.5f, 0.0f), 
+                                           glm::vec3(0.0f, -0.375f, 0.0f), 
+                                           glm::vec3(0.25f, 0.75f, 0.25f), 
+                                           swingAngle);
+    rightArm.inverseModelMatrix = glm::inverse(rightArm.modelMatrix);
+
+    // Left Leg
+    leftLeg.modelMatrix = BuildPartMatrix(feetPosition, bodyYaw, 
+                                          glm::vec3(-0.125f, 0.75f, 0.0f), 
+                                          glm::vec3(0.0f, -0.375f, 0.0f), 
+                                          glm::vec3(0.25f, 0.75f, 0.25f), 
+                                          swingAngle);
+    leftLeg.inverseModelMatrix = glm::inverse(leftLeg.modelMatrix);
+
+    // Right Leg
+    rightLeg.modelMatrix = BuildPartMatrix(feetPosition, bodyYaw, 
+                                           glm::vec3(0.125f, 0.75f, 0.0f), 
+                                           glm::vec3(0.0f, -0.375f, 0.0f), 
+                                           glm::vec3(0.25f, 0.75f, 0.25f), 
+                                           -swingAngle);
+    rightLeg.inverseModelMatrix = glm::inverse(rightLeg.modelMatrix);
 }
