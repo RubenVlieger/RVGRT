@@ -1,0 +1,86 @@
+# RVGRT (RubenVlieger GPU Ray Tracer) - Exhaustive Project Architecture & LLM Context
+
+This document is the master architectural blueprint for RVGRT, an advanced, cross-platform (Metal/CUDA) Minecraft-like path-traced voxel engine. It is specifically designed to provide LLMs with maximum context, accelerating debugging, feature implementation, and optimization.
+
+## 1. Executive Summary & Philosophy
+- **Core Goal:** Real-time path tracing of massive voxel terrains at high framerates using GPU compute.
+- **Rendering Paradigm:** A deferred, multi-pass compute pipeline. It eschews traditional rasterization in favor of pure compute raytracing.
+- **Platform Strategy:** C++ core logic, abstracted `Renderer` interfaces, and OS-specific backends. Currently, **Apple Metal (macOS)** is the primary, actively developed path using Objective-C++ (`.mm`) and `.metal` shaders. A CUDA/D3D12 fallback exists on Windows but is not actively maintained.
+- **Memory Philosophy:** GPUs have limited memory; a massive world cannot fit in dense grids. The engine dictates a strict, aggressive **3-Level Sparse Voxel Octree (SVO-like)** structure mapping world space to toroidal fixed-capacity GPU buffers.
+
+## 2. Directory Layout & Core Components
+```
+[RVGRT Root]
+├── CMakeLists.txt        # Handles OS branching, Metal shader compilation (.air/.metallib), and CUDA targets.
+├── include/              # Shared C++ Headers (Platform agnostic).
+│   ├── renderer/         # Renderer interfaces, struct definitions shared with shaders.
+│   │   ├── ShaderTypes.h # CRITICAL: Memory layout bridge between C++ and Metal/CUDA.
+│   │   ├── Renderer.hpp  # Abstract base class for the engine.
+│   │   ├── MaterialMap.hpp / BrickPool.hpp # GPU voxel memory management headers.
+│   │   └── intersections.h # Contains the core hierarchical DDA ray traversal maths (Metal C++).
+│   └── platform/         # OS window/event interfaces.
+├── src/                  # Implementations.
+│   ├── Character.cpp, Camera.cpp, State.cpp # Game state, physics, user input.
+│   ├── renderer/
+│   │   ├── MetalRenderer.mm # The orchestrator. Executes the 8-pass compute pipeline.
+│   │   ├── MaterialMap.mm   # Handles async terrain generation and toroidal LOD streaming.
+│   │   ├── BrickPool.mm     # Allocator for the physical GPU voxel chunks (Bricks).
+│   │   └── kernels/         # Metal compute shaders for the rendering passes.
+│   │       ├── direct_kernel.metal, indirect_bounce.metal, denoise_kernel.metal
+│   │       ├── volumetric_kernel.metal, composite_kernel.metal, exposure_kernel.metal
+│   │       └── material_gen_kernel.metal (Procedural voxel generation)
+│   └── platform/         # macOS/Windows boilerplate (macos_main.mm sets up the MetalView).
+└── resources/            # App icons, default texture packs.
+```
+
+## 3. Data Structures & Memory Management (The Voxel Backbone)
+To render millions of voxels smoothly, the world is broken down into a 3-level hierarchical sparsity model managed by `MaterialMap` and `BrickPool`.
+
+### Levels of Abstraction
+1. **Level 1 (Indirection):** A toroidal 3D `MTLTexture` (`_indirectionTexture`, R32Uint). It wraps around the camera's spawn. It holds a single integer index pointing to the `SectorBuffer`. If a sector is unallocated, it reads `SECTOR_HANDLE_EMPTY`.
+2. **Level 2 (Sector Buffer):** A flat buffer of `SectorInfo` structs. A "Sector" represents a 32x32x32 span of voxels space. `SectorInfo` contains a 64-bit `brickMask` denoting which inner 8x8x8 bricks actually exist, and a `baseBrickIndex` pointing into the `BrickPool`.
+3. **Level 3 (Occupancy Buffer / Sub-Brick):** Inside the `BrickPool`, an occupancy mask defines the solid status of a 4x4x4 block of voxels using 64-bit integers (`ulong`).
+4. **Level 4 (Data Buffer / Voxel):** The actual material IDs (`uchar` / `uint8_t`) for the 1x1x1 voxels. 512 bytes per brick.
+
+**Toroidal Streaming:** `MaterialMap::UpdateStreaming(cameraPos)` fires every frame. As the player moves across sector boundaries, old sectors at the trailing edge of the 3D texture are unloaded, and new sectors at the leading edge are queued for async GPU procedural generation (`psoAnalyze`, `psoFill`).
+
+## 4. The Rendering Pipeline (Deep Dive)
+The `MetalRenderer::Draw()` loop executes an 8-Pass Deferred Compute Pipeline on the GPU.
+
+1. **Pass 0: DistApprox (`distApproximationKernel`)**
+   - Renders a half-resolution depth map. Optimizes ray starting points for the main passes.
+2. **Pass 1: GBuffer & Direct Light (`GBufferAndDirectLight`)**
+   - Full resolution. Shoots primary rays (`hitInfo = trace()`).
+   - Computes Water logic (surface noise, reflections, specularity, refractions).
+   - Trace shadow rays to the sun. Outputs Albedo, Normal, Motion Vectors, and Direct Lighting.
+3. **Pass 2: Indirect Bounce (`IndirectBounce`)**
+   - Hemisphere sampling via cosine-weighted random rays based on the `normal`.
+   - Bounces rays to calculate Global Illumination (GI). Traces short shadow rays for the bounced light.
+   - Output is extremely noisy.
+4. **Pass 3: Temporal Accumulation (`TemporalAccumulation`)**
+   - Uses Motion Vectors from Pass 1 to reproject the previous frame's Indirect Light.
+   - Exponential moving average of the raw indirect light to settle the noise over time.
+5. **Pass 4: Denoise (`BilateralDenoise`)**
+   - An *A-Trous Edge-Avoiding Spatial Filter* executing in 3 iterations (Step widths: 1, 2, and 4).
+   - Preserves geometry edges using Normal and Depth strictness weights while smoothing out the accumulated GI noise.
+6. **Pass 5: Volumetric (`VolumetricFog`)**
+   - Half-resolution raymarching through the SVO.
+   - Samples shadow maps incrementally to compute realistic god-rays and scattering in empty air.
+7. **Pass 6: Exposure (`ComputeExposure`)**
+   - A compute shader that averages scene luminance and writes to a shared 1-element buffer to smoothly adapt camera exposure over time.
+8. **Pass 7: Composite (`Composite`)**
+   - Combines Direct Light, Denoised Indirect Light, Albedo, Volumetrics, and Skybox into an HDR buffer, applying the Exposure modifier and tone-mapping.
+9. **Post-Process:** Apple `MetalFX` (Temporal Scaler/TAA) upscales to native resolution and provides anti-aliasing.
+
+## 5. Raytracing Algorithms (`intersections.h`)
+The heart of the performance lies in `intersections.h` (included by `.metal` kernels).
+- **`GetStepPos()`**: Evaluates the hierarchy. Checks Level 1 (Indirection), then Level 2 (Sector Mask), then Level 3 (Occupancy). 
+- **LOD Optimization:** If a region is empty or far away, it identifies the sparse bounds using `GetIsotropicLOD()` and skips vast empty spaces instantly by advancing the ray position to the cell boundary.
+- **Bitwise Magic:** Utilizes `popcnt64()` and bitmasking (`BitTestHalf64`) against a `RayMaskOptimizationLUT` to cheaply calculate intersection boundaries within an 8x8x8 or 4x4x4 cell without standard AABB testing.
+
+## 6. Guidelines & Constraints for LLMs
+1. **Never Break the GPU/CPU Boundary:** If you alter a struct in `ShaderTypes.h` (e.g., adding a float to `CameraData` or `FrameData`), be extremely mindful of alignment and padding (16-byte boundaries) since Metal and C++ must interpret the raw bytes identically.
+2. **Minimize Divergence in Shaders:** In `.metal` files, keep thread divergence low.
+3. **Performance is King:** Because path tracing is inherently slow, if you suggest a feature (e.g., glass refraction), implement it as cheaply as possible (single extra trace) rather than exploding the ray count.
+
+Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`.

@@ -14,6 +14,8 @@ int State::screenHEIGHT = 1080;
 State::State()
 {
     // The constructor can be empty if initialization is done in the main function.
+    Character npc;
+    otherCharacters.push_back(npc);
 }
 
 // DEFINE the destructor here. 

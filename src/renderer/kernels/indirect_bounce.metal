@@ -3,6 +3,8 @@
 #include "raytracing_functions.h"  
 #include "renderer/ShaderTypes.h"
 #include "TerrainGeneration.h"
+#include "renderer/shader_settings.h"
+
 using namespace metal;
 
 kernel void IndirectBounce(
@@ -20,11 +22,13 @@ kernel void IndirectBounce(
     device ulong* occupancyBuffer             [[buffer(4)]],
     device uchar* dataBuffer                  [[buffer(5)]],
     device ulong* sectorMaskBuffer            [[buffer(6)]],
+    constant CharacterGPUData* charData       [[buffer(7)]],
 
     uint2 gid [[thread_position_in_grid]])
 {
     if (gid.x >= texRawIndirect.get_width() || gid.y >= texRawIndirect.get_height()) return;
     
+#if INDIRECT_LIGHTING
     float depth = texDepth.read(gid).r;
     if (depth > 50000.0f) {
         texRawIndirect.write(float4(0,0,0,0), gid);
@@ -60,23 +64,28 @@ kernel void IndirectBounce(
     float3 rayDir = normalize(localDir.x * Tangent + localDir.y * N + localDir.z * Bitangent);
 
     // Bounce Trace
-    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
+    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
     
     half3 incomingLight = half3(0.0h);
 
     if (hit.hit) 
     {   
         // Indirect bounce shadow: relatively short range and we can afford fewer iterations.
+#if SHADOWS
         bool isShadowed = traceShadow(hit.pos + (float3)hit.normal * 0.01f,
                                       frame.sunDirection,
-                                      2000.0f,
-                                      64,
+                                      INDIRECT_SHADOW_MAXDIST,
+                                      INDIRECT_SHADOW_STEPS,
                                       indirection,
                                       sectorBuffer,
                                       occupancyBuffer,
                                       dataBuffer,
                                       sectorMaskBuffer,
-                                      frame.worldOrigin);
+                                      frame.worldOrigin,
+                                      charData);
+#else
+        bool isShadowed = false;
+#endif
         
         float distSq = (depth * depth) + dot(hit.pos - pos, hit.pos - pos); 
         half3 bouncedAlbedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, distSq);
@@ -93,4 +102,7 @@ kernel void IndirectBounce(
     }
     
     texRawIndirect.write(float4((float3)incomingLight, 1.0f), gid);
+#else
+    texRawIndirect.write(float4(0.0f), gid);
+#endif
 }

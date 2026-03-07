@@ -2,6 +2,7 @@
 
 #include "ShaderTypes.h"
 #include "renderer/ShaderTypes.h"
+#include "renderer/shader_settings.h"
 #include "renderer/hitInfo.h"
 #include "tables.h"
 #include <metal_stdlib>
@@ -216,7 +217,8 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
                      texture3d<uint, access::read> indirection,
                      device SectorInfo *sectors, device ulong *occupancy,
                      device uchar *data, device ulong *sectorMasks,
-                     int3 worldOrigin) {
+                     int3 worldOrigin,
+                     constant CharacterGPUData* charData = nullptr) {
   hitInfo hit;
   hit.hit = false;
   hit.normal = half3(0, 1, 0);
@@ -240,6 +242,75 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
   float3 startPos = ClipRayToAABB(rayPos, safeDir, invDir, worldMin, worldMax);
 
   int3 voxelPos = int3(floor(startPos));
+  
+  // ---------- Character AABB intersections (O(1) closest test) ----------
+  float closestCharT = 1e20f;
+  float3 closestCharNormal = float3(0.0f);
+  int closestCharMatID = 0;
+  
+  if (charData != nullptr) {
+      #if CHARACTER_MODELS
+      for (int i = 0; i < charData->numCharacters; ++i) {
+          // Check overall bounding box first
+          float4x4 invBBox = charData->invBoundingBoxes[i];
+          float3 localBDir = (invBBox * float4(rayDir, 0.0f)).xyz;
+          float3 localBPos = (invBBox * float4(rayPos, 1.0f)).xyz;
+          float3 invLocalBDir = 1.0f / localBDir;
+          
+          float3 bt0 = (-0.5f - localBPos) * invLocalBDir;
+          float3 bt1 = ( 0.5f - localBPos) * invLocalBDir;
+          float3 btmin = min(bt0, bt1);
+          float3 btmax = max(bt0, bt1);
+          float bNear = max(max(btmin.x, btmin.y), btmin.z);
+          float bFar = min(min(btmax.x, btmax.y), btmax.z);
+          
+          // Self-intersection check: if ray origin is inside bounding box (bNear < 0 AND bFar > 0),
+          // we are generating primary rays from inside our own head, so we should skip this character entirely 
+          // in the primary trace trace() to avoid black/flickering screens blocking the view.
+          if (bNear < 0.0f && bFar > 0.0f) continue;
+          
+          // Missed the bounding box entirely, or it's behind us, or further than a found character hit
+          if (bNear > bFar || bFar < 0.0f || bNear >= closestCharT) continue;
+          
+          // Bounding box hit! Now check the 6 body parts
+          for (int p = 0; p < 6; ++p) {
+              float4x4 invPart = charData->invBodyParts[i * 6 + p];
+              float3 localDir = (invPart * float4(rayDir, 0.0f)).xyz;
+              float3 localPos = (invPart * float4(rayPos, 1.0f)).xyz;
+              float3 invLocalDir = 1.0f / localDir;
+              
+              float3 t0 = (-0.5f - localPos) * invLocalDir;
+              float3 t1 = ( 0.5f - localPos) * invLocalDir;
+              float3 tmin = min(t0, t1);
+              float3 tmax = max(t0, t1);
+              float tNear = max(max(tmin.x, tmin.y), tmin.z);
+              float tFar = min(min(tmax.x, tmax.y), tmax.z);
+              
+              if (tNear <= tFar && tFar > 0.0f && tNear < closestCharT) {
+                  closestCharT = max(tNear, 0.0f);
+                  closestCharMatID = 255;
+                  
+                  // Calculate local normal of the AABB
+                  float3 hitPosLocal = localPos + localDir * closestCharT;
+                  float3 absHit = abs(hitPosLocal);
+                  float3 localNormal = float3(0.0f);
+                  if (absHit.x > absHit.y && absHit.x > absHit.z)
+                      localNormal = float3(sign(hitPosLocal.x), 0.0f, 0.0f);
+                  else if (absHit.y > absHit.z)
+                      localNormal = float3(0.0f, sign(hitPosLocal.y), 0.0f);
+                  else
+                      localNormal = float3(0.0f, 0.0f, sign(hitPosLocal.z));
+                      
+                  // Transform normal back to world space: n_world = transpose(inverse(M)) * n_local
+                  // wait! invPart IS the inverse! So we want transpose(invPart) * n_local
+                  // Note: metal float4x4 matrix multiply with float3 vector implicitly pads w=0
+                  closestCharNormal = normalize((transpose(invPart) * float4(localNormal, 0.0f)).xyz);
+              }
+          }
+      }
+      #endif
+  }
+  // ----------------------------------------------------------------------
 
   // Traversal loop
   int maxIters = 512;
@@ -268,6 +339,15 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
       float3 t1 = (cellMin + 1.0f - rayPos) * invDir;
       float3 tmin_v = min(t0, t1);
       float tEntry = max(max(tmin_v.x, tmin_v.y), tmin_v.z);
+      
+      // Compare voxel intersection distance vs character intersection
+      if (closestCharT < tEntry) {
+          hit.pos = rayPos + rayDir * closestCharT;
+          hit.normal = half3(closestCharNormal);
+          hit.matID = closestCharMatID;
+          hit.uv = half2(0.0h);
+          return hit;
+      }
 
       hit.pos = rayPos + rayDir * tEntry;
 
@@ -329,6 +409,15 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
     voxelPos = nextVoxelPos;
   }
 
+  if (closestCharT < 1e20f) {
+      hit.hit = true;
+      hit.pos = rayPos + rayDir * closestCharT;
+      hit.normal = half3(closestCharNormal);
+      hit.matID = closestCharMatID;
+      hit.uv = half2(0.0h);
+      return hit;
+  }
+
   return hit;
 }
 
@@ -337,7 +426,8 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
                         int maxIters, texture3d<uint, access::read> indirection,
                         device SectorInfo *sectors, device ulong *occupancy,
                         device uchar *data, device ulong *sectorMasks,
-                        int3 worldOrigin) {
+                        int3 worldOrigin,
+                        constant CharacterGPUData* charData = nullptr) {
   float3 safeDir = rayDir;
   safeDir.x = (abs(safeDir.x) < 1e-8f) ? copysign(1e-8f, safeDir.x) : safeDir.x;
   safeDir.y = (abs(safeDir.y) < 1e-8f) ? copysign(1e-8f, safeDir.y) : safeDir.y;
@@ -352,8 +442,45 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
 
   float3 startPos = ClipRayToAABB(rayPos, safeDir, invDir, worldMin, worldMax);
 
-  int3 voxelPos = int3(floor(startPos));
   float maxDistSq = maxDist * maxDist;
+  
+  if (charData != nullptr) {
+      #if CHARACTER_MODELS
+      for (int i = 0; i < charData->numCharacters; ++i) {
+          float4x4 invBBox = charData->invBoundingBoxes[i];
+          float3 localBDir = (invBBox * float4(rayDir, 0.0f)).xyz;
+          float3 localBPos = (invBBox * float4(rayPos, 1.0f)).xyz;
+          float3 invLocalBDir = 1.0f / localBDir;
+          float3 bt0 = (-0.5f - localBPos) * invLocalBDir;
+          float3 bt1 = ( 0.5f - localBPos) * invLocalBDir;
+          float3 btmin = min(bt0, bt1);
+          float3 btmax = max(bt0, bt1);
+          float bNear = max(max(btmin.x, btmin.y), btmin.z);
+          float bFar = min(min(btmax.x, btmax.y), btmax.z);
+          
+          if (bNear > bFar || bFar < 0.0f || bNear * bNear > maxDistSq) continue;
+          
+          for (int p = 0; p < 6; ++p) {
+              float4x4 invPart = charData->invBodyParts[i * 6 + p];
+              float3 localDir = (invPart * float4(rayDir, 0.0f)).xyz;
+              float3 localPos = (invPart * float4(rayPos, 1.0f)).xyz;
+              float3 invLocalDir = 1.0f / localDir;
+              float3 t0 = (-0.5f - localPos) * invLocalDir;
+              float3 t1 = ( 0.5f - localPos) * invLocalDir;
+              float3 tmin = min(t0, t1);
+              float3 tmax = max(t0, t1);
+              float tNear = max(max(tmin.x, tmin.y), tmin.z);
+              float tFar = min(min(tmax.x, tmax.y), tmax.z);
+              
+              if (tNear <= tFar && tFar > 0.0f && (tNear * tNear) < maxDistSq) {
+                  return true;
+              }
+          }
+      }
+      #endif
+  }
+
+  int3 voxelPos = int3(floor(startPos));
 
   for (int i = 0; i < maxIters; ++i) {
 
@@ -420,7 +547,7 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
                      device SectorInfo *sectors, device ulong *occupancy,
                      device uchar *data, device ulong *sectorMasks) {
   return trace(rayPos, rayDir, indirection, sectors, occupancy, data,
-               sectorMasks, int3(0));
+               sectorMasks, int3(0), nullptr);
 }
 
 inline hitInfo trace(float3 rayPos, float3 rayDir,
@@ -428,7 +555,7 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
                      device SectorInfo *sectors, device ulong *occupancy,
                      device uchar *data) {
   return trace(rayPos, rayDir, indirection, sectors, occupancy, data, nullptr,
-               int3(0));
+               int3(0), nullptr);
 }
 
 inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
@@ -436,7 +563,7 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
                         device SectorInfo *sectors, device ulong *occupancy,
                         device uchar *data, device ulong *sectorMasks) {
   return traceShadow(rayPos, rayDir, maxDist, maxIters, indirection, sectors,
-                     occupancy, data, sectorMasks, int3(0));
+                     occupancy, data, sectorMasks, int3(0), nullptr);
 }
 
 inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
@@ -444,5 +571,5 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
                         device SectorInfo *sectors, device ulong *occupancy,
                         device uchar *data) {
   return traceShadow(rayPos, rayDir, maxDist, maxIters, indirection, sectors,
-                     occupancy, data, nullptr, int3(0));
+                     occupancy, data, nullptr, int3(0), nullptr);
 }

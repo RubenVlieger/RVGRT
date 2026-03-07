@@ -20,6 +20,16 @@ struct CameraData {
   simd_float2 padding; // 16-byte aligned
 };
 
+#define MAX_CHARACTERS 16
+
+struct CharacterGPUData {
+  int numCharacters;
+  int padding[3];
+  simd_float4x4 invBoundingBoxes[MAX_CHARACTERS];
+  // 6 body parts (head, trunk, left/right arm, left/right leg) per character
+  simd_float4x4 invBodyParts[MAX_CHARACTERS * 6]; 
+};
+
 struct FrameData {
   simd_float3 sunDirection;
   float time;
@@ -44,8 +54,8 @@ struct ExposureData {
 
 // Brick pool capacity — how many 8x8x8 bricks can exist simultaneously.
 // Each brick uses 576 bytes (64 occupancy + 512 data).
-// At 8M bricks: ~4.4GB total.
-#define BRICK_POOL_CAPACITY (8 * 1024 * 1024)
+// At 6M bricks: ~3.3GB total.
+#define BRICK_POOL_CAPACITY (6 * 1024 * 1024)
 
 // Maximum number of sectors that can be active simultaneously.
 // Must be >= the total cells in the indirection texture.

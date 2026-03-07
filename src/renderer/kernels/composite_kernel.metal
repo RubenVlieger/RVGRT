@@ -3,9 +3,9 @@
 #include "raytracing_functions.h"  
 #include "renderer/ShaderTypes.h"
 #include "TerrainGeneration.h"
+#include "renderer/shader_settings.h"
+
 using namespace metal;
-
-
 
 // Standard ACES fitted tone mapper (Unreal Engine 4 version)
 // Compresses High Dynamic Range (e.g., 0 to 100) to LDR (0 to 1).
@@ -121,11 +121,11 @@ kernel void Composite(
     // 4. Fog Logic (unchanged)
     if (depth < 50000.0f) 
     {
-        const float fogStart = 60.0f;
-        const float fogDensity = 0.0002f; 
+        const float fogStart = COMPOSITE_FOG_START;
+        const float fogDensity = COMPOSITE_FOG_DENSITY; 
         float dist = max(depth - fogStart, 0.0f);
         float fogFactor = 1.0f - exp(-dist * fogDensity);
-        float3 fogColor = float3(0.5f, 0.7f, 0.9f); 
+        float3 fogColor = float3(COMPOSITE_FOG_COLOR); 
         linearColor = mix(linearColor, fogColor, fogFactor);
     }
 
@@ -142,7 +142,7 @@ kernel void Composite(
     linearColor *= exposureScale;
 
     // Saturation Boost 
-    linearColor = applySaturation(linearColor, (depth > 50000.0f) ? 1.05f : 1.4f); 
+    linearColor = applySaturation(linearColor, (depth > 50000.0f) ? SKY_IMAGE_SATURATION : IMAGE_SATURATION); 
 
     // Tone Mapping (ACES)
     float3 toneMapped = ACESFilm(linearColor);

@@ -117,6 +117,13 @@
     State::state.platform->deltaTime = frameTimeMs;
 
     State::state.character.Update(globalFrameCount); 
+    
+    static float npcTime = 0.0f;
+    npcTime += frameTimeMs / 1000.0f;
+    for (auto& npc : State::state.otherCharacters) {
+        npc.UpdateTestNPC(npcTime, frameTimeMs / 1000.0f);
+    }
+    
     globalFrameCount++;
 
     [_view setNeedsDisplay:YES];
