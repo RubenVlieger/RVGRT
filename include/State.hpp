@@ -26,6 +26,7 @@ public:
 
     // --- 3D World ---
     Character character = Character();
+    std::vector<Character> otherCharacters;
 
     // --- Singleton Instance ---
     static State state;

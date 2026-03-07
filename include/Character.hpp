@@ -62,6 +62,7 @@ public:
 
     bool IsKeyDown(char key);
     void Update(unsigned int frameCount);
+    void UpdateTestNPC(float time, float deltaTime);
     
     Character();
     

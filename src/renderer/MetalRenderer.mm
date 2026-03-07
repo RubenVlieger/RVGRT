@@ -67,6 +67,9 @@ MetalRenderer::MetalRenderer(id device_id) : _texturepack() {
                                          length:sizeof(ExposureData)
                                         options:MTLResourceStorageModeShared];
 
+  _characterBuffer = [_device newBufferWithLength:sizeof(CharacterGPUData)
+                                          options:MTLResourceStorageModeShared];
+
   NSLog(@"Starting Dynamic World Generation (XBrickMap)...");
   _materialMap.GenerateDynamic();
   NSLog(@"World Generation Complete.");
@@ -232,6 +235,38 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   }
   frameData.worldOrigin = _materialMap.GetWorldOrigin();
 
+  // Populate Character GPU Data
+  CharacterGPUData *charDataDest =
+      (CharacterGPUData *)[(id<MTLBuffer>)_characterBuffer contents];
+
+  int activeChars = 0;
+
+  auto appendCharacter = [&](const Character &c) {
+    if (activeChars < MAX_CHARACTERS) {
+      memcpy(&charDataDest->invBoundingBoxes[activeChars],
+             &c.boundingBox.inverseModelMatrix, sizeof(simd_float4x4));
+      memcpy(&charDataDest->invBodyParts[activeChars * 6 + 0],
+             &c.head.inverseModelMatrix, sizeof(simd_float4x4));
+      memcpy(&charDataDest->invBodyParts[activeChars * 6 + 1],
+             &c.trunk.inverseModelMatrix, sizeof(simd_float4x4));
+      memcpy(&charDataDest->invBodyParts[activeChars * 6 + 2],
+             &c.leftArm.inverseModelMatrix, sizeof(simd_float4x4));
+      memcpy(&charDataDest->invBodyParts[activeChars * 6 + 3],
+             &c.rightArm.inverseModelMatrix, sizeof(simd_float4x4));
+      memcpy(&charDataDest->invBodyParts[activeChars * 6 + 4],
+             &c.leftLeg.inverseModelMatrix, sizeof(simd_float4x4));
+      memcpy(&charDataDest->invBodyParts[activeChars * 6 + 5],
+             &c.rightLeg.inverseModelMatrix, sizeof(simd_float4x4));
+      activeChars++;
+    }
+  };
+
+  appendCharacter(character);
+  for (const auto &npc : State::state.otherCharacters) {
+    appendCharacter(npc);
+  }
+  charDataDest->numCharacters = activeChars;
+
   id<MTLComputeCommandEncoder> encoder = [cmdBuf computeCommandEncoder];
   encoder.label = @"Render Pipeline";
 
@@ -264,6 +299,7 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
               offset:0
              atIndex:6];
+  [encoder setBuffer:_characterBuffer offset:0 atIndex:7];
   [encoder dispatchThreads:gridSizeHalf
       threadsPerThreadgroup:MTLSizeMake(8, 8, 1)];
   [encoder popDebugGroup];
@@ -301,6 +337,7 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
               offset:0
              atIndex:6];
+  [encoder setBuffer:_characterBuffer offset:0 atIndex:7];
   [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject()
               atIndex:8];
   [encoder setTexture:_halfDistTexture atIndex:9];
@@ -336,6 +373,7 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
               offset:0
              atIndex:6];
+  [encoder setBuffer:_characterBuffer offset:0 atIndex:7];
   [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject()
               atIndex:8];
   [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
@@ -425,6 +463,7 @@ void MetalRenderer::Draw(id<MTLCommandBuffer> cmdBuf,
   [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer()
               offset:0
              atIndex:6];
+  [encoder setBuffer:_characterBuffer offset:0 atIndex:7];
   [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize];
   [encoder popDebugGroup];
   if (_supportsTimestamps)

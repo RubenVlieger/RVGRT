@@ -22,6 +22,7 @@ kernel void IndirectBounce(
     device ulong* occupancyBuffer             [[buffer(4)]],
     device uchar* dataBuffer                  [[buffer(5)]],
     device ulong* sectorMaskBuffer            [[buffer(6)]],
+    constant CharacterGPUData* charData       [[buffer(7)]],
 
     uint2 gid [[thread_position_in_grid]])
 {
@@ -63,7 +64,7 @@ kernel void IndirectBounce(
     float3 rayDir = normalize(localDir.x * Tangent + localDir.y * N + localDir.z * Bitangent);
 
     // Bounce Trace
-    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
+    hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
     
     half3 incomingLight = half3(0.0h);
 
@@ -80,7 +81,8 @@ kernel void IndirectBounce(
                                       occupancyBuffer,
                                       dataBuffer,
                                       sectorMaskBuffer,
-                                      frame.worldOrigin);
+                                      frame.worldOrigin,
+                                      charData);
 #else
         bool isShadowed = false;
 #endif

@@ -22,6 +22,7 @@ kernel void GBufferAndDirectLight(
     device ulong* occupancyBuffer             [[buffer(4)]],
     device uchar* dataBuffer                  [[buffer(5)]],
     device ulong* sectorMaskBuffer            [[buffer(6)]],
+    constant CharacterGPUData* charData       [[buffer(7)]],
     
     texture2d_array<float, access::sample>  textureAtlas[[texture(8)]],
 
@@ -43,7 +44,7 @@ kernel void GBufferAndDirectLight(
     float startDist = halfDistTex.sample(sLinear, uv).r;
     
 
-    hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
+    hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
 
     float depth = 100000.0f;
     half3 irradiance = half3(0.0h);
@@ -83,7 +84,7 @@ kernel void GBufferAndDirectLight(
             
             // Reflection Trace
 #if REFLECTIONS
-            hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin);
+            hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
 #else
             hitInfo reflHit;
             reflHit.hit = false;
@@ -108,7 +109,8 @@ kernel void GBufferAndDirectLight(
                                            occupancyBuffer,
                                            dataBuffer,
                                            sectorMaskBuffer,
-                                           frame.worldOrigin);
+                                           frame.worldOrigin,
+                                           charData);
 #else
                 bool rShadow = false;
 #endif
@@ -139,7 +141,8 @@ kernel void GBufferAndDirectLight(
                                            occupancyBuffer,
                                            dataBuffer,
                                            sectorMaskBuffer,
-                                           frame.worldOrigin);
+                                           frame.worldOrigin,
+                                           charData);
 #else
             bool waterShadow = false;
 #endif
@@ -163,7 +166,8 @@ kernel void GBufferAndDirectLight(
                                           occupancyBuffer,
                                           dataBuffer,
                                           sectorMaskBuffer,
-                                          frame.worldOrigin);
+                                          frame.worldOrigin,
+                                          charData);
 #else
             bool isShadowed = false;
 #endif

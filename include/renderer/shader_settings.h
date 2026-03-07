@@ -13,6 +13,8 @@
 #define REFLECTIONS 1
 #define SHADOWS 1
 
+#define CHARACTER_MODELS 1
+
 // ---------------------------------------------------------------------------------
 // SHADOW CASTING SETTINGS (Distance & Quality)
 // ---------------------------------------------------------------------------------

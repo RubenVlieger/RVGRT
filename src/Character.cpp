@@ -36,6 +36,40 @@ Character::Character()
   lastRenderedViewProjectionMatrix = glm::mat4(1.0f);
 }
 
+void Character::UpdateTestNPC(float time, float deltaTime) {
+  // Move back and forth along the Z axis based on a sine wave.
+  // We place it slightly in front of the typical spawn point (408.0f)
+  float baseZ = 405.0f; 
+  float newZ = baseZ + sin(time * 2.0f) * 3.0f;
+  
+  // Fake velocity to drive the animation
+  velocity.x = 0.0f;
+  velocity.y = 0.0f;
+  velocity.z = (newZ - position.z) / fmax(deltaTime, 0.001f);
+  
+  position.x = 508.0f;
+  position.y = 156.0f; 
+  position.z = newZ;
+
+  // Face the direction of movement
+  if (velocity.z > 0.0f) {
+      direction = glm::dvec3(0.0, 0.0, 1.0);
+  } else {
+      direction = glm::dvec3(0.0, 0.0, -1.0);
+  }
+
+  vec2 horizontalVelocity = vec2(velocity.x, velocity.z);
+  float currentSpeed = length(horizontalVelocity);
+  
+  float targetSwing = glm::clamp(currentSpeed * 2.0f, 0.0f, 1.0f);
+  walkSwingAmount = glm::mix(walkSwingAmount, targetSwing, deltaTime * 10.0f);
+  
+  walkPhase += currentSpeed * deltaTime * 25.0f; 
+  walkPhase = fmod(walkPhase, std::numbers::pi_v<float> * 2.0f);
+  
+  UpdateTransformations();
+}
+
 glm::dvec3 calcDirfromSphere(double pitch, double yaw) {
   const float pih = std::numbers::pi_v<float> * 0.5f;
   glm::vec4 sins = glm::vec4(sin(yaw), sin(yaw + pih), sin(pitch), sin(pitch + pih));
@@ -196,7 +230,7 @@ void Character::UpdateTransformations() {
     // Overall Character Bounding Box (for coarse culling)
     glm::mat4 bboxMat = glm::translate(glm::mat4(1.0f), feetPosition + glm::vec3(0.0f, 1.0f, 0.0f));
     bboxMat = glm::rotate(bboxMat, bodyYaw, glm::vec3(0.0f, 1.0f, 0.0f));
-    bboxMat = glm::scale(bboxMat, glm::vec3(1.2f, 2.2f, 1.2f));
+    bboxMat = glm::scale(bboxMat, glm::vec3(2.4f, 2.2f, 2.4f));
     boundingBox.modelMatrix = bboxMat;
     boundingBox.inverseModelMatrix = glm::inverse(bboxMat);
 

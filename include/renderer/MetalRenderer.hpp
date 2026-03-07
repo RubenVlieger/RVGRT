@@ -71,6 +71,7 @@ private:
     id _texFinalHistory[2];
     id _texDenoiseTemp;
     id _exposureBuffer;
+    id _characterBuffer;
 
 
     id _texVolumetric[2]; 

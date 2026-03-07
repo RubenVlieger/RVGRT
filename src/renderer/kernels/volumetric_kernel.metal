@@ -39,6 +39,7 @@ kernel void VolumetricFog(
     device SectorInfo* sectorBuffer           [[buffer(3)]],
     device ulong* occupancyBuffer             [[buffer(4)]],
     device ulong* sectorMaskBuffer            [[buffer(6)]],
+    constant CharacterGPUData* charData       [[buffer(7)]],
 
     uint2 gid [[thread_position_in_grid]])
 {
@@ -101,7 +102,8 @@ kernel void VolumetricFog(
                                      occupancyBuffer,
                                      0,
                                      sectorMaskBuffer,
-                                     frame.worldOrigin);
+                                     frame.worldOrigin,
+                                     charData);
 #else
             isShadowed = false;
 #endif
