@@ -21,11 +21,11 @@ This is an attempt at creating a **Minecraft-like voxel world engine**, built mo
 - A-Trous edge aware denoising of the noisy indirect lighting 
 - A-Trous edge aware denoising of noisy volumetric lighting data
 - Usage of the orignial Minecraft texturepack
-
+- Animated character model
 
 
 ## To-do list:
-- Character model, and multiplayer support
+- Multiplayer support
 - Clouds
 - Realistic lens effects
 - A plane to fly around in
