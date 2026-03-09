@@ -255,7 +255,12 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
           float4x4 invBBox = charData->invBoundingBoxes[i];
           float3 localBDir = (invBBox * float4(rayDir, 0.0f)).xyz;
           float3 localBPos = (invBBox * float4(rayPos, 1.0f)).xyz;
-          float3 invLocalBDir = 1.0f / localBDir;
+          
+          float3 safeLocalBDir = localBDir;
+          safeLocalBDir.x = (abs(safeLocalBDir.x) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.x) : safeLocalBDir.x;
+          safeLocalBDir.y = (abs(safeLocalBDir.y) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.y) : safeLocalBDir.y;
+          safeLocalBDir.z = (abs(safeLocalBDir.z) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.z) : safeLocalBDir.z;
+          float3 invLocalBDir = 1.0f / safeLocalBDir;
           
           float3 bt0 = (-0.5f - localBPos) * invLocalBDir;
           float3 bt1 = ( 0.5f - localBPos) * invLocalBDir;
@@ -277,7 +282,12 @@ inline hitInfo trace(float3 rayPos, float3 rayDir,
               float4x4 invPart = charData->invBodyParts[i * 6 + p];
               float3 localDir = (invPart * float4(rayDir, 0.0f)).xyz;
               float3 localPos = (invPart * float4(rayPos, 1.0f)).xyz;
-              float3 invLocalDir = 1.0f / localDir;
+              
+              float3 safeLocalDir = localDir;
+              safeLocalDir.x = (abs(safeLocalDir.x) < 1e-8f) ? copysign(1e-8f, safeLocalDir.x) : safeLocalDir.x;
+              safeLocalDir.y = (abs(safeLocalDir.y) < 1e-8f) ? copysign(1e-8f, safeLocalDir.y) : safeLocalDir.y;
+              safeLocalDir.z = (abs(safeLocalDir.z) < 1e-8f) ? copysign(1e-8f, safeLocalDir.z) : safeLocalDir.z;
+              float3 invLocalDir = 1.0f / safeLocalDir;
               
               float3 t0 = (-0.5f - localPos) * invLocalDir;
               float3 t1 = ( 0.5f - localPos) * invLocalDir;
@@ -450,7 +460,13 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
           float4x4 invBBox = charData->invBoundingBoxes[i];
           float3 localBDir = (invBBox * float4(rayDir, 0.0f)).xyz;
           float3 localBPos = (invBBox * float4(rayPos, 1.0f)).xyz;
-          float3 invLocalBDir = 1.0f / localBDir;
+          
+          float3 safeLocalBDir = localBDir;
+          safeLocalBDir.x = (abs(safeLocalBDir.x) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.x) : safeLocalBDir.x;
+          safeLocalBDir.y = (abs(safeLocalBDir.y) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.y) : safeLocalBDir.y;
+          safeLocalBDir.z = (abs(safeLocalBDir.z) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.z) : safeLocalBDir.z;
+          float3 invLocalBDir = 1.0f / safeLocalBDir;
+          
           float3 bt0 = (-0.5f - localBPos) * invLocalBDir;
           float3 bt1 = ( 0.5f - localBPos) * invLocalBDir;
           float3 btmin = min(bt0, bt1);
@@ -458,13 +474,20 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
           float bNear = max(max(btmin.x, btmin.y), btmin.z);
           float bFar = min(min(btmax.x, btmax.y), btmax.z);
           
-          if (bNear > bFar || bFar < 0.0f || bNear * bNear > maxDistSq) continue;
+          float bStartDist = max(0.0f, bNear);
+          if (bNear > bFar || bFar < 0.0f || (bStartDist * bStartDist) > maxDistSq) continue;
           
           for (int p = 0; p < 6; ++p) {
               float4x4 invPart = charData->invBodyParts[i * 6 + p];
               float3 localDir = (invPart * float4(rayDir, 0.0f)).xyz;
               float3 localPos = (invPart * float4(rayPos, 1.0f)).xyz;
-              float3 invLocalDir = 1.0f / localDir;
+              
+              float3 safeLocalDir = localDir;
+              safeLocalDir.x = (abs(safeLocalDir.x) < 1e-8f) ? copysign(1e-8f, safeLocalDir.x) : safeLocalDir.x;
+              safeLocalDir.y = (abs(safeLocalDir.y) < 1e-8f) ? copysign(1e-8f, safeLocalDir.y) : safeLocalDir.y;
+              safeLocalDir.z = (abs(safeLocalDir.z) < 1e-8f) ? copysign(1e-8f, safeLocalDir.z) : safeLocalDir.z;
+              float3 invLocalDir = 1.0f / safeLocalDir;
+              
               float3 t0 = (-0.5f - localPos) * invLocalDir;
               float3 t1 = ( 0.5f - localPos) * invLocalDir;
               float3 tmin = min(t0, t1);
@@ -472,7 +495,8 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
               float tNear = max(max(tmin.x, tmin.y), tmin.z);
               float tFar = min(min(tmax.x, tmax.y), tmax.z);
               
-              if (tNear <= tFar && tFar > 0.0f && (tNear * tNear) < maxDistSq) {
+              float tStartDist = max(0.0f, tNear);
+              if (tNear <= tFar && tFar > 0.0f && (tStartDist * tStartDist) < maxDistSq) {
                   return true;
               }
           }

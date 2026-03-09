@@ -1,135 +1,163 @@
 #ifdef WIN32
 
-#include <windows.h>
-#include <thread>
 #include <atomic>
+#include <thread>
+#include <windows.h>
 
 #include "State.hpp"
+#include "StateRender.cuh" // For the render loop
+#include "platform/NetworkClient.hpp"
 #include "platform/WindowsPlatform.hpp"
 #include "renderer/D3D12Device.hpp"
-#include "StateRender.cuh" // For the render loop
 
 // Forward declaration of the render loop
 void renderLoop();
 std::atomic<bool> running = true;
 
 // The one and only main function for the entire project.
-int main(int argc, char *argv[])
-{
-    // On Windows, call the Win32 entry point.
-    return Win32Main(GetModuleHandle(NULL), NULL, GetCommandLineA(), SW_SHOW);
+int main(int argc, char *argv[]) {
+  // On Windows, call the Win32 entry point.
+  return Win32Main(GetModuleHandle(NULL), NULL, GetCommandLineA(), SW_SHOW);
 }
 
-int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow) 
-{
-    try {
-        // 1. Create the platform-specific window and input handler
-        State::state.platform = std::make_unique<WindowsPlatform>();
-        State::state.platform->Create(); // This creates the HWND
+int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance,
+                     LPSTR lpCmdLine, int nCmdShow) {
+  try {
+    // 1. Create the platform-specific window and input handler
+    State::state.platform = std::make_unique<WindowsPlatform>();
+    State::state.platform->Create(); // This creates the HWND
 
-        // 2. Create the platform-specific graphics device
-        State::state.graphicsDevice = std::make_unique<D3D12Device>();
-        State::state.graphicsDevice->Initialize(State::state.platform->GetWindowHandle());
+    // 2. Create the platform-specific graphics device
+    State::state.graphicsDevice = std::make_unique<D3D12Device>();
+    State::state.graphicsDevice->Initialize(
+        State::state.platform->GetWindowHandle());
 
-        // 3. Perform engine-specific (platform-agnostic) initialization
-        State::state.renderer = std::make_unique<CudaRenderer>();
+    // 3. Perform engine-specific (platform-agnostic) initialization
+    State::state.renderer = std::make_unique<CudaRenderer>();
 
-        // 4. Start the render thread
-        std::thread renderThread(renderLoop);
-
-        // 5. Run the message loop
-        MSG msg = {};
-        while (running) {
-            if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
-                if (msg.message == WM_QUIT) {
-                    running = false;
-                }
-                TranslateMessage(&msg);
-                DispatchMessage(&msg);
-            }
-        }
-
-        // Wait for the render thread to finish
-        renderThread.join();
-
-        return (int)msg.wParam;
-
-    } catch (const std::runtime_error& e) {
-        MessageBoxA(NULL, e.what(), "Initialization Error", MB_OK | MB_ICONERROR);
-        return -1;
+    State::state.networkClient = NetworkClient::Create();
+    if (State::state.networkClient) {
+      State::state.networkClient->Connect("ws://rvgrt.rubenvlieger.nl/ws");
     }
+
+    // 4. Start the render thread
+    std::thread renderThread(renderLoop);
+
+    // 5. Run the message loop
+    MSG msg = {};
+    while (running) {
+      if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
+        if (msg.message == WM_QUIT) {
+          running = false;
+        }
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+      }
+    }
+
+    // Wait for the render thread to finish
+    renderThread.join();
+
+    return (int)msg.wParam;
+
+  } catch (const std::runtime_error &e) {
+    MessageBoxA(NULL, e.what(), "Initialization Error", MB_OK | MB_ICONERROR);
+    return -1;
+  }
 }
 
+void renderLoop() {
+  // Get the concrete device type for D3D12-specific operations
+  D3D12Device *d3d12Device =
+      static_cast<D3D12Device *>(State::state.graphicsDevice.get());
 
-void renderLoop()
-{
-    // Get the concrete device type for D3D12-specific operations
-    D3D12Device* d3d12Device = static_cast<D3D12Device*>(State::state.graphicsDevice.get());
-    
-    // The rest of this loop is nearly identical to your original,
-    // just using the new device and platform objects.
-    
-    using clock = std::chrono::steady_clock;
-    auto lastTime = clock::now();
-    double frameTimeMs = 16.6f;
-    unsigned int frameCount = 0;
+  // The rest of this loop is nearly identical to your original,
+  // just using the new device and platform objects.
 
-    // --- Initialize DLSS resources once the device is created ---
-    // (This part is moved from WndCreate to here, after device init)
-    // The command list must be open to record commands for tagging.
-    d3d12Device->BeginFrame(); // This will reset the allocator and command list
-    ID3D12GraphicsCommandList* cmdList = d3d12Device->GetCommandList();
-    
-    // Tag resources for Streamline... (Your existing slSetTag logic goes here)
+  using clock = std::chrono::steady_clock;
+  auto lastTime = clock::now();
+  double frameTimeMs = 16.6f;
+  unsigned int frameCount = 0;
 
-    d3d12Device->EndFrame(); // Execute the tagging commands
-    
-    while (running)
-    {
-        State::state.graphicsDevice->BeginFrame();
+  // --- Initialize DLSS resources once the device is created ---
+  // (This part is moved from WndCreate to here, after device init)
+  // The command list must be open to record commands for tagging.
+  d3d12Device->BeginFrame(); // This will reset the allocator and command list
+  ID3D12GraphicsCommandList *cmdList = d3d12Device->GetCommandList();
 
-        // The core rendering logic
-        State::state.character.Update(frameCount);
-        State::state.platform->deltaTime = (float)frameTimeMs / 1000.f;
+  // Tag resources for Streamline... (Your existing slSetTag logic goes here)
 
-        State::state.render->GIdata.UpdateGIData(State::state.render->cArray, State::state.render->csdf, State::state.render->texturepack);
+  d3d12Device->EndFrame(); // Execute the tagging commands
 
-        if (State::state.renderer) {
-            State::state.renderer->Draw(State::state.character, frameCount);
-        }
+  while (running) {
+    State::state.graphicsDevice->BeginFrame();
 
-        // ... Your full slSetConstants and slEvaluateFeature logic ...
-        // ... then copy to the back buffer ...
-        
-        ID3D12Resource* backBuffer = d3d12Device->GetCurrentBackBuffer();
-        ID3D12Resource* outputTexture = State::state.render->upscaledColorBuffer.GetD3D12Resource();
+    // The core rendering logic
+    State::state.character.Update(frameCount);
+    State::state.platform->deltaTime = (float)frameTimeMs / 1000.f;
 
-        D3D12_RESOURCE_BARRIER copyBarriers[] = {
-            CD3DX12_RESOURCE_BARRIER::Transition(outputTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS, D3D12_RESOURCE_STATE_COPY_SOURCE),
-            CD3DX12_RESOURCE_BARRIER::Transition(backBuffer, D3D12_RESOURCE_STATE_PRESENT, D3D12_RESOURCE_STATE_COPY_DEST)
-        };
-        cmdList->ResourceBarrier(_countof(copyBarriers), copyBarriers);
-        cmdList->CopyResource(backBuffer, outputTexture);
-
-        D3D12_RESOURCE_BARRIER finalBarriers[] = {
-            CD3DX12_RESOURCE_BARRIER::Transition(outputTexture, D3D12_RESOURCE_STATE_COPY_SOURCE, D3D12_RESOURCE_STATE_COMMON),
-            CD3DX12_RESOURCE_BARRIER::Transition(backBuffer, D3D12_RESOURCE_STATE_COPY_DEST, D3D12_RESOURCE_STATE_PRESENT)
-        };
-        cmdList->ResourceBarrier(_countof(finalBarriers), finalBarriers);
-
-        State::state.graphicsDevice->EndFrame();
-
-        // --- Frame Timing ---
-        frameTimeMs = std::chrono::duration<double, std::milli>(clock::now() - lastTime).count();
-        State::state.platform->frameTimeAverager.addFrameTime(frameTimeMs);
-        lastTime = clock::now();
-
-        // Update window title
-        char title[256];
-        snprintf(title, sizeof(title), "RVGRT: %.1f ms | Avg: %.1f ms", frameTimeMs, State::state.platform->frameTimeAverager.getAverage());
-        SetWindowTextA(static_cast<HWND>(State::state.platform->GetWindowHandle()), title);
-        frameCount++;
+    if (State::state.networkClient) {
+      State::state.networkClient->SendState(State::state.character);
+      State::state.networkClient->PollUpdates(State::state.otherCharacters);
+    } else {
+      static float npcTime = 0.0f;
+      npcTime += frameTimeMs / 1000.0f;
+      for (auto &npc : State::state.otherCharacters) {
+        npc.UpdateTestNPC(npcTime, frameTimeMs / 1000.0f);
+      }
     }
+
+    State::state.render->GIdata.UpdateGIData(State::state.render->cArray,
+                                             State::state.render->csdf,
+                                             State::state.render->texturepack);
+
+    if (State::state.renderer) {
+      State::state.renderer->Draw(State::state.character, frameCount);
+    }
+
+    // ... Your full slSetConstants and slEvaluateFeature logic ...
+    // ... then copy to the back buffer ...
+
+    ID3D12Resource *backBuffer = d3d12Device->GetCurrentBackBuffer();
+    ID3D12Resource *outputTexture =
+        State::state.render->upscaledColorBuffer.GetD3D12Resource();
+
+    D3D12_RESOURCE_BARRIER copyBarriers[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(
+            outputTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            D3D12_RESOURCE_STATE_COPY_SOURCE),
+        CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
+                                             D3D12_RESOURCE_STATE_PRESENT,
+                                             D3D12_RESOURCE_STATE_COPY_DEST)};
+    cmdList->ResourceBarrier(_countof(copyBarriers), copyBarriers);
+    cmdList->CopyResource(backBuffer, outputTexture);
+
+    D3D12_RESOURCE_BARRIER finalBarriers[] = {
+        CD3DX12_RESOURCE_BARRIER::Transition(outputTexture,
+                                             D3D12_RESOURCE_STATE_COPY_SOURCE,
+                                             D3D12_RESOURCE_STATE_COMMON),
+        CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
+                                             D3D12_RESOURCE_STATE_COPY_DEST,
+                                             D3D12_RESOURCE_STATE_PRESENT)};
+    cmdList->ResourceBarrier(_countof(finalBarriers), finalBarriers);
+
+    State::state.graphicsDevice->EndFrame();
+
+    // --- Frame Timing ---
+    frameTimeMs =
+        std::chrono::duration<double, std::milli>(clock::now() - lastTime)
+            .count();
+    State::state.platform->frameTimeAverager.addFrameTime(frameTimeMs);
+    lastTime = clock::now();
+
+    // Update window title
+    char title[256];
+    snprintf(title, sizeof(title), "RVGRT: %.1f ms | Avg: %.1f ms", frameTimeMs,
+             State::state.platform->frameTimeAverager.getAverage());
+    SetWindowTextA(static_cast<HWND>(State::state.platform->GetWindowHandle()),
+                   title);
+    frameCount++;
+  }
 }
 
 #endif // WIN32
