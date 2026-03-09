@@ -42,6 +42,7 @@ if(WIN32)
         src/platform/win32_main.cpp
         src/platform/WindowsPlatform.cpp
         src/renderer/D3D12Device.cpp
+        src/platform/Win32NetworkClient.cpp
     )
     file(GLOB_RECURSE WIN_CUDA_SOURCES CONFIGURE_DEPENDS "src/*.cu")
 
@@ -99,6 +100,7 @@ elseif(APPLE)
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm
         src/renderer/BrickPool.mm
+        src/platform/MacOSNetworkClient.mm
         ${MACOS_ICON} 
     )
     

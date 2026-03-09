@@ -2,6 +2,7 @@
 #include "platform/Platform.hpp"
 #include "renderer/GraphicsDevice.hpp"
 #include "renderer/Renderer.hpp"
+#include "platform/NetworkClient.hpp"
 
 // The global singleton instance
 State State::state = State();

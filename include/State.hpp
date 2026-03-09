@@ -10,6 +10,7 @@
 class Platform;
 class GraphicsDevice;
 class Renderer;
+class NetworkClient;
 
 class State {
 public:
@@ -17,6 +18,7 @@ public:
     std::unique_ptr<Platform> platform;
     std::unique_ptr<GraphicsDevice> graphicsDevice;
     std::unique_ptr<Renderer> renderer;
+    std::unique_ptr<NetworkClient> networkClient;
 
     // --- Resolution Control ---
     static int dispHEIGHT;
