@@ -19,31 +19,47 @@ using namespace metal;
 // ============================================================================
 
 KERNEL(GBufferAndDirectLight)(
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texDirectLight, 0),
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texAlbedo, 1),
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texNormal, 2),
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texMotion, 3),
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texDepth, 4),
+#else
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texDirectLight, 0),
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texAlbedo, 1),
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texNormal, 2),
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texMotion, 3),
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texDepth, 4),
+#endif
 
     PARAM_CONSTANT(CameraData, camera, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
 
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_READ(tex3d_u32, indirection, 5),
+#else
     PARAM_TEXTURE_READ(texture3d<uint, access::read>, indirection, 5),
-    PARAM_BUFFER(device SectorInfo*, sectorBuffer, 3),
-    PARAM_BUFFER(device ulong*, occupancyBuffer, 4),
-    PARAM_BUFFER(device uchar*, dataBuffer, 5),
-    PARAM_BUFFER(device ulong*, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData*, charData, 7),
+#endif
+    PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
+    PARAM_BUFFER(ulong, occupancyBuffer, 4),
+    PARAM_BUFFER(uchar, dataBuffer, 5),
+    PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
+    PARAM_CONSTANT(CharacterGPUData, charData, 7),
     
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_READ(tex2d_arr_f32_s, textureAtlas, 8),
+    PARAM_TEXTURE_READ(tex2d_f32_s, halfDistTex, 9),
+#else
     PARAM_TEXTURE_READ(texture2d_array<float, access::sample>, textureAtlas, 8),
     PARAM_TEXTURE_READ(texture2d<float, access::sample>, halfDistTex, 9),
+#endif
 
     DECLARE_GID()
 )
 {
 #if defined(PLATFORM_METAL)
     CHECK_BOUNDS(texDirectLight);
-    uint2 gid = GET_GID();
     int width = texDirectLight.get_width();
     int height = texDirectLight.get_height();
 #else
@@ -61,11 +77,11 @@ KERNEL(GBufferAndDirectLight)(
     float3 dir = normalize(camera.forward + ndc.x * camera.right + ndc.y * camera.up);
 
     // Read Dist Approx
-    DECLARE_SAMPLER(sLinear, linear, clampededge);
+    DECLARE_SAMPLER(sLinear, linear, clamp_to_edge);
     float startDist = TEX_SAMPLE_2D(halfDistTex, uv).r;
 
     hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer,
-                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
+                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
 
     float depth = 100000.0f;
     half3 irradiance = half3(0.0h);
@@ -102,7 +118,7 @@ KERNEL(GBufferAndDirectLight)(
             
 #if REFLECTIONS
             hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer,
-                                   dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
+                                   dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
 #else
             hitInfo reflHit;
             reflHit.hit = false;
@@ -119,7 +135,7 @@ KERNEL(GBufferAndDirectLight)(
                 bool rShadow = traceShadow(reflHit.pos + (float3)reflHit.normal * 0.01f,
                                            frame.sunDirection, REFLECTION_SHADOW_MAXDIST, REFLECTION_SHADOW_STEPS,
                                            indirection, sectorBuffer, occupancyBuffer, dataBuffer,
-                                           sectorMaskBuffer, frame.worldOrigin, charData);
+                                           sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
 #else
                 bool rShadow = false;
 #endif
@@ -141,7 +157,7 @@ KERNEL(GBufferAndDirectLight)(
 #if SHADOWS
             bool waterShadow = traceShadow(reflHit.pos, frame.sunDirection, WATER_SHADOW_MAXDIST,
                                           WATER_SHADOW_STEPS, indirection, sectorBuffer, occupancyBuffer,
-                                          dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
+                                          dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
 #else
             bool waterShadow = false;
 #endif
@@ -155,7 +171,7 @@ KERNEL(GBufferAndDirectLight)(
 #if SHADOWS
             bool isShadowed = traceShadow(hit.pos + (float3)normal * 0.005f, frame.sunDirection,
                                           SHADOW_MAXDIST, SHADOW_STEPS, indirection, sectorBuffer,
-                                          occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
+                                          occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
 #else
             bool isShadowed = false;
 #endif

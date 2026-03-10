@@ -8,8 +8,8 @@
 // ---------------------------------------------------------------------------------
 // FEATURE TOGGLES
 // ---------------------------------------------------------------------------------
-#define VOLUMETRIC_FOG 0
-#define INDIRECT_LIGHTING 0
+#define VOLUMETRIC_FOG 1
+#define INDIRECT_LIGHTING 1
 #define REFLECTIONS 1
 #define SHADOWS 1
 

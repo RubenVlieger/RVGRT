@@ -3,6 +3,10 @@
 #if defined(PLATFORM_METAL)
 #include <metal_stdlib>
 using namespace metal;
+// Texture type aliases to avoid comma issues in macros
+typedef texture2d<float, access::write> tex2d_f32_w;
+typedef texture2d<float, access::read> tex2d_f32_r;
+typedef texture2d<float, access::sample> tex2d_f32_s;
 #endif
 
 #include "cumath.h"
@@ -31,6 +35,15 @@ inline float3 YCoCgToRGB(float3 ycocg) {
 }
 
 KERNEL(TemporalAccumulation)(
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texAccum, 0),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texRawIndirect, 1),
+    PARAM_TEXTURE_READ(tex2d_f32_s, texHistory, 2),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texMotion, 3),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 4),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texPrevDepth, 5),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDirect, 6),
+#else
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texAccum, 0),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texRawIndirect, 1),
     PARAM_TEXTURE_READ(texture2d<float, access::sample>, texHistory, 2),
@@ -38,12 +51,12 @@ KERNEL(TemporalAccumulation)(
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 4),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texPrevDepth, 5),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDirect, 6),
+#endif
     DECLARE_GID()
 )
 {
 #if defined(PLATFORM_METAL)
     CHECK_BOUNDS(texAccum);
-    uint2 gid = GET_GID();
     int width = texAccum.get_width();
     int height = texAccum.get_height();
 #else
@@ -109,7 +122,7 @@ KERNEL(TemporalAccumulation)(
     float3 maxColor = mu + gamma * sigma;
 
     // Sample history
-    DECLARE_SAMPLER(sLinear, linear, clampededge);
+    DECLARE_SAMPLER(sLinear, linear, clamp_to_edge);
     float3 historyRGB = TEX_SAMPLE_2D(texHistory, prevUV).rgb;
     if (isnan(historyRGB.x) || isnan(historyRGB.y) || isnan(historyRGB.z))
         historyRGB = currentRGB;

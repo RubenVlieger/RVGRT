@@ -58,7 +58,7 @@ private:
   id _sectorBuffer;
 
   // L3+L4: Brick data (owned by BrickPool)
-  BrickPool _brickPool;
+  MetalBrickPool _brickPool;
 
   // Super-sector masks: one uint64_t per 4x4x4 group of sectors
   id _sectorMaskBuffer;

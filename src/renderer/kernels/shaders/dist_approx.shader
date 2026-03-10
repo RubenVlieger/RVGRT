@@ -18,17 +18,25 @@ using namespace metal;
 // ============================================================================
 
 KERNEL(distApproximationKernel)(
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, distTex, 0),
+#else
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, distTex, 0),
+#endif
     
     PARAM_CONSTANT(CameraData, camera, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
     
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_READ(tex3d_u32, indirection, 2),
+#else
     PARAM_TEXTURE_READ(texture3d<uint, access::read>, indirection, 2),
-    PARAM_BUFFER(device SectorInfo*, sectorBuffer, 3),
-    PARAM_BUFFER(device ulong*, occupancyBuffer, 4),
-    PARAM_BUFFER(device uchar*, dataBuffer, 5),
-    PARAM_BUFFER(device ulong*, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData*, charData, 7),
+#endif
+    PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
+    PARAM_BUFFER(ulong, occupancyBuffer, 4),
+    PARAM_BUFFER(uchar, dataBuffer, 5),
+    PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
+    PARAM_CONSTANT(CharacterGPUData, charData, 7),
     
     DECLARE_GID()
 )
@@ -37,7 +45,6 @@ KERNEL(distApproximationKernel)(
     CHECK_BOUNDS(distTex);
     uint width = distTex.get_width();
     uint height = distTex.get_height();
-    uint2 gid = GET_GID();
 #else
     CHECK_BOUNDS(_width, _height);
     int2 gid = GET_GID();
@@ -52,7 +59,7 @@ KERNEL(distApproximationKernel)(
     // Trace ray through voxel data
     hitInfo hit = trace(camera.position, dir, indirection, sectorBuffer, 
                         occupancyBuffer, dataBuffer, sectorMaskBuffer, 
-                        frame.worldOrigin, charData);
+                        frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
     
     float dist = hit.hit ? length(hit.pos - camera.position) : 5000.0f;
     

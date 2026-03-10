@@ -20,11 +20,17 @@ inline float getLuminance(float3 color) {
 }
 
 KERNEL(ComputeExposure)(
-    PARAM_BUFFER(device ExposureData, exposure, 0),
+    PARAM_BUFFER(ExposureData, exposure, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDirect, 0),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texAccum, 1),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texAlbedo, 2),
+#else
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDirect, 0),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texAccum, 1),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texAlbedo, 2),
+#endif
     DECLARE_GID(),
     DECLARE_TID()
 )
@@ -32,8 +38,6 @@ KERNEL(ComputeExposure)(
 #if defined(PLATFORM_METAL)
     uint width = texDirect.get_width();
     uint height = texDirect.get_height();
-    uint2 gid = GET_GID();
-    uint2 tid = GET_TID();
 #else
     int2 gid = GET_GID();
     int2 tid = make_int2(threadIdx.x, threadIdx.y);
@@ -111,13 +115,13 @@ KERNEL(ComputeExposure)(
         float currentSceneLum = exp(avgLogLum);
         currentSceneLum = clamp(currentSceneLum, 0.01f, 60.0f);
 
-        float lastLum = exposure.sceneLuminance;
+        float lastLum = exposure->sceneLuminance;
         float adaptationSpeed = (currentSceneLum > lastLum) ? 4.0f : 1.0f;
         float interpolatedLum = lastLum + (currentSceneLum - lastLum) * 
                                (1.0f - exp(-frame.deltaTime * adaptationSpeed));
         
         if (isnan(interpolatedLum)) interpolatedLum = 0.5f;
 
-        exposure.sceneLuminance = interpolatedLum;
+        exposure->sceneLuminance = interpolatedLum;
     }
 }

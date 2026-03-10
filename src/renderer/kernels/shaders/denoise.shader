@@ -16,17 +16,23 @@ using namespace metal;
 // ============================================================================
 
 KERNEL(BilateralDenoise)(
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texDenoised, 0),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texAccum, 1),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texNormal, 2),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 3),
+#else
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texDenoised, 0),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texAccum, 1),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texNormal, 2),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 3),
+#endif
     PARAM_CONSTANT(int, step_width, 0),
     DECLARE_GID()
 )
 {
 #if defined(PLATFORM_METAL)
     CHECK_BOUNDS(texDenoised);
-    uint2 gid = GET_GID();
     int width = texDenoised.get_width();
     int height = texDenoised.get_height();
 #else

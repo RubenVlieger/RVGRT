@@ -19,27 +19,37 @@ using namespace metal;
 // ============================================================================
 
 KERNEL(IndirectBounce)(
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texRawIndirect, 0),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texNormal, 1),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 2),
+#else
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texRawIndirect, 0),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texNormal, 1),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 2),
+#endif
     
     PARAM_CONSTANT(CameraData, camera, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
     
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_READ(tex2d_arr_f32_s, textureAtlas, 8),
+    PARAM_TEXTURE_READ(tex3d_u32, indirection, 3),
+#else
     PARAM_TEXTURE_READ(texture2d_array<float, access::sample>, textureAtlas, 8),
     PARAM_TEXTURE_READ(texture3d<uint, access::read>, indirection, 3),
-    PARAM_BUFFER(device SectorInfo*, sectorBuffer, 3),
-    PARAM_BUFFER(device ulong*, occupancyBuffer, 4),
-    PARAM_BUFFER(device uchar*, dataBuffer, 5),
-    PARAM_BUFFER(device ulong*, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData*, charData, 7),
+#endif
+    PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
+    PARAM_BUFFER(ulong, occupancyBuffer, 4),
+    PARAM_BUFFER(uchar, dataBuffer, 5),
+    PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
+    PARAM_CONSTANT(CharacterGPUData, charData, 7),
     
     DECLARE_GID()
 )
 {
 #if defined(PLATFORM_METAL)
     CHECK_BOUNDS(texRawIndirect);
-    uint2 gid = GET_GID();
     int width = texRawIndirect.get_width();
     int height = texRawIndirect.get_height();
 #else
@@ -89,7 +99,7 @@ KERNEL(IndirectBounce)(
 
     // Bounce Trace
     hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer,
-                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
+                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
     
     half3 incomingLight = half3(0.0h);
 
@@ -100,7 +110,7 @@ KERNEL(IndirectBounce)(
                                       INDIRECT_SHADOW_MAXDIST,
                                       INDIRECT_SHADOW_STEPS,
                                       indirection, sectorBuffer, occupancyBuffer,
-                                      dataBuffer, sectorMaskBuffer, frame.worldOrigin, charData);
+                                      dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
 #else
         bool isShadowed = false;
 #endif

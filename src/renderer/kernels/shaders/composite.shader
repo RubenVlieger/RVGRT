@@ -38,12 +38,21 @@ inline float3 applySaturation(float3 color, float saturation) {
     return mix(float3(luma), color, saturation);
 }
 
+#if defined(PLATFORM_METAL)
 float3 SampleFogBilateral(
-    PARAM_TEXTURE_READ(texture2d<float, access::sample>, texVolumetric),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth),
+    texture2d<float, access::sample> texVolumetric,
+    texture2d<float, access::read> texDepth,
     float2 uv,
     float currentDepth,
     float2 screenSize)
+#else
+float3 SampleFogBilateral(
+    texture2d<float, access::sample> texVolumetric,
+    texture2d<float, access::read> texDepth,
+    float2 uv,
+    float currentDepth,
+    float2 screenSize)
+#endif
 {
     float2 lowResSize = screenSize * 0.5f;
     float2 pixelPos = uv * lowResSize - 0.5f;
@@ -87,21 +96,29 @@ float3 SampleFogBilateral(
 }
 
 KERNEL(Composite)(
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texFinal, 0),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDirect, 1),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texAccum, 2),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texAlbedo, 3),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 4),
+    PARAM_TEXTURE_READ(tex2d_f32_s, texVolumetric, 5),
+#else
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texFinal, 0),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDirect, 1),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texAccum, 2),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texAlbedo, 3),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 4),
     PARAM_TEXTURE_READ(texture2d<float, access::sample>, texVolumetric, 5),
+#endif
     
-    PARAM_BUFFER(device ExposureData, exposure, 0),
+    PARAM_BUFFER(ExposureData, exposure, 0),
 
     DECLARE_GID()
 )
 {
 #if defined(PLATFORM_METAL)
     CHECK_BOUNDS(texFinal);
-    uint2 gid = GET_GID();
     int width = texFinal.get_width();
     int height = texFinal.get_height();
 #else
@@ -136,7 +153,7 @@ KERNEL(Composite)(
     }
 
     // Auto-exposure
-    float avgLum = exposure.sceneLuminance;
+    float avgLum = exposure->sceneLuminance;
     float exposureScale = 0.15f / (max(avgLum, 0.001f));
     linearColor *= exposureScale;
 

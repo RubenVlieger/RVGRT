@@ -27,6 +27,16 @@
 #if defined(PLATFORM_METAL) && defined(__METAL_VERSION__)
     #include <metal_stdlib>
     using namespace metal;
+    
+    // Texture type aliases to avoid commas in macro arguments
+    typedef texture2d<float, access::read> tex2d_f32_r;
+    typedef texture2d<float, access::write> tex2d_f32_w;
+    typedef texture2d<float, access::sample> tex2d_f32_s;
+    typedef texture2d<half, access::read> tex2d_f16_r;
+    typedef texture2d<half, access::write> tex2d_f16_w;
+    typedef texture2d<half, access::sample> tex2d_f16_s;
+    typedef texture3d<uint, access::read> tex3d_u32;
+    typedef texture2d_array<float, access::sample> tex2d_arr_f32_s;
 #endif
 
 // Note: For CUDA, we rely on the CUDA compiler defining __CUDA_ARCH__
@@ -49,8 +59,8 @@
 #if defined(PLATFORM_METAL)
     #define PARAM_TEXTURE_READ(type, name, slot) type name [[texture(slot)]]
     #define PARAM_TEXTURE_WRITE(type, name, slot) type name [[texture(slot)]]
-    #define PARAM_BUFFER(type, name, slot) type name [[buffer(slot)]]
-    #define PARAM_CONSTANT(type, name, slot) constant type name [[buffer(slot)]]
+    #define PARAM_BUFFER(type, name, slot) device type* name [[buffer(slot)]]
+    #define PARAM_CONSTANT(type, name, slot) constant type& name [[buffer(slot)]]
 #elif defined(PLATFORM_CUDA)
     #define PARAM_TEXTURE_READ(type, name, slot) type name
     #define PARAM_TEXTURE_WRITE(type, name, slot) cudaSurfaceObject_t name
@@ -84,8 +94,8 @@
     #define TEX_READ_2D(tex, coord) tex.read(coord)
     #define TEX_READ_3D(tex, coord) tex.read(coord).r
     #define TEX_WRITE_2D(tex, val, coord) tex.write(val, coord)
-    #define TEX_SAMPLE_2D(tex, uv) tex.sample(sampler, uv)
-    #define TEX_SAMPLE_2D_ARRAY(tex, uv, idx) tex.sample(sampler, uv, idx)
+    #define TEX_SAMPLE_2D(tex, uv) tex.sample(sLinear, uv)
+    #define TEX_SAMPLE_2D_ARRAY(tex, uv, idx) tex.sample(sLinear, uv, idx)
     #define TEX_GET_WIDTH(tex) tex.get_width()
     #define TEX_GET_HEIGHT(tex) tex.get_height()
     #define TEX_GET_DEPTH(tex) tex.get_depth()

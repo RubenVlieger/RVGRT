@@ -84,19 +84,24 @@ inline uint GetSectorIndex(uint3 pos, uint sx, uint sy) {
 }
 
 // Kernel: Analyze sectors for initial generation
-KERNEL(XMap_AnalyzeSectors)(
-    PARAM_BUFFER(device uint64_t, resultBuffer, 0),
-    DECLARE_GID()
+#if defined(PLATFORM_METAL)
+kernel void XMap_AnalyzeSectors(
+    PARAM_BUFFER(uint64_t, resultBuffer, 0),
+    uint3 gid [[thread_position_in_grid]]
 )
+#else
+__global__ void XMap_AnalyzeSectors(
+    ulong* resultBuffer
+)
+#endif
 {
 #if defined(PLATFORM_METAL)
-    uint3 gid = GET_GID();
     uint sx = IND_X / 4;
     uint sy = IND_Y / 4;
     uint sz = IND_Z / 4;
     if (gid.x >= sx || gid.y >= sy || gid.z >= sz) return;
 #else
-    int3 gid = GET_GID();
+    int3 gid = make_int3(blockIdx.x, blockIdx.y, blockIdx.z);
     uint sx = IND_X / 4;
     uint sy = IND_Y / 4;
     uint sz = IND_Z / 4;
@@ -133,17 +138,23 @@ KERNEL(XMap_AnalyzeSectors)(
 }
 
 // Kernel: Analyze sectors for streaming
-KERNEL(XMap_AnalyzeStreaming)(
-    PARAM_BUFFER(device SectorWorkItem, workItems, 0),
-    PARAM_BUFFER(device uint64_t, resultBuffer, 1),
-    PARAM_CONSTANT(uint, totalItems, 2),
-    DECLARE_GID()
-)
-{
 #if defined(PLATFORM_METAL)
-    uint gid = GET_GID().x;
+kernel void XMap_AnalyzeStreaming(
+    PARAM_BUFFER(SectorWorkItem, workItems, 0),
+    PARAM_BUFFER(uint64_t, resultBuffer, 1),
+    PARAM_CONSTANT(uint, totalItems, 2),
+    uint gid [[thread_position_in_grid]]
+)
 #else
-    int gid = GET_GID().x;
+__global__ void XMap_AnalyzeStreaming(
+    SectorWorkItem* workItems,
+    ulong* resultBuffer,
+    uint totalItems
+)
+#endif
+{
+#if !defined(PLATFORM_METAL)
+    uint gid = blockIdx.x * blockDim.x + threadIdx.x;
 #endif
     if (gid >= totalItems) return;
 
@@ -179,10 +190,10 @@ KERNEL(XMap_AnalyzeStreaming)(
 // Kernel: Fill brick data
 #if defined(PLATFORM_METAL)
 KERNEL(XMap_FillBricks)(
-    PARAM_BUFFER(device BrickWorkItem, workList, 0),
-    PARAM_BUFFER(device SectorInfo, sectorBuffer, 1),
-    PARAM_BUFFER(device uint64_t, occupancyBuffer, 2),
-    PARAM_BUFFER(device uchar, dataBuffer, 3),
+    PARAM_BUFFER(BrickWorkItem, workList, 0),
+    PARAM_BUFFER(SectorInfo, sectorBuffer, 1),
+    PARAM_BUFFER(uint64_t, occupancyBuffer, 2),
+    PARAM_BUFFER(uchar, dataBuffer, 3),
     PARAM_CONSTANT(int3, worldOrigin, 4),
     
     uint groupID [[threadgroup_position_in_grid]],
@@ -190,10 +201,10 @@ KERNEL(XMap_FillBricks)(
 )
 #else
 KERNEL(XMap_FillBricks)(
-    PARAM_BUFFER(device BrickWorkItem, workList, 0),
-    PARAM_BUFFER(device SectorInfo, sectorBuffer, 1),
-    PARAM_BUFFER(device uint64_t, occupancyBuffer, 2),
-    PARAM_BUFFER(device uchar, dataBuffer, 3),
+    PARAM_BUFFER(BrickWorkItem, workList, 0),
+    PARAM_BUFFER(SectorInfo, sectorBuffer, 1),
+    PARAM_BUFFER(uint64_t, occupancyBuffer, 2),
+    PARAM_BUFFER(uchar, dataBuffer, 3),
     PARAM_CONSTANT(int3, worldOrigin, 4)
 )
 #endif
@@ -328,17 +339,25 @@ ulong pack_4x4x4_block(float3 startPos) {
 }
 
 // Kernel: Fill dynamic atlases
-KERNEL(FillDynamicAtlases)(
-    PARAM_TEXTURE_READ(texture3d<uint, access::read>, indirection, 0),
-    PARAM_BUFFER(device uint, geoPool, 0),
-    PARAM_BUFFER(device uchar, matPool, 1),
-    DECLARE_GID()
-)
-{
 #if defined(PLATFORM_METAL)
-    uint3 gid = GET_GID();
+kernel void FillDynamicAtlases(
+    PARAM_TEXTURE_READ(tex3d_u32, indirection, 0),
+    PARAM_BUFFER(uint, geoPool, 0),
+    PARAM_BUFFER(uchar, matPool, 1),
+    uint3 gid [[thread_position_in_grid]]
+)
 #else
-    int3 gid = GET_GID();
+__global__ void FillDynamicAtlases(
+    cudaTextureObject_t indirection,
+    uint* geoPool,
+    uchar* matPool
+)
+#endif
+{
+#if !defined(PLATFORM_METAL)
+    int3 gid = make_int3(blockIdx.x * blockDim.x + threadIdx.x,
+                         blockIdx.y * blockDim.y + threadIdx.y,
+                         blockIdx.z * blockDim.z + threadIdx.z);
 #endif
     if (gid.x >= IND_X || gid.y >= IND_Y || gid.z >= IND_Z) return;
 

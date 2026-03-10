@@ -1,291 +1,289 @@
-# RVGRT Cross-Platform Migration Plan
-
-## Project Overview
-Port the Windows/CUDA path to match the macOS/Metal architecture using MaterialMap + BrickPool 
-and the 8-pass deferred rendering pipeline.
-
-## Architecture
-
-| Platform | GPU API  | Renderer      | Data Structures          |
-|----------|----------|---------------|--------------------------|
-| macOS    | Metal    | MetalRenderer | MaterialMap, BrickPool   |
-| Windows  | CUDA     | CudaRenderer  | CudaMaterialMap, CudaBrickPool |
-
-Both platforms share:
-- Unified `.shader` source files (preprocessed for Metal/CUDA)
-- `intersections.h` (cross-platform ray tracing)
-- `shader_macros.h` (platform abstraction)
-
+RVGRT Project Structure - Comprehensive Analysis
+1. Complete Directory Tree of Source Files
+/Users/rubenvlieger/Documents/RVGRT/
+├── CMakeLists.txt                 # Build configuration (311 lines)
+├── README.md
+├── MIGRATION_PLAN.txt
+├── project_structure.txt
+├── exports.def                    # Windows exports
+├── restore.py
+│
+├── include/                       # All Headers
+│   ├── Camera.hpp
+│   ├── Character.hpp
+│   ├── State.hpp
+│   ├── Timer.hpp
+│   ├── TerrainGeneration.h
+│   ├── Texturepack.h
+│   ├── basewin.h
+│   ├── cumath.h                   # CRITICAL: Cross-platform math/types (862 lines)
+│   ├── hitInfo.hpp
+│   ├── raytracing_functions.h     # Ray tracing core functions (404 lines)
+│   ├── shader_macros.h            # Unified Metal/CUDA macros (184 lines)
+│   ├── tables.h
+│   ├── texturepackdata.h
+│   ├── stb_image.h                # Third-party image loader
+│   ├── util.hpp
+│   │
+│   ├── renderer/                  # Renderer Headers
+│   │   ├── Buffer.hpp             # Abstract GPU buffer interface
+│   │   ├── BrickPool.hpp          # GPU brick allocator header
+│   │   ├── MaterialMap.hpp        # Voxel world streaming header
+│   │   ├── Renderer.hpp           # Abstract renderer interface
+│   │   ├── ShaderTypes.h          # CRITICAL: CPU/GPU data structures
+│   │   ├── shader_settings.h      # Render settings/feature flags
+│   │   ├── intersections.h        # DDA ray traversal math
+│   │   ├── hitInfo.h
+│   │   │
+│   │   ├── Metal/                 # Metal-specific headers
+│   │   │   ├── MetalBuffer.hpp
+│   │   │   ├── MetalDevice.hpp
+│   │   │   ├── MetalRenderer.hpp
+│   │   │
+│   │   ├── CUDA/                  # CUDA-specific headers
+│   │   │   ├── CudaBuffer.cuh
+│   │   │   ├── CudaBrickPool.cuh
+│   │   │   ├── CudaMaterialMap.cuh
+│   │   │   ├── CudaRender.cuh
+│   │   │   ├── CudaRenderer.cuh
+│   │   │
+│   │   └── D3D12/
+│   │       ├── D3D12Device.hpp
+│   │       ├── GraphicsDevice.hpp
+│   │
+│   ├── platform/                  # Platform Headers
+│   │   ├── Platform.hpp           # Abstract platform interface
+│   │   ├── GameView.h             # macOS MetalKit view
+│   │   ├── NetworkClient.hpp
+│   │   ├── MacOSPlatform.hpp
+│   │   └── WindowsPlatform.hpp
+│   │
+│   ├── d3d12/                     # Windows D3D12 headers (third-party)
+│   │   └── [~25 D3D12/DirectX headers]
+│   │
+│   └── glm/                       # GLM math library
+│       └── [~200 GLM headers]
+│
+├── src/                           # All Source Files
+│   ├── main.cpp                   # Entry point
+│   ├── Camera.cpp
+│   ├── Character.cpp
+│   ├── State.cpp
+│   ├── TerrainGeneration.cu       # CUDA terrain generation
+│   ├── CudaD3D12Texture.cu        # CUDA-D3D12 interop
+│   │
+│   ├── renderer/                  # Renderer Implementations
+│   │   ├── CudaRenderer.cpp       # CUDA renderer stub
+│   │   ├── CudaRenderer_mac_stub.cpp  # macOS stub for CUDA
+│   │   │
+│   │   ├── Metal/ (macOS)
+│   │   │   ├── MetalRenderer.mm   # Main Metal renderer (558 lines)
+│   │   │   ├── MetalDevice.mm
+│   │   │   ├── MetalBuffer.mm     # Metal buffer impl (60 lines)
+│   │   │   ├── BrickPool.mm       # Metal brick allocator (107 lines)
+│   │   │   ├── MaterialMap.mm     # Metal world streaming
+│   │   │   ├── TexturePack_impl.mm
+│   │   │
+│   │   ├── CUDA/ (Windows)
+│   │   │   ├── CudaRenderer.cu    # CUDA renderer (626 lines)
+│   │   │   ├── CudaBuffer.cu      # CUDA buffer impl (79 lines)
+│   │   │   ├── CudaBrickPool.cu   # CUDA brick allocator (124 lines)
+│   │   │   ├── CudaMaterialMap.cu
+│   │   │   ├── raytracing_functions_impl.cu
+│   │   │   ├── TexturePack_impl.cu
+│   │   │
+│   │   ├── D3D12/ (Windows)
+│   │   │   └── D3D12Device.cpp
+│   │   │
+│   │   └── kernels/               # Shader Files
+│   │       ├── Metal Shaders (*.metal):
+│   │       │   ├── direct_kernel.metal
+│   │       │   ├── indirect_bounce.metal
+│   │       │   ├── temporal_acc_kernel.metal
+│   │       │   ├── denoise_kernel.metal
+│   │       │   ├── volumetric_kernel.metal
+│   │       │   ├── exposure_kernel.metal
+│   │       │   ├── composite_kernel.metal
+│   │       │   ├── material_gen_kernel.metal
+│   │       │   ├── dist_approximation_kernel.metal
+│   │       │   ├── sdf_generator.metal
+│   │       │   ├── tables.metal
+│   │       │   └── raytracing_function_impl.metal
+│   │       │
+│   │       └── Unified Shaders (*.shader - preprocessed for both):
+│   │           ├── direct_light.shader
+│   │           ├── indirect_bounce.shader
+│   │           ├── temporal_acc.shader
+│   │           ├── denoise.shader
+│   │           ├── volumetric.shader
+│   │           ├── exposure.shader
+│   │           ├── composite.shader
+│   │           ├── material_gen.shader
+│   │           ├── dist_approx.shader
+│   │           └── tables.shader
+│   │
+│   └── platform/                  # Platform Implementations
+│       ├── MacOS/:
+│       │   ├── macos_main.mm      # macOS entry point
+│       │   ├── MacOSPlatform.mm   # macOS platform impl (44 lines)
+│       │   ├── MacOSPlatform.cpp  # Shared C++ parts
+│       │   ├── MacOSNetworkClient.mm
+│       │   └── GameView.mm
+│       │
+│       └── Windows/:
+│           ├── win32_main.cpp     # Windows entry point
+│           ├── WindowsPlatform.cpp # Windows platform impl (113 lines)
+│           └── Win32NetworkClient.cpp
+│
+├── resources/
+│   └── AppIcon.icns
+│
+└── vendor/                        # Third-party SDKs
+    └── [optional streamline-sdk]
 ---
-
-## Completed Phases
-
-### Phase 1: Foundation Headers (DONE 2026-03-10)
-- `include/renderer/ShaderTypes.h` - Platform guards for simd/types
-- `include/renderer/intersections.h` - Cross-platform ray tracing (Metal/CUDA/C++)
-- Fixed include extensions (`.cuh` -> `.h`)
-
-### Phase 2: CUDA Data Structures (DONE 2026-03-10)
-- `include/renderer/CudaBrickPool.cuh` + `src/renderer/CudaBrickPool.cu`
-- `include/renderer/CudaMaterialMap.cuh` + `src/renderer/CudaMaterialMap.cu`
-
-### Phase 3: Unified Shader System (DONE 2026-03-10)
-- `include/shader_macros.h` - Platform abstraction macros
-- `src/renderer/kernels/shaders/*.shader` - 10 unified shader files
-- CMakeLists.txt: Shader preprocessing for CUDA
-
-### Phase 4: CMake Build System (DONE 2026-03-10)
-- Shader preprocessing with C preprocessor
-- Optional Streamline SDK (DLSS)
-- Separate Windows/macOS build paths
-
-### Phase 5: CUDA Renderer (DONE 2026-03-10)
-- `include/renderer/CudaRender.cuh` - Header matching MetalRenderer interface
-- `src/renderer/CudaRenderer.cu` - 8-pass pipeline implementation (~680 lines)
-
+2. Source Files Organized by Purpose
+A. Core Shared Files (Platform-Agnostic C++)
+File	Purpose
+src/main.cpp	Application entry point
+src/State.cpp	Global game state management
+src/Character.cpp	Player/NPC logic and animation
+src/Camera.cpp	Camera controller
+include/renderer/Renderer.hpp	Abstract renderer interface
+include/renderer/Buffer.hpp	Abstract GPU buffer interface
+include/renderer/ShaderTypes.h	CRITICAL - Shared CPU/GPU data structures
+include/platform/Platform.hpp	Abstract platform interface
+include/cumath.h	Cross-platform math/types (862 lines)
+include/shader_macros.h	Unified Metal/CUDA shader macros
+B. Metal-Specific Files (macOS Only)
+Type	File	Purpose
+.mm	MetalRenderer.mm	Main Metal rendering pipeline (558 lines)
+.mm	MetalDevice.mm	Metal device management
+.mm	MetalBuffer.mm	MTLBuffer wrapper (60 lines)
+.mm	BrickPool.mm	Metal brick allocator (107 lines)
+.mm	MaterialMap.mm	Metal world streaming
+.mm	TexturePack_impl.mm	Texture atlas for Metal
+.mm	MacOSPlatform.mm	macOS window/input (44 lines)
+.mm	macos_main.mm	macOS app entry
+.mm	GameView.mm	MTKView wrapper
+.metal	*.metal (12 files)	Metal compute shaders
+C. CUDA-Specific Files (Windows Only)
+Type	File	Purpose
+.cu	CudaRenderer.cu	Main CUDA rendering pipeline (626 lines)
+.cu	CudaBuffer.cu	CUDA buffer wrapper (79 lines)
+.cu	CudaBrickPool.cu	CUDA brick allocator (124 lines)
+.cu	CudaMaterialMap.cu	CUDA world streaming
+.cu	TerrainGeneration.cu	Procedural terrain kernels
+.cu	CudaD3D12Texture.cu	CUDA-D3D12 interop
+.cu	raytracing_functions_impl.cu	CUDA ray tracing
+.cpp	D3D12Device.cpp	D3D12 device management
+.cpp	WindowsPlatform.cpp	Windows window/input (113 lines)
+.cpp	win32_main.cpp	Windows app entry
+D. Unified Shaders (*.shader)
+These files use the shader_macros.h abstraction layer and are preprocessed for both Metal and CUDA:
+File	Pipeline Pass
+dist_approx.shader	Pass 0: Distance approximation (half-res)
+direct_light.shader	Pass 1: GBuffer + Direct lighting
+indirect_bounce.shader	Pass 2: Global illumination
+temporal_acc.shader	Pass 3: Temporal accumulation
+denoise.shader	Pass 4: Bilateral denoising
+volumetric.shader	Pass 5: Volumetric fog
+exposure.shader	Pass 6: Auto-exposure
+composite.shader	Pass 7: Final composition
+material_gen.shader	Procedural voxel generation
+tables.shader	Lookup tables
 ---
-
-## Phase 6: Platform Integration (DONE 2026-03-10)
-
-### 6.1 Fix Shader Include Order ✅
-**Status:** Fixed all 10 shader files
-
-**Change:** Restructured all `.shader` files to include `shader_macros.h` FIRST:
-
-```cpp
-#include "shader_macros.h"
-
-#if defined(PLATFORM_METAL)
-#include <metal_stdlib>
-using namespace metal;
-#endif
-
-#include "cumath.h"
-// ... rest of includes
-```
-
-**Files Modified:**
-- tables.shader
-- dist_approx.shader
-- direct_light.shader
-- indirect_bounce.shader
-- temporal_acc.shader
-- denoise.shader
-- volumetric.shader
-- exposure.shader
-- composite.shader
-- material_gen.shader
-
-### 6.2 Update shader_macros.h ✅
-**Status:** Enhanced with explicit platform guards
-
-**Changes:**
-- Added automatic platform detection based on `__METAL_VERSION__` and `__CUDA_ARCH__`
-- Made `shader_macros.h` the single source of truth
-- Added comprehensive documentation
-- Platform-specific blocks only compile when appropriate
-
-### 6.3 Refactor CudaRenderer.cu ✅
-**Status:** Complete rewrite with proper kernel launches
-
-**Major Changes:**
-- Moved all kernel declarations to file scope (not inside functions)
-- Changed from `extern __global__` inside functions to proper file-scope declarations
-- Switched to direct kernel launch syntax: `KernelName<<<grid, block>>>(args)`
-- Added proper CUDA stream usage throughout
-- Implemented full 8-pass pipeline matching MetalRenderer exactly
-
-**New Interface:**
-```cpp
-class CudaRenderer {
-    void Draw(const Character& character, unsigned int frameCount);
-    void PostDraw(cudaSurfaceObject_t outputSurface, uint32_t width, uint32_t height, bool useDLSS);
-    void InitializeDLSS(void* d3dDevice, uint32_t width, uint32_t height);
-    cudaSurfaceObject_t GetCompositeSurface() const;
-    cudaTextureObject_t GetCompositeTexture() const;
-    // ... getters for interop
-};
-```
-
-### 6.4 Update win32_main.cpp ✅
-**Status:** Simplified render loop implemented
-
-**Changes:**
-- Removed old `State::state.render->GIdata.UpdateGIData()` logic
-- Now uses clean `State::state.renderer->Draw(character, frameCount)` pattern
-- Integrated CudaD3D12Texture interop for output
-- Added DLSS/Streamline SDK integration skeleton
-- Simplified to match macOS architecture
-
-**⚠️ Manual Update Required:**
-The file has permission restrictions (owned by root). To apply changes:
-```bash
-sudo cp /tmp/new_win32_main.cpp /Users/rubenvlieger/Documents/RVGRT/src/platform/win32_main.cpp
-sudo chown $(whoami) /Users/rubenvlieger/Documents/RVGRT/src/platform/win32_main.cpp
-```
-
-### 6.5 CUDA-D3D12 Interop ✅
-**Status:** Implemented with CudaD3D12Texture class
-
-**Implementation:**
-- Uses existing `CudaD3D12Texture` class for shared CUDA/D3D12 resources
-- `PostDraw()` method copies composite result to interop texture
-- Synchronized with CUDA stream for proper ordering
-- Ready for DLSS integration
-
-### 6.6 DLSS Support ✅
-**Status:** Integrated with Streamline SDK
-
-**Features:**
-- `InitializeDLSS()` sets up Streamline context
-- `UpdateDLSSConstants()` handles jitter and reset flags
-- win32_main.cpp includes DLSS evaluation in render loop
-- Supports temporal upscaling when Streamline SDK is available
-
-### 6.7 Update CMakeLists.txt ✅
-**Status:** Enhanced preprocessing and build configuration
-
-**Changes:**
-- Updated shader preprocessing to define `PLATFORM_CUDA=1`
-- Added CudaD3D12Texture.cu to Windows CUDA sources
-- Improved dependency tracking (shaders now depend on shader_macros.h)
-- Build properly generates preprocessed kernel files
-
-### 6.8 Verify Kernel Linking ✅
-**Status:** Kernel signatures verified and declared properly
-
-**All 8 kernels declared at file scope:**
-1. `distApproximationKernel` - Distance approximation (half-res)
-2. `GBufferAndDirectLight` - GBuffer generation + direct lighting
-3. `IndirectBounce` - Indirect lighting
-4. `TemporalAccumulation` - Temporal anti-aliasing
-5. `BilateralDenoise` - Edge-preserving denoise (A-Trous wavelet)
-6. `VolumetricFog` - Volumetric lighting
-7. `ComputeExposure` - Auto-exposure calculation
-8. `Composite` - Final composition + tone mapping
-
-**Plus helper kernel:**
-- `CopyToInteropKernel` - Copy to D3D12 interop surface
-
+3. Platform-Specific vs Shared Analysis
+Shared Code (~60%)
+- Core Logic: Character.cpp, Camera.cpp, State.cpp
+- Abstractions: Renderer.hpp, Buffer.hpp, Platform.hpp
+- Data Structures: ShaderTypes.h, cumath.h
+- Unified Shaders: All *.shader files
+- Ray Tracing: raytracing_functions.h, intersections.h
+Platform-Specific Code (~40%)
+Component	Metal (macOS)	CUDA (Windows)
+Renderer	MetalRenderer.mm	CudaRenderer.cu
+Buffer	MetalBuffer.mm	CudaBuffer.cu
+BrickPool	BrickPool.mm	CudaBrickPool.cu
+MaterialMap	MaterialMap.mm	CudaMaterialMap.cu
+Platform	MacOSPlatform.mm	WindowsPlatform.cpp
+Entry Point	macos_main.mm	win32_main.cpp
+Shaders	*.metal files	Preprocessed *.shader
+Upscaling	MetalFX	DLSS (Streamline SDK)
 ---
-
+4. Code Duplication Patterns Between Metal and CUDA
+A. BrickPool Implementation (HIGH DUPLICATION)
+Files: BrickPool.mm vs CudaBrickPool.cu
+Aspect	Metal
+Lines	107
+Allocation Logic	IDENTICAL
+Free Logic	IDENTICAL
+Next-Fit Algorithm	IDENTICAL
+Duplication Rate: ~95% - Only differs in:
+- Memory allocation: [dev newBufferWithLength:] vs cudaMalloc()
+- Logging: NSLog() vs fprintf()
+- Buffer storage mode: MTLStorageModePrivate vs raw pointers
+B. Buffer Implementation (MODERATE DUPLICATION)
+Files: MetalBuffer.mm vs CudaBuffer.cu
+Method	Metal
+Allocate()	newBufferWithLength:
+Free()	m_buffer = nil
+Readback()	memcpy()
+GetSize()	[buffer length]
+Duplication Rate: ~80% - Same interface, different APIs
+C. Renderer Pipeline (STRUCTURAL DUPLICATION)
+Files: MetalRenderer.mm (558 lines) vs CudaRenderer.cu (626 lines)
+Both implement the exact same 8-pass pipeline:
+1. Distance Approximation (half-res)
+2. GBuffer + Direct Light (full-res)
+3. Indirect Bounce (GI)
+4. Temporal Accumulation
+5. Bilateral Denoise (3 iterations)
+6. Volumetric Fog (half-res)
+7. Compute Exposure
+8. Composite
+Duplication Pattern:
+- Identical render target creation logic
+- Identical camera/framedata preparation
+- Identical kernel dispatch order
+- Different API calls for kernel launch
+D. Shader Code (NOW UNIFIED)
+Previously duplicated in *.metal and *.cu files.
+Current approach uses shader_macros.h to unify:
+// Platform abstraction examples:
+#define KERNEL(name) kernel void name        // Metal
+#define KERNEL(name) __global__ void name    // CUDA
+#define TEX_WRITE_2D(tex, val, coord) tex.write(val, coord)  // Metal
+#define TEX_WRITE_2D(tex, val, coord) surf2Dwrite(val, ...)  // CUDA
+E. Key Duplication Summary
+Component	Duplication Level	Lines (Metal)
+BrickPool	~95%	107
+Buffer	~80%	60
+Renderer Pipeline	~70%	558
+Platform Code	~30%	44
+Ray Tracing Functions	~60%	In headers
 ---
-
-## Phase 6 Summary
-
-**Completed Tasks:**
-1. ✅ Fixed shader include order in all 10 shader files
-2. ✅ Updated shader_macros.h with robust platform detection
-3. ✅ Refactored CudaRenderer.cu with proper kernel declarations and launches
-4. ✅ Added DLSS/Streamline SDK integration to CudaRenderer
-5. ✅ Implemented CUDA-D3D12 interop using CudaD3D12Texture
-6. ✅ Updated win32_main.cpp (ready for manual installation)
-7. ✅ Enhanced CMakeLists.txt with proper preprocessing
-
-**Key Design Decisions:**
-- **Kernel Declaration:** File-scope declarations instead of inside functions
-- **Kernel Launch:** Direct `<<<grid, block>>>` syntax for clarity
-- **Interop:** Reused existing CudaD3D12Texture class for shared resources
-- **DLSS:** Integrated Streamline SDK support (optional)
-- **Normals:** Using RGBA16F instead of RGBA8Snorm (functionally equivalent)
-
-**Architecture Parity Achieved:**
-- CUDA path now mirrors Metal path exactly:
-  - Same 8-pass pipeline order
-  - Same buffer/resource management pattern
-  - Same Renderer interface
-  - Similar interop pattern (MetalFX/DLSS)
-
+5. Build Configuration Analysis
+CMakeLists.txt Structure
+Windows Build (CUDA + D3D12):
+  - Finds CUDA Toolkit
+  - Preprocesses .shader files → .cu via C preprocessor
+  - Links: d3d12, dxgi, dxguid
+  - Optional: Streamline SDK (DLSS)
+macOS Build (Metal):
+  - Compiles .metal files → .air
+  - Links .air → default.metallib
+  - Links: Cocoa, Metal, MetalKit, MetalFX, QuartzCore
+  - Creates stub CudaRenderer for compilation
 ---
-
-## Phase 7: Verification (FINAL)
-
-### Build Commands
-```bash
-# Windows (Visual Studio 2022)
-mkdir build && cd build
-cmake .. -G "Visual Studio 17 2022" -A x64
-cmake --build . --config Release
-
-# With DLSS (optional, requires Streamline SDK)
-cmake .. -G "Visual Studio 17 2022" -A x64 -DUSE_STREAMLINE=ON
-```
-
-### Test Checklist
-- [ ] Compilation succeeds on Windows with no errors
-- [ ] Application launches and creates window
-- [ ] Voxel terrain renders correctly
-- [ ] Visual output matches macOS build side-by-side
-- [ ] No CUDA errors in console output
-
----
-
-## File Structure (Current State)
-
-### Cross-Platform (Shared)
-```
-include/
-  renderer/ShaderTypes.h      # Platform-typed math (simd_float3 / float3)
-  renderer/intersections.h    # Ray tracing (Metal/CUDA/C++)
-  shader_macros.h             # Platform abstraction macros
-
-src/renderer/kernels/shaders/
-  *.shader                    # Unified shader sources (10 files)
-```
-
-### macOS-Specific
-```
-src/renderer/
-  MetalRenderer.mm            # 8-pass Metal pipeline
-  MaterialMap.mm              # SVO streaming (Metal buffers)
-  BrickPool.mm                # Brick allocator
-  *.metal                     # Metal kernels (compiled by xcrun)
-```
-
-### Windows-Specific
-```
-src/renderer/
-  CudaRenderer.cu             # 8-pass CUDA pipeline (mirrors MetalRenderer)
-  CudaMaterialMap.cu          # SVO streaming (CUDA malloc)
-  CudaBrickPool.cu            # Brick allocator
-  D3D12Device.cpp             # D3D12 + optional Streamline
-
-src/platform/
-  win32_main.cpp              # Windows entry point
-```
-
----
-
-## Key Design Decisions
-
-1. **Unified Shaders**: Single `.shader` source -> preprocessed to `.metal` / `.cu`
-2. **Flat Buffers for CUDA**: 3D textures emulated with `index = x + y*W + z*W*H`
-3. **Streamline Optional**: DLSS requires SDK download, disabled by default
-4. **Identical Algorithms**: Same ray traversal logic on all platforms (see intersections.h)
-5. **8-Pass Pipeline Order**: dist_approx -> GBuffer/Direct -> Indirect -> Temporal -> Denoise(3x) -> Volumetric -> Exposure -> Composite
-
----
-
-## Dependencies
-
-**Required:**
-- CMake 3.10+
-- CUDA Toolkit 11.0+ (Windows)
-- Xcode 15+ / macOS 14.0+ (macOS)
-- Visual Studio 2022 (Windows)
-- C Preprocessor: cpp or clang-cpp (Windows, for shader preprocessing)
-
-**Optional:**
-- NVIDIA Streamline SDK v2.9.0 (for DLSS support)
-  - Download: https://github.com/NVIDIAGameWorks/Streamline/releases
-  - Extract to: `vendor/streamline-sdk-v2.9.0/`
-  - Enable with: `cmake .. -DUSE_STREAMLINE=ON`
-
----
-
-## Known Issues / Future Work
-
-1. **Kernel Implementations**: The 10 shader files define kernel signatures but may need implementation verification
-2. **Performance**: Initial CUDA port may be slower than Metal; optimization pass needed later
-3. **DLSS**: Not available until Streamline SDK is properly integrated
-4. **Error Handling**: CUDA_CHECK macro exits on error; may want graceful fallback
+6. Recommendations for Reducing Duplication
+1. ~~Template-based BrickPool~~ [COMPLETED]
+   - Implemented `BrickPool<Traits>` template in `include/renderer/BrickPool.hpp`
+   - Created `BrickPoolTraits.hpp` with platform-specific traits (Metal/CUDA)
+   - Shared 95% of allocation logic (Allocate/Free algorithms)
+   - Metal: `src/renderer/BrickPool_Metal.mm` | CUDA: `src/renderer/BrickPool_CUDA.cu`
+   - Line reduction: ~231 lines → ~140 lines shared + ~60 lines per platform
+   - Type aliases maintained: `MetalBrickPool`, `CudaBrickPool` for backward compatibility
+2. Unified Renderer Base: Extract common pipeline logic to a shared base class
+3. Expand shader_macros.h: More comprehensive abstraction for all shader operations
+4. Shared Constants: Move all BRICK_POOL_CAPACITY, MAX_CHARACTERS etc. to a single header
+5. Platform Factory Pattern: Consolidate platform creation logic

@@ -106,7 +106,7 @@ if(WIN32)
     set(WIN_CUDA_SOURCES
         src/renderer/CudaRenderer.cu
         src/renderer/CudaMaterialMap.cu
-        src/renderer/CudaBrickPool.cu
+        src/renderer/BrickPool_CUDA.cu
         src/CudaD3D12Texture.cu
     )
     
@@ -193,15 +193,36 @@ elseif(APPLE)
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm
-        src/renderer/BrickPool.mm
+        src/renderer/BrickPool_Metal.mm
         src/platform/MacOSNetworkClient.mm
         ${MACOS_ICON} 
     )
     
-    file(GLOB MAC_METAL_SOURCES CONFIGURE_DEPENDS 
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/*.metal"
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/kernels/*.metal"
-    )    
+    # --- Metal shader compilation ---
+    # Compile .shader files directly (they contain PLATFORM_METAL preprocessor directives)
+    set(SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/renderer/kernels/shaders")
+    
+    set(SHADER_FILES
+        tables.shader
+        dist_approx.shader
+        direct_light.shader
+        indirect_bounce.shader
+        temporal_acc.shader
+        denoise.shader
+        volumetric.shader
+        exposure.shader
+        composite.shader
+        material_gen.shader
+    )
+    
+    find_program(XCRUN_TOOL xcrun REQUIRED)
+    message(STATUS "Found xcrun for Metal shader compilation")
+    
+    set(MAC_METAL_SOURCES "")
+    foreach(SHADER ${SHADER_FILES})
+        set(SHADER_PATH "${SHADER_SOURCE_DIR}/${SHADER}")
+        list(APPEND MAC_METAL_SOURCES ${SHADER_PATH})
+    endforeach()    
     set(MAC_METAL_AIR_FILES "")
     set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") 
 
@@ -215,12 +236,14 @@ elseif(APPLE)
         add_custom_command(
             OUTPUT "${AIR_FILE}"
             COMMAND ${XCRUN_TOOL} metal -c
+                    -x metal
+                    -DPLATFORM_METAL=1
                     -frecord-sources
                     -gline-tables-only
                     -I "${CMAKE_SOURCE_DIR}/include"
                     "${METAL_FILE}"
                     -o "${AIR_FILE}"
-            DEPENDS "${METAL_FILE}"
+            DEPENDS "${METAL_FILE}" "${CMAKE_SOURCE_DIR}/include/shader_macros.h"
             COMMENT "Compiling Metal shader ${METAL_FILE}"
         )
     endforeach()

@@ -29,25 +29,34 @@ inline float phaseFunction(float3 viewDir, float3 lightDir, float g) {
 }
 
 KERNEL(VolumetricFog)(
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texVolumetric, 0),
+    PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 1),
+    PARAM_TEXTURE_READ(tex2d_f32_s, texHistory, 2),
+#else
     PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texVolumetric, 0),
     PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 1),
     PARAM_TEXTURE_READ(texture2d<float, access::sample>, texHistory, 2),
+#endif
     
     PARAM_CONSTANT(CameraData, camera, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
     
+#if defined(PLATFORM_METAL)
+    PARAM_TEXTURE_READ(tex3d_u32, indirection, 3),
+#else
     PARAM_TEXTURE_READ(texture3d<uint, access::read>, indirection, 3),
-    PARAM_BUFFER(device SectorInfo*, sectorBuffer, 3),
-    PARAM_BUFFER(device ulong*, occupancyBuffer, 4),
-    PARAM_BUFFER(device ulong*, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData*, charData, 7),
+#endif
+    PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
+    PARAM_BUFFER(ulong, occupancyBuffer, 4),
+    PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
+    PARAM_CONSTANT(CharacterGPUData, charData, 7),
 
     DECLARE_GID()
 )
 {
 #if defined(PLATFORM_METAL)
     CHECK_BOUNDS(texVolumetric);
-    uint2 gid = GET_GID();
     int width = texVolumetric.get_width();
     int height = texVolumetric.get_height();
 #else
@@ -110,7 +119,7 @@ KERNEL(VolumetricFog)(
 #if SHADOWS
             isShadowed = traceShadow(pos, frame.sunDirection, VOLUMETRIC_SHADOW_MAXDIST,
                                     VOLUMETRIC_SHADOW_STEPS, indirection, sectorBuffer,
-                                    occupancyBuffer, 0, sectorMaskBuffer, frame.worldOrigin, charData);
+                                    occupancyBuffer, 0, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
 #else
             isShadowed = false;
 #endif
@@ -138,7 +147,7 @@ KERNEL(VolumetricFog)(
         prevUV.y = 0.5f - prevNDC.y * 0.5f;
 
         if (prevUV.x >= 0.0f && prevUV.x <= 1.0f && prevUV.y >= 0.0f && prevUV.y <= 1.0f) {
-            DECLARE_SAMPLER(sLinear, linear, clampededge);
+            DECLARE_SAMPLER(sLinear, linear, clamp_to_edge);
             history = TEX_SAMPLE_2D(texHistory, prevUV).rgb;
             
             float diff = length(history - accumulatedLight);
