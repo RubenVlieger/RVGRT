@@ -4,6 +4,7 @@
 /build
 /.agents
 /RVGRT.app
+/vendor/streamline-sdk-v2.9.0
 /CMakePresets.json
 /embed.py
 /build-ninja-release
@@ -11,6 +12,9 @@
 /voxelRT-relevant-files
 /build-ninja-reldeb
 /.cache
+/.agents
+
+
 /.agents    
 /vendor/streamline-sdk-v2.9.0
 # all CUDA and Windows files!
