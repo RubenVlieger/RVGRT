@@ -82,7 +82,7 @@ KERNEL(ComputeExposure)(
             float lum = getLuminance(color);
             
             // Center weighting
-            float2 uv = make_float2(x, y) / make_float2(width, height);
+            float2 uv = make_float2(x / width, y / height);
             float dist = length(uv - 0.5f);
             float weight = 1.0f - smoothstep(0.2f, 0.6f, dist);
             weight = max(weight, 0.1f);
