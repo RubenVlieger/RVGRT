@@ -1,98 +1,80 @@
 #pragma once
 
-#include "renderer/Renderer.hpp"
-#include "renderer/Buffer.hpp" 
+#include "renderer/RendererBase.hpp"
+#include "renderer/RendererTraits.hpp"
 #include "renderer/MaterialMap.hpp"
-
 #include "Texturepack.h"
 
-#include <MetalFX/MetalFX.h>
-
-#include <cstdint> 
-#include <memory> 
-
 #ifdef __OBJC__
-@protocol MTLComputePipelineState;
-@protocol MTLTexture;
 @protocol MTLDevice;
-@protocol MTLCommandQueue;
+@protocol MTLCommandBuffer;
+@protocol MTLFXTemporalScaler;
+@protocol MTLCounterSampleBuffer;
 #else
 typedef void* id;
 #endif
 
-class Character; 
+class Character;
 
-class MetalRenderer : public Renderer
-{
+/**
+ * MetalRenderer - Metal-specific renderer implementation
+ * 
+ * Inherits from RendererBase which handles the common pipeline logic.
+ * This class only implements Metal-specific operations:
+ * - Kernel loading from .metallib
+ * - MetalFX temporal upscaling
+ * - Timestamp sampling (optional)
+ */
+class MetalRenderer : public RendererBase<RendererImpl::MetalRendererTraits> {
 public:
-    MetalRenderer(id device);
+    explicit MetalRenderer(Device device);
     ~MetalRenderer() override;
 
-    void Draw(id<MTLCommandBuffer> buffer, const Character& character, unsigned int frameCount);
+    // Override Draw to accept Metal command buffer
+    void Draw(CommandBuffer buffer, const Character& character, unsigned int frameCount);
+    
+    // Required by base class
     void Draw(const Character& character, unsigned int frameCount) override;
 
-    id GetOutputTexture();
-
+    // Platform-specific interface implementations
+    void CreatePipelineStates() override;
+    void DestroyPipelineStates() override;
+    MaterialMap& GetMaterialMap() { return _materialMap; }
+    Texturepack& GetTexturePack() override { return _texturepack; }
+    id GetTemporalScaler() const override { return _temporalScaler; }
+    void CreateExposureBuffer() override;
+    void CreateCharacterBuffer() override;
+    void UploadConstantData(CommandBuffer cmdBuf, 
+                           const CameraData& camera,
+                           const FrameData& frame,
+                           const CharacterGPUData& characters) override;
+    
+    // Additional Metal-specific methods
     void GenerateWorld();
-    void OnResize(uint32_t newWidth, uint32_t newHeight);
-    void generateNoiseTexture();
-
-    void ResetScaler(); // Helper to reset history (e.g. on teleport)
-
-
+    id GetOutputTexture();
     id GetCounterBuffer() { return _counterSampleBuffer; }
     id GetTimestampBuffer() { return _timestampBuffer; }
+    bool SupportsTimestamps() const { return _supportsTimestamps; }
 
 private:
-    void createRenderTarget(uint32_t width, uint32_t height);
-    Texturepack _texturepack;
-
-    id _device;
-
-    // --- Pipeline State Objects ---
-
-    id _psoDistApprox;      // Kernel 0
-    id _psoGBuffer;         // Kernel 1
-    id _psoIndirect;        // Kernel 2
-    id _psoAccumulate;      // Kernel 3
-    id _psoDenoise;         // Kernel 4
-    id _psoComposite;       // Kernel 5
-    id _psoVolumetric; //
-    id _psoExposure; 
-
-    // screen textures
-    id _texDirectLight;
-    id _texAlbedo;
-    id _texNormal;
-    id _texMotion;
-    id _texRawIndirect;
-    id _texDenoised;
-    id _texFinal;           // The main render target
-    id _texFinalHistory[2];
-    id _texDenoiseTemp;
-    id _exposureBuffer;
-    id _characterBuffer;
-
-
-    id _texVolumetric[2]; 
-
-    id<MTLFXTemporalScaler> _temporalScaler;
-    bool _scalerNeedsReset = true;
-    id _texCompositeResult; 
-
-    id _texDepth[2];        // [0] = current, [1] = prev (swaps every frame)
-    id _texAccum[2];        // [0] = current, [1] = history (swaps every frame)
+    void CreateTemporalScaler(uint32_t width, uint32_t height);
+    void ClearHistoryBuffers();
+    // Metal-specific members
+    id _library;
+    id _commandQueue;
     
-    id _halfDistTexture;
-
+    // Material map and texture pack
     MaterialMap _materialMap;
-
-    //remaining data structures
-    id _noiseTexture;
-
-    //remaining data
-    uint32_t _frameIndex = 0;
+    Texturepack _texturepack;
+    
+    // MetalFX temporal scaler
+    id _temporalScaler;
+    
+    // Optional timestamp support
     id _counterSampleBuffer;
-    id _timestampBuffer; 
+    id _timestampBuffer;
     bool _supportsTimestamps;
+    
+    // Helper methods
+    void SetupTimestampSupport();
 };

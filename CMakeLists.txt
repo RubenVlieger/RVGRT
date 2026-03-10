@@ -95,6 +95,7 @@ if(WIN32)
         src/State.cpp
         src/Character.cpp
         src/Camera.cpp
+        src/renderer/FrameDataManager.cpp
         src/platform/win32_main.cpp
         src/platform/WindowsPlatform.cpp
         src/renderer/D3D12Device.cpp
@@ -105,6 +106,7 @@ if(WIN32)
     # Core CUDA renderer files
     set(WIN_CUDA_SOURCES
         src/renderer/CudaRenderer.cu
+        src/renderer/CUDA/CudaTraits.cu
         src/renderer/CudaMaterialMap.cu
         src/renderer/BrickPool_CUDA.cu
         src/CudaD3D12Texture.cu
@@ -185,17 +187,20 @@ elseif(APPLE)
         src/State.cpp
         src/Character.cpp
         src/Camera.cpp
+        src/renderer/FrameDataManager.cpp
+        src/renderer/RendererBase.mm
         src/platform/macos_main.mm
         src/platform/MacOSPlatform.mm
         src/renderer/MetalDevice.mm
-        src/renderer/MetalRenderer.mm
+        src/renderer/Metal/MetalRenderer.mm
+        src/renderer/Metal/MetalTraits.mm
         src/renderer/MetalBuffer.mm
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm
         src/renderer/BrickPool_Metal.mm
         src/platform/MacOSNetworkClient.mm
-        ${MACOS_ICON} 
+        ${MACOS_ICON}
     )
     
     # --- Metal shader compilation ---
