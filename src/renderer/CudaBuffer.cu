@@ -1,6 +1,6 @@
 #include "renderer/CudaBuffer.cuh"
-#include "cumath.cuh"
-#include "TerrainGeneration.hpp"
+#include "cumath.h"
+#include "TerrainGeneration.h"
 
 // The world generation kernel remains the same.
 extern "C" __global__

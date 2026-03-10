@@ -3,7 +3,26 @@
 
 // The simd library provides C++ types like `simd_float3` that are
 // directly memory-compatible with Metal's `float3`.
+#if defined(__METAL_VERSION__)
+// Metal shader path - simd types are built-in
 #include <simd/simd.h>
+#elif defined(__APPLE__)
+// macOS C++ path - use system simd library
+#include <simd/simd.h>
+#else
+// Windows/CUDA path - use cumath types
+#include "cumath.h"
+using simd_float2 = float2;
+using simd_float3 = float3;
+using simd_float4 = float4;
+using simd_int3 = int3;
+using simd_float4x4 = mat4;
+
+// Utility functions that Metal provides natively
+inline float3 simd_normalize(float3 v) { return normalize(v); }
+inline float3 simd_make_float3(float x, float y, float z) { return make_float3(x, y, z); }
+inline float2 simd_make_float2(float x, float y) { return make_float2(x, y); }
+#endif
 
 // This struct is now defined in a plain C++ header.
 // Both your .metal file and your .mm file will include this.

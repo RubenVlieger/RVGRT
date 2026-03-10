@@ -19,7 +19,127 @@ Phase 1: Foundation (Make it compile)
 3. Make intersections.h dual-path (Metal + CUDA)
 4. Make Streamline SDK optional
 5. Fix win32_main.cpp to use new Renderer API
-Phase 2: CUDA Data Structures
+
+=== COMPLETED WORK LOG ===
+
+## Phase 1 Header Fixes (COMPLETED 2026-03-10)
+
+### Changes Made:
+
+**ShaderTypes.h** (include/renderer/ShaderTypes.h)
+- Added platform guards around `#include <simd/simd.h>`
+- Metal path: Uses `<simd/simd.h>` when `__METAL_VERSION__` defined
+- macOS C++ path: Uses system `<simd/simd.h>` when `__APPLE__` defined
+- Windows/CUDA path: Uses cumath.h types with aliases (simd_float2/3/4, simd_int3, simd_float4x4)
+- Added utility functions: simd_normalize(), simd_make_float3(), simd_make_float2()
+
+**Fixed Include Extensions:**
+- src/renderer/CudaBuffer.cu: cumath.cuh → cumath.h
+- src/renderer/CudaBuffer.cu: TerrainGeneration.hpp → TerrainGeneration.h
+- src/CudaD3D12Texture.cu: cumath.cuh → cumath.h
+
+**intersections.h** (include/renderer/intersections.h)
+- Added complete platform guards with `#if defined(__METAL_VERSION__)`
+- Metal path: Full original implementation with Metal textures
+- CUDA/CPU path: Includes intersections_cuda.h (flat buffer access)
+
+**intersections_cuda.h** (NEW FILE: include/renderer/intersections_cuda.h)
+- CUDA-compatible version using flat buffers instead of Metal textures
+- Implements GetStepPos() with same logic as Metal version
+- Uses cumath.h types
+
+## Phase 2: Cross-Platform intersections.h (COMPLETED 2026-03-10)
+
+### Changes Made:
+
+**intersections.h** (include/renderer/intersections.h) - MAJOR REWRITE
+- Converted to true cross-platform header with 3 paths:
+  - `#if defined(__METAL_VERSION__)`: Metal implementation with texture3d
+  - `#elif defined(__CUDACC__)`: CUDA implementation with flat buffers
+  - `#else`: C++ reference implementation
+- Unified GetStepPos(), trace(), and traceShadow() functions
+- Added type aliases (SVO_TEXTURE_TYPE, SECTOR_BUFFER_TYPE, etc.) for platform abstraction
+- Identical traversal logic on all platforms - only data access differs
+- **NO separate intersections_cuda.h needed** - everything in one file
+
+Key design:
+- Metal: Uses texture3d<uint, access::read> for indirection
+- CUDA: Uses const uint32_t* __restrict__ flat buffer (index = x + y*W + z*W*H)
+- Same algorithm, same logic, single source of truth
+
+## Phase 3: CUDA Data Structures (COMPLETED 2026-03-10)
+
+### Changes Made:
+
+**CudaBrickPool** (NEW: include/renderer/CudaBrickPool.cuh, src/renderer/CudaBrickPool.cu)
+- Mirrors Metal BrickPool exactly
+- Uses cudaMalloc instead of Metal buffers
+- Same Next-Fit allocator with _isFree bitset
+- Same capacity: 6M bricks (~3.3GB)
+- Buffer layout: 8 uint64_t occupancy + 512 uint8_t data per brick
+
+**CudaMaterialMap** (NEW: include/renderer/CudaMaterialMap.cuh, src/renderer/CudaMaterialMap.cu)
+- Mirrors Metal MaterialMap exactly
+- Toroidal streaming with worldOrigin tracking
+- CPU-side sector analysis (GPU async TODO)
+- Flat uint32_t* buffer for indirection (not 3D texture)
+- Same streaming radius and LOD logic
+- Sector state tracking identical to Metal
+
+## Phase 4: Unified Shader System (COMPLETED 2026-03-10)
+
+### Architecture:
+Created a unified shader preprocessing system that uses the C preprocessor to generate both Metal (.metal) and CUDA (.cu) files from single .shader source files.
+
+**New Files:**
+- **include/shader_macros.h** - Platform abstraction macros
+  - KERNEL() - kernel declaration macro
+  - PARAM_TEXTURE_READ/WRITE/BUFFER/CONSTANT - parameter qualifiers
+  - TEX_READ_2D/3D, TEX_WRITE_2D, TEX_SAMPLE_2D - texture operations
+  - DECLARE_GID(), GET_GID() - thread indexing
+  - SHARED_MEM, BARRIER_GROUP - synchronization
+  - Platform-specific bounds checking
+
+**Unified Shader Sources (NEW: src/renderer/kernels/shaders/):**
+1. **tables.shader** - Lookup tables (RayMaskOptimizationLUT)
+2. **dist_approx.shader** - Distance approximation kernel (half-res)
+3. **exposure.shader** - Log-average luminance computation with parallel reduction
+4. **denoise.shader** - A-Trous bilateral edge-avoiding filter
+5. **temporal_acc.shader** - Temporal anti-aliasing with neighborhood clamping
+6. **indirect_bounce.shader** - 1-bounce global illumination
+7. **direct_light.shader** - GBuffer generation + direct lighting (water, reflections, shadows)
+8. **volumetric.shader** - Volumetric fog with ray marching
+9. **composite.shader** - Final composition + tone mapping (ACES) + gamma correction
+10. **material_gen.shader** - Procedural terrain generation kernels
+
+**Deleted (replaced by unified shaders):**
+- ❌ composite_kernel.metal
+- ❌ denoise_kernel.metal
+- ❌ direct_kernel.metal
+- ❌ dist_approximation_kernel.metal
+- ❌ exposure_kernel.metal
+- ❌ indirect_bounce.metal
+- ❌ material_gen_kernel.metal
+- ❌ raytracing_function_impl.metal
+- ❌ sdf_generator.metal
+- ❌ tables.metal
+- ❌ temporal_acc_kernel.metal
+- ❌ volumetric_kernel.metal
+
+### Build System Changes Needed:
+CMakeLists.txt needs to be updated to:
+1. Preprocess .shader files using C preprocessor
+2. For Metal: `cpp -E -P -D__METAL_VERSION__=1 shader.shader > shader.metal`
+3. For CUDA: `cpp -E -P -D__CUDA_ARCH__=1 shader.shader > shader.cu`
+4. Compile generated files as before
+
+### Status:
+Phase 1 Headers: COMPLETE
+Phase 2: CUDA Data Structures: COMPLETE
+Phase 3: Unified Shader System: COMPLETE
+Phase 4: CUDA Renderer Integration - PENDING
+Phase 5: Platform Integration - PENDING
+Phase 6: Verification - PENDING
 1. Create CudaBrickPool.cu/cuh
 2. Create CudaMaterialMap.cu/cuh
 3. Update CudaBuffer.cu to match new interface
@@ -388,27 +508,49 @@ Expected: Zero compilation errors
 - No DLSS upscaling initially (until Streamline SDK is added)
 - Performance may differ from Metal (needs optimization pass later)
 ---
-File Creation Summary
-New Files to Create (11 files):
-1. include/renderer/CudaBrickPool.cuh
-2. src/renderer/CudaBrickPool.cu
-3. include/renderer/CudaMaterialMap.cuh
-4. src/renderer/CudaMaterialMap.cu
-5. src/renderer/kernels/cuda_kernels.cu (8 kernel implementations)
-6. vendor/README.md
-Files to Rewrite (3 files):
-1. include/renderer/CudaRender.cuh
-2. src/renderer/CudaRenderer.cu
-3. src/platform/win32_main.cpp
-Files to Modify (7 files):
-1. include/renderer/ShaderTypes.h
-2. include/renderer/intersections.h
-3. src/renderer/CudaBuffer.cu
-4. src/CudaD3D12Texture.cu
-5. src/renderer/D3D12Device.cpp
-6. include/renderer/D3D12Device.hpp
-7. CMakeLists.txt
-Estimated Lines of Code: ~2500-3000 new/modified lines
+=== UPDATED FILE STATUS (2026-03-10) ===
+
+**COMPLETED Files:**
+1. ✅ include/renderer/intersections.h - MAJOR REWRITE (cross-platform with Metal/CUDA/C++ paths)
+2. ✅ include/renderer/CudaBrickPool.cuh - NEW
+3. ✅ src/renderer/CudaBrickPool.cu - NEW
+4. ✅ include/renderer/CudaMaterialMap.cuh - NEW
+5. ✅ src/renderer/CudaMaterialMap.cu - NEW
+6. ✅ include/shader_macros.h - NEW (platform abstraction macros)
+7. ✅ src/renderer/kernels/shaders/*.shader - NEW (10 unified shader files)
+
+**Unified Shaders Created:**
+- tables.shader - Lookup tables
+- dist_approx.shader - Distance approximation
+- exposure.shader - Auto-exposure computation
+- denoise.shader - Bilateral edge-avoiding filter
+- temporal_acc.shader - Temporal anti-aliasing
+- indirect_bounce.shader - Global illumination
+- direct_light.shader - GBuffer + direct lighting
+- volumetric.shader - Volumetric fog
+- composite.shader - Final composition + tone mapping
+- material_gen.shader - Procedural generation
+
+**REMOVED (no longer needed):**
+- ❌ include/renderer/intersections_cuda.h - MERGED into intersections.h
+- ❌ All .metal kernel files (replaced by unified .shader sources)
+
+**REMAINING to implement:**
+1. ⏳ include/renderer/CudaRender.cuh (rewrite)
+2. ⏳ src/renderer/CudaRenderer.cu (rewrite)
+3. ⏳ src/platform/win32_main.cpp (update)
+4. ⏳ CMakeLists.txt (shader preprocessing + make Streamline optional)
+
+**Summary:**
+- ✅ Phase 1: Foundation headers (DONE)
+- ✅ Phase 2: Cross-platform intersections.h (DONE)
+- ✅ Phase 3: CUDA data structures (DONE)
+- ✅ Phase 4: Unified Shader System (DONE - 10 shaders, ~2000 lines)
+- ⏳ Phase 5: CUDA Renderer Integration (PENDING)
+- ⏳ Phase 6: Platform integration (PENDING)
+- ⏳ Phase 7: Verification (PENDING)
+
+Current code: ~3800 lines written
 ---
 Implementation Timeline
 Suggested Order:
