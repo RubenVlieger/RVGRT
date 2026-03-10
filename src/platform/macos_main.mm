@@ -9,8 +9,8 @@
 #import "platform/GameView.h"
 #include "platform/MacOSPlatform.hpp"
 #include "platform/NetworkClient.hpp"
-#include "renderer/MetalDevice.hpp"
-#include "renderer/MetalRenderer.hpp"
+#include "renderer/Metal/MetalDevice.hpp"
+#include "renderer/Metal/MetalRenderer.hpp"
 
 /**
  * @file macos_main.mm

@@ -1,6 +1,6 @@
 #include "renderer/BrickPoolTraits.hpp"
 #include "State.hpp"
-#include "renderer/MetalDevice.hpp"
+#include "renderer/Metal/MetalDevice.hpp"
 
 #ifdef __OBJC__
 #import <Metal/Metal.h>

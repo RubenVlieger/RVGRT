@@ -1,4 +1,4 @@
-#include "renderer/CudaBuffer.cuh"
+#include "renderer/CUDA/CudaBuffer.cuh"
 #include "cumath.h"
 #include "TerrainGeneration.h"
 

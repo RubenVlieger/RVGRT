@@ -8,8 +8,8 @@
 #include "State.hpp"
 #include "platform/NetworkClient.hpp"
 #include "platform/WindowsPlatform.hpp"
-#include "renderer/D3D12Device.hpp"
-#include "renderer/CudaRender.cuh"
+#include "renderer/D3D12/D3D12Device.hpp"
+#include "renderer/CUDA/CudaRender.cuh"
 #include "CudaD3D12Texture.cuh"
 
 #ifdef HAS_STREAMLINE

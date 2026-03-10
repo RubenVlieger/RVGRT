@@ -1,5 +1,5 @@
 #import <Metal/Metal.h>
-#include "renderer/MetalBuffer.hpp"
+#include "renderer/Metal/MetalBuffer.hpp"
 #include "cumath.h"
 #include <stdexcept>
 

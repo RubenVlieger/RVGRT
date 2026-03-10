@@ -98,17 +98,17 @@ if(WIN32)
         src/renderer/FrameDataManager.cpp
         src/platform/win32_main.cpp
         src/platform/WindowsPlatform.cpp
-        src/renderer/D3D12Device.cpp
+        src/renderer/D3D12/D3D12Device.cpp
         src/renderer/TexturePack_impl.cu
         src/platform/Win32NetworkClient.cpp
     )
     
     # Core CUDA renderer files
     set(WIN_CUDA_SOURCES
-        src/renderer/CudaRenderer.cu
+        src/renderer/CUDA/CudaRenderer.cu
         src/renderer/CUDA/CudaTraits.cu
-        src/renderer/CudaMaterialMap.cu
-        src/renderer/BrickPool_CUDA.cu
+        src/renderer/CUDA/CudaMaterialMap.cu
+        src/renderer/CUDA/BrickPool_CUDA.cu
         src/CudaD3D12Texture.cu
     )
     
@@ -191,14 +191,14 @@ elseif(APPLE)
         src/renderer/RendererBase.mm
         src/platform/macos_main.mm
         src/platform/MacOSPlatform.mm
-        src/renderer/MetalDevice.mm
+        src/renderer/Metal/MetalDevice.mm
         src/renderer/Metal/MetalRenderer.mm
         src/renderer/Metal/MetalTraits.mm
-        src/renderer/MetalBuffer.mm
+        src/renderer/Metal/MetalBuffer.mm
         src/renderer/TexturePack_impl.mm
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm
-        src/renderer/BrickPool_Metal.mm
+        src/renderer/Metal/BrickPool_Metal.mm
         src/platform/MacOSNetworkClient.mm
         ${MACOS_ICON}
     )
@@ -278,7 +278,7 @@ elseif(APPLE)
 
     add_executable(${APP_NAME} MACOSX_BUNDLE
         ${MAC_SOURCES}
-        "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CUDA/CudaRenderer_mac_stub.cpp"
         "${MAC_METAL_LIBRARY_SRC}" 
     )
     add_custom_command(TARGET ${APP_NAME} POST_BUILD

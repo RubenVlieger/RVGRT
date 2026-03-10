@@ -1,7 +1,7 @@
 #pragma once
 
 #include "renderer/Renderer.hpp"
-#include "renderer/CudaMaterialMap.cuh"
+#include "renderer/CUDA/CudaMaterialMap.cuh"
 #include "Texturepack.h"
 #include <cuda_runtime.h>
 
@@ -11,11 +11,6 @@ class CudaD3D12Texture;
 #endif
 
 class Character;
-
-// Forward declaration of traits
-namespace RendererImpl {
-    struct CudaRendererTraits;
-}
 
 /**
  * CudaRenderer - CUDA implementation of the 8-pass deferred pipeline.
@@ -55,11 +50,6 @@ public:
     cudaTextureObject_t GetCompositeTexture() const { return _texCompositeResult.texture; }
     cudaSurfaceObject_t GetFinalSurface() const { return _texFinal.surface; }
     cudaTextureObject_t GetFinalTexture() const { return _texFinal.texture; }
-    
-    // Getters for MaterialMap (returns base class reference)
-    CudaMaterialMap& GetMaterialMap() { return _materialMap; }
-    Texturepack& GetTexturePack() { return _texturepack; }
-    cudaStream_t GetCudaStream() const { return _cudaStream; }
 
 private:
     void createRenderTarget(uint32_t width, uint32_t height);

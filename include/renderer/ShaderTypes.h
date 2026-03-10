@@ -7,8 +7,15 @@
 // The simd library provides C++ types like `simd_float3` that are
 // directly memory-compatible with Metal's `float3`.
 #if defined(__METAL_VERSION__)
-// Metal shader path - simd types are built-in
+// Metal shader path - use Metal's native types
 #include <metal_stdlib>
+using namespace metal;
+// Metal shaders use float4x4 directly, not simd_float4x4
+using simd_float4x4 = float4x4;
+using simd_float3 = float3;
+using simd_float4 = float4;
+using simd_float2 = float2;
+using simd_int3 = int3;
 #elif defined(__APPLE__)
 // macOS C++ path - use system simd library
 #include <simd/simd.h>

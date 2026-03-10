@@ -1,4 +1,4 @@
-#include "renderer/MetalRenderer.hpp"
+#include "renderer/Metal/MetalRenderer.hpp"
 #include "Character.hpp"
 #include "State.hpp"
 #include "Texturepack.h"

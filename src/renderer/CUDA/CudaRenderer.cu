@@ -2,7 +2,7 @@
 // CudaRenderer.cu - CUDA implementation mirroring MetalRenderer
 // ============================================================================
 
-#include "renderer/CudaRender.cuh"
+#include "renderer/CUDA/CudaRender.cuh"
 #include "Character.hpp"
 #include "State.hpp"
 #include "cumath.h"
