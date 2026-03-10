@@ -1,9 +1,16 @@
 #pragma once
 
+#ifdef __OBJC__
+#import <Metal/Metal.h>
+#else
+typedef void *id;
+#endif
+
 #include "renderer/BrickPool.hpp"
 #include "renderer/ShaderTypes.h"
 #include <cstdint>
 #include <mutex>
+#include <simd/simd.h>
 #include <vector>
 
 /**
@@ -18,9 +25,6 @@
  * Call UpdateStreaming() each frame with the camera position.
  * Returns true if new sectors were loaded (caller should reset temporal
  * accumulation).
- *
- * Platform-specific implementations live in MaterialMap.mm (Metal)
- * and CudaMaterialMap.cu (CUDA).
  */
 class MaterialMap {
 public:
@@ -33,55 +37,45 @@ public:
   /// Per-frame streaming update. Returns true if any sectors changed.
   bool UpdateStreaming(simd_float3 cameraPos);
 
-  // Getters for rendering bindings (return platform-specific handles as void*)
-  // On Metal: these return id<MTLTexture> / id<MTLBuffer>
-  // On CUDA:  these return device pointers (uint32_t*, SectorInfo*, etc.)
-  void* GetIndirectionTexture();
-  void* GetSectorBuffer();
-  void* GetOccupancyBuffer();
-  void* GetDataBuffer();
-  void* GetSectorMaskBuffer();
+  // Getters for rendering bindings
+  id GetIndirectionTexture();
+  id GetSectorBuffer();
+  id GetOccupancyBuffer();
+  id GetDataBuffer();
+  id GetSectorMaskBuffer();
 
   /// Get the world origin (world-space coordinate of indirection cell (0,0,0))
   simd_int3 GetWorldOrigin() const { return _worldOrigin; }
 
-  /// Get indirection dimensions (needed by CUDA path to index flat buffer)
-  int GetIndW() const { return _indW; }
-  int GetIndH() const { return _indH; }
-  int GetIndD() const { return _indD; }
-
 private:
-  void* _device; // Platform-specific device handle
+  id _device;
 
   // --- GPU Resources ---
-  // L1: 3D Texture / flat buffer (R32Uint). Value = sector handle
-  void* _indirectionTexture;
+  // L1: 3D Texture (R32Uint). Value = sector handle (index into SectorBuffer)
+  id _indirectionTexture;
 
   // L2: Buffer of SectorInfo structs
-  void* _sectorBuffer;
+  id _sectorBuffer;
 
   // L3+L4: Brick data (owned by BrickPool)
   BrickPool _brickPool;
 
   // Super-sector masks: one uint64_t per 4x4x4 group of sectors
-  void* _sectorMaskBuffer;
+  id _sectorMaskBuffer;
 
-  // --- Compute Pipelines (Metal PSOs or CUDA function pointers) ---
-  void* _psoAnalyze;
-  void* _psoFill;
-  void* _psoAnalyzeLOD;
-  void* _psoAnalyzeStreaming;
+  // --- Compute Pipelines ---
+  id _psoAnalyze;          // Analyze sectors (determine brick activity)
+  id _psoFill;             // Fill brick data (occupancy + materials)
+  id _psoAnalyzeLOD;       // LOD analysis (16 samples per brick for solid/air)
+  id _psoAnalyzeStreaming; // Async streaming analysis of sectors
 
-public:
-  // --- Async Compute Results (public so CUDA callbacks can access) ---
+  // --- Async Compute Results ---
   struct AsyncResult {
     SectorWorkItem item;
     uint64_t brickMask;
   };
   std::mutex _asyncResultsMutex;
   std::vector<AsyncResult> _asyncResults;
-
-private:
 
   // --- Streaming State ---
   simd_int3 _worldOrigin; // World-space coordinate of indirection cell (0,0,0)
@@ -110,20 +104,42 @@ private:
       _sectorInfoCPU; // CPU mirror of sector buffer (for updates)
   std::vector<uint32_t> _indirectionCPU; // CPU mirror of indirection texture
 
-  // Command queue for async generation (Metal) / CUDA stream (CUDA)
-  void* _commandQueue;
+  // Command queue for async generation
+  id _commandQueue;
 
   // --- Internal Methods ---
+
+  /// Convert world sector position to wrapped indirection coordinates
   void WorldToWrapped(int wx, int wy, int wz, int &ix, int &iy, int &iz) const;
+
+  /// Get linear index from wrapped coordinates
   int WrappedToLinear(int ix, int iy, int iz) const;
+
+  /// Load a sector at world position. If isLOD, only generate brickMask.
   void LoadSector(int wx, int wy, int wz, bool isLOD,
                   std::vector<BrickWorkItem> &workList);
+
+  /// Unload the sector at wrapped position
   void UnloadSector(int ix, int iy, int iz);
+
+  /// Allocate a sector handle
   uint32_t AllocSectorHandle();
+
+  /// Free a sector handle
   void FreeSectorHandle(uint32_t handle);
+
+  /// Upload indirection texture for given wrapped coords
   void UploadIndirectionCell(int ix, int iy, int iz, uint32_t value);
+
+  /// Upload a single SectorInfo to the GPU buffer
   void UploadSectorInfo(uint32_t handle, const SectorInfo &info);
+
+  /// Generate full-detail bricks for a batch of sectors
   void GenerateDetailBatch(const std::vector<SectorWorkItem> &sectors);
+
+  /// Generate LOD brickMasks for a batch of sectors
   void GenerateLODBatch(const std::vector<SectorWorkItem> &sectors);
+
+  /// Rebuild super-sector masks for affected regions
   void RebuildSectorMasks();
 };

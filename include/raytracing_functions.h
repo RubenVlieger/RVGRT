@@ -14,9 +14,9 @@ class CoarseArray;
 #define BRICK_VOLUME 512
 #define FLAG_CONSTANT_MAT 0x80000000
 
-GLOBAL_CONST half3 TINT_GRASS   = {0.48f, 0.65f, 0.36f}; 
-GLOBAL_CONST half3 TINT_FOLIAGE = {0.28f, 0.70f, 0.17f};
-GLOBAL_CONST half3 TINT_NONE    = {1.0f, 1.0f, 1.0f};
+constant half3 TINT_GRASS   = half3(0.48h, 0.65h, 0.36h); 
+constant half3 TINT_FOLIAGE = half3(0.28h, 0.70h, 0.17h);
+constant half3 TINT_NONE    = half3(1.0h, 1.0h, 1.0h);
 
 GPU_FUNC half3 sampleTexture(
     half2 uv, 
@@ -25,10 +25,8 @@ GPU_FUNC half3 sampleTexture(
     TEXTURE_OBJECT texObj, 
     float distSq) 
 {
-#if defined(PLATFORM_METAL)
     constexpr sampler s(coord::normalized, address::repeat, filter::linear, mip_filter::linear); 
-#endif
-    int face = (normal.y > 0.5f) ? 0 : ((normal.y < -0.5f) ? 1 : 2);
+    int face = (normal.y > 0.5h) ? 0 : ((normal.y < -0.5h) ? 1 : 2);
     int texIndex = TEX_STONE; 
     half3 tint = TINT_NONE;
 
@@ -109,30 +107,23 @@ GPU_FUNC half3 sampleTexture(
             break;
 
         default: 
-            return make_half3(1.0f, 0.0f, 1.0f); 
+            return half3(1.0h, 0.0h, 1.0h); 
     }
 
     float lod = 0.5f * log2(max(distSq, 0.0001f)) - 6.0f;    
     
-#if defined(PLATFORM_METAL)
     half4 t = (half4)texObj.sample(s, float2(uv.x, -uv.y), texIndex, level(lod));
-#elif defined(PLATFORM_CUDA)
-    float4 t_f = tex2DLayeredLod<float4>(texObj, uv.x, 1.0f - uv.y, texIndex, lod);
-    half4 t = make_half4(t_f.x, t_f.y, t_f.z, t_f.w);
-#else
-    half4 t = make_half4(0.5f, 0.5f, 0.5f, 1.0f);
-#endif
-    return make_half3(t.x * tint.x, t.y * tint.y, t.z * tint.z);
+    return t.rgb * tint;
 }
 
 
 
 
 GPU_FUNC uint hash3_to_1(int3 p) {
-    uint3 u = make_uint3((uint)p.x, (uint)p.y, (uint)p.z);
-    u = ((u >> 8U) ^ make_uint3(u.y, u.z, u.x)) * 0x45D9F3BU;
-    u = ((u >> 8U) ^ make_uint3(u.y, u.z, u.x)) * 0x45D9F3BU;
-    u = ((u >> 8U) ^ make_uint3(u.y, u.z, u.x)) * 0x45D9F3BU;
+    uint3 u = uint3(p);
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
+    u = ((u >> 8U) ^ u.yzx) * 0x45D9F3BU;
     return u.x ^ u.y ^ u.z;
 }
 // High-quality, fast Pseudo-Random Number Generator (PCG Hash)
@@ -144,13 +135,13 @@ GPU_FUNC uint pcg_hash(uint seed)
     return (word >> 22u) ^ word;
 }
 // Float random [0, 1]
-GPU_FUNC float rand_float(THREAD_PTR(uint) seed) {
-    *seed = pcg_hash(*seed);
-    return (float)(*seed) / (float)0xffffffffu;
+GPU_FUNC float rand_float(thread uint& seed) {
+    seed = pcg_hash(seed);
+    return (float)seed / (float)UINT_MAX;
 }
 
 // Reconstruct World Position from Depth and Camera info
-GPU_FUNC float3 reconstructPos(float depth, float2 uv, const CameraData& cam) {
+GPU_FUNC float3 reconstructPos(float depth, float2 uv, constant const CameraData& cam) {
     float2 ndc = uv * 2.0f - 1.0f;
     float3 viewDir = normalize(cam.forward + ndc.x * cam.right + ndc.y * cam.up);
     return cam.position + viewDir * depth;
@@ -159,9 +150,9 @@ GPU_FUNC float3 reconstructPos(float depth, float2 uv, const CameraData& cam) {
 GPU_FUNC half2 reconstructUV(float3 pos, half3 normal) {
     float3 fpos = floor(pos);
     half2 uv;
-    if (abs(normal.x) > 0.5f)      uv = make_half2(pos.y - fpos.y, pos.z - fpos.z);
-    else if (abs(normal.y) > 0.5f) uv = make_half2(pos.x - fpos.x, pos.z - fpos.z);
-    else                           uv = make_half2(pos.x - fpos.x, pos.y - fpos.y);
+    if (abs(normal.x) > 0.5h)      uv = half2(pos.y - fpos.y, pos.z - fpos.z);
+    else if (abs(normal.y) > 0.5h) uv = half2(pos.x - fpos.x, pos.z - fpos.z);
+    else                           uv = half2(pos.x - fpos.x, pos.y - fpos.y);
     return uv;
 }
 
@@ -311,7 +302,7 @@ GPU_FUNC bool checkBitLocal_Optimized(
 
     float3 deltaDist = abs(rayInvDir);
     
-    float3 originOffset = make_float3((float)mapPos.x, (float)mapPos.y, (float)mapPos.z) - localEntry;
+    float3 originOffset = float3(mapPos) - localEntry;
     
     float3 sideDist;
     sideDist.x = (stepSign.x > 0? (originOffset.x + 1.0f) : -originOffset.x) * deltaDist.x;
@@ -338,9 +329,9 @@ GPU_FUNC bool checkBitLocal_Optimized(
             HI.its += i;
 
             float3 fpos = floor(HI.pos);
-            if (abs(HI.normal.x) > 0.5f)      HI.uv = make_half2(HI.pos.y - fpos.y, HI.pos.z - fpos.z);
-            else if (abs(HI.normal.y) > 0.5f) HI.uv = make_half2(HI.pos.x - fpos.x, HI.pos.z - fpos.z);
-            else                              HI.uv = make_half2(HI.pos.x - fpos.x, HI.pos.y - fpos.y);
+            if (abs(HI.normal.x) > 0.5h)      HI.uv = half2(HI.pos.y - fpos.y, HI.pos.z - fpos.z);
+            else if (abs(HI.normal.y) > 0.5h) HI.uv = half2(HI.pos.x - fpos.x, HI.pos.z - fpos.z);
+            else                              HI.uv = half2(HI.pos.x - fpos.x, HI.pos.y - fpos.y);
             
             return true;
         }
@@ -383,18 +374,18 @@ inline half3 sampleSky(const float3 dir, const float3 sunDir)
     float sunDot = dot(dir, sunDir);
     
     // Sun Disk (Sharp)
-    if (sunDot > 0.999f) {
-        return make_half3(c_sunColor.x * 2.0f, c_sunColor.y * 2.0f, c_sunColor.z * 2.0f); // Super bright sun disk
+    if (sunDot > 0.999h) {
+        return c_sunColor * 2.0h; // Super bright sun disk
     } 
     
     // Gradient: Deep Blue at top, lighter blue at horizon
     float y = clamp(dir.y, 0.0f, 1.0f);
     
     // Richer Blues for vibrant look
-    half3 zenith = make_half3(0.1f, 0.4f, 0.8f);  // Deep blue top
-    half3 horizon = make_half3(0.4f, 0.6f, 0.9f); // Cyan/White horizon
+    half3 zenith = half3(0.1h, 0.4h, 0.8h);  // Deep blue top
+    half3 horizon = half3(0.4h, 0.6h, 0.9h); // Cyan/White horizon
     
-    half3 skyColor = lerp(horizon, zenith, (half)(pow(y, 0.7f)));
+    half3 skyColor = lerp(horizon, zenith, half(pow(y, 0.7f)));
     
     return skyColor;
 }

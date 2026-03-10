@@ -1,6 +1,5 @@
 #pragma once
 #include "cumath.h"
-#include <cstdint>
 
 struct hitInfo
 {

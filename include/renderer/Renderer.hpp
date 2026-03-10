@@ -15,8 +15,5 @@ public:
         unsigned int frameCount
     ) = 0;
     
-    // Returns the final platform-specific output texture (e.g. ID3D12Resource* or id<MTLTexture>)
-    virtual void* GetOutputTexture() = 0;
-    
     // Any other common renderer functions can go here.
 };

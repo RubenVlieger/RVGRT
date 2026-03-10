@@ -2,7 +2,7 @@
 #include <stdexcept>
 #include <iostream>
 #include <aclapi.h> // For security attributes
-#include <cumath.h>
+#include <cumath.cuh>
 
 // (You can reuse your existing WindowsSecurityAttributes class here)
 class WindowsSecurityAttributes {

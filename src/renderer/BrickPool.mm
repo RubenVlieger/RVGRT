@@ -3,10 +3,6 @@
 #import "renderer/MetalDevice.hpp"
 #include <algorithm>
 
-// Under ARC, we store id objects as __bridge_retained void* in construction
-// and release them in the destructor. The getters return the raw void* which
-// callers (also in .mm) cast back to id<MTLBuffer> with (__bridge id<MTLBuffer>).
-
 namespace {
 id<MTLDevice> get_pool_device() {
   return static_cast<MetalDevice *>(State::state.graphicsDevice.get())
@@ -15,24 +11,22 @@ id<MTLDevice> get_pool_device() {
 } // namespace
 
 BrickPool::BrickPool() : _usedCount(0), _searchStart(0) {
+  _device = get_pool_device();
   _capacity = BRICK_POOL_CAPACITY;
 
-  id<MTLDevice> dev = get_pool_device();
-  _deviceHandle = (__bridge_retained void*)dev;
+  id<MTLDevice> dev = (id<MTLDevice>)_device;
 
   // Allocate occupancy buffer: 8 uint64_t per brick
   NSUInteger occSize = (NSUInteger)_capacity * 8 * sizeof(uint64_t);
-  id<MTLBuffer> occBuf = [dev newBufferWithLength:occSize
-                                          options:MTLResourceStorageModePrivate];
-  occBuf.label = @"BrickPool_Occupancy";
-  _occupancyBuffer = (__bridge_retained void*)occBuf;
+  _occupancyBuffer = [dev newBufferWithLength:occSize
+                                      options:MTLResourceStorageModePrivate];
+  ((id<MTLBuffer>)_occupancyBuffer).label = @"BrickPool_Occupancy";
 
   // Allocate data buffer: 512 uint8_t per brick
   NSUInteger dataSize = (NSUInteger)_capacity * 512 * sizeof(uint8_t);
-  id<MTLBuffer> dataBuf = [dev newBufferWithLength:dataSize
-                                           options:MTLResourceStorageModePrivate];
-  dataBuf.label = @"BrickPool_Data";
-  _dataBuffer = (__bridge_retained void*)dataBuf;
+  _dataBuffer = [dev newBufferWithLength:dataSize
+                                 options:MTLResourceStorageModePrivate];
+  ((id<MTLBuffer>)_dataBuffer).label = @"BrickPool_Data";
 
   // Initialize all bricks as free
   _isFree.resize(_capacity, 1);
@@ -44,10 +38,9 @@ BrickPool::BrickPool() : _usedCount(0), _searchStart(0) {
 }
 
 BrickPool::~BrickPool() {
-  // Release the retained Objective-C objects
-  if (_occupancyBuffer) { (void)(__bridge_transfer id)_occupancyBuffer; _occupancyBuffer = nullptr; }
-  if (_dataBuffer) { (void)(__bridge_transfer id)_dataBuffer; _dataBuffer = nullptr; }
-  if (_deviceHandle) { (void)(__bridge_transfer id)_deviceHandle; _deviceHandle = nullptr; }
+  _occupancyBuffer = nil;
+  _dataBuffer = nil;
+  _device = nil;
 }
 
 uint32_t BrickPool::Allocate(uint32_t count) {
@@ -110,5 +103,5 @@ void BrickPool::Free(uint32_t base, uint32_t count) {
   _usedCount -= count;
 }
 
-void* BrickPool::GetOccupancyBuffer() { return _occupancyBuffer; }
-void* BrickPool::GetDataBuffer() { return _dataBuffer; }
+id BrickPool::GetOccupancyBuffer() { return _occupancyBuffer; }
+id BrickPool::GetDataBuffer() { return _dataBuffer; }

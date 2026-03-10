@@ -3,7 +3,6 @@
 
 #ifndef __METAL_VERSION__
 #include "cumath.h"
-#include <cuda_runtime.h>
 #include <utility> // for std::exchange
 
 
@@ -20,11 +19,7 @@ public:
     Texturepack& operator=(Texturepack&& other) noexcept;
 
     // Accessors
-    #if !defined(__METAL_VERSION__)
-    cudaTextureObject_t texObject() const { return texObj_; }
-    #else
     TEXTURE_OBJECT texObject() const { return texObj_; }
-    #endif
     int width() const { return width_; }
     int height() const { return height_; }
 
@@ -32,9 +27,9 @@ public:
     #if defined(__METAL_VERSION__)
     // For Metal, the TEXTURE_OBJECT is a texture2d, which is a value type.
     GPU_FUNC static float3 sampleFloat3(TEXTURE_OBJECT tex, sampler s, float u, float v);
-    #else
-    // For CUDA
-    __device__ static float3 sampleFloat3(cudaTextureObject_t tex, float u, float v);
+    #elif defined(__CUDA_ARCH__)
+    // For CUDA, TEXTURE_OBJECT is a cudaTextureObject_t (a handle).
+    __device__ static float3 sampleFloat3(TEXTURE_OBJECT tex, float u, float v);
     #endif
 
     // Swap function for efficient swapping
@@ -44,22 +39,13 @@ public:
         std::swap(width_, other.width_);
         std::swap(height_, other.height_);
     }
-    #if !defined(__METAL_VERSION__)
-    cudaTextureObject_t getTextureObject() const { return texObj_; }
-    #else
     TEXTURE_OBJECT getTextureObject() const { return texObj_; }
-    #endif
 
 private:
     void uploadRGBAData(const unsigned char* rgba8, int w, int h);
     void releaseResources(); 
-    #if defined(__METAL_VERSION__)
     TEXTURE_OBJECT texObj_ = nullptr;
     ARRAY_OBJECT cuArray_ = nullptr;
-    #else
-    cudaTextureObject_t texObj_ = 0;
-    cudaArray_t cuArray_ = nullptr;
-    #endif
     int width_ = 0, height_ = 0;
 };
 #endif

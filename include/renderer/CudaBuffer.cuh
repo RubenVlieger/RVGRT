@@ -16,7 +16,12 @@ public:
     void Readback(void* cpuBuffer, uint64_t sizeInBytes) override;
     void* GetNativeHandle() const override;
 
+    // --- CUDA-Specific Functionality ---
+    // This is not part of the interface, as it's unique to the CUDA path.
+    // It launches the terrain generation kernel.
+    void FillWithWorldData();
+
 private:
-    void* m_deviceData = nullptr;
+    uint32_t* m_deviceData = nullptr;
     uint64_t m_sizeInBytes = 0;
 };

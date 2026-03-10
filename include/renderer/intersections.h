@@ -5,41 +5,21 @@
 #include "renderer/shader_settings.h"
 #include "renderer/hitInfo.h"
 #include "tables.h"
-#if defined(PLATFORM_METAL)
 #include <metal_stdlib>
+
 using namespace metal;
-#else
-using uchar = unsigned char;
-using ulong = unsigned long long;
-#define popcount(x) __popcll(x)
-#define copysign(x, y) copysignf((x), (y))
-#define sign(x) ((x) > 0.0f ? 1.0f : ((x) < 0.0f ? -1.0f : 0.0f))
-#define thread
-#define device
-#define constant
-#endif
 
-GPU_FUNC GPU_INLINE uint32_t ReadIndirection(TEX3D_U32_R indirection, uint3 pos) {
-#if defined(PLATFORM_METAL)
-    return indirection.read(pos).r;
-#else
-    uint w = (IND_X / 4);
-    uint h = (IND_Y / 4);
-    return indirection[pos.x + pos.y * w + pos.z * w * h];
-#endif
-}
-
-GPU_FUNC GPU_INLINE uint GetLinearIndex4(uint3 p) {
+inline uint GetLinearIndex4(uint3 p) {
   return (p.x & 3) + ((p.z & 3) << 2) + ((p.y & 3) << 4);
 }
 
 // Cheaper approximation of 64-bit bit tests.
-GPU_FUNC GPU_INLINE bool BitTestHalf64(ulong value, uint shift, uint mask) {
+inline bool BitTestHalf64(ulong value, uint shift, uint mask) {
   uint low = shift < 32 ? uint(value) : uint(value >> 32);
   return (low >> (shift & 31) & mask) != 0;
 }
 
-GPU_FUNC GPU_INLINE int GetIsotropicLOD(ulong mask, uint idx) {
+inline int GetIsotropicLOD(ulong mask, uint idx) {
   if (mask == 0) {
     return 4;
   }
@@ -51,10 +31,10 @@ GPU_FUNC GPU_INLINE int GetIsotropicLOD(ulong mask, uint idx) {
 }
 
 // 64-bit Population Count
-GPU_FUNC GPU_INLINE int popcnt64(ulong mask) { return popcount(mask); }
+inline int popcnt64(ulong mask) { return popcount(mask); }
 
 // Prefix popcount: count bits set below the given index
-GPU_FUNC GPU_INLINE uint prefix_popcnt64(ulong mask, uint width) {
+inline uint prefix_popcnt64(ulong mask, uint width) {
   uint lo = uint(mask);
   uint count = 0;
 
@@ -72,7 +52,7 @@ GPU_FUNC GPU_INLINE uint prefix_popcnt64(ulong mask, uint width) {
 // =================================================================================
 
 // Robust Ray-AABB intersection. Returns the entry point clamped to the box.
-GPU_FUNC GPU_INLINE float3 ClipRayToAABB(float3 origin, float3 dir, float3 invDir,
+inline float3 ClipRayToAABB(float3 origin, float3 dir, float3 invDir,
                             float3 boxMin, float3 boxMax) {
   float3 t0 = (boxMin - origin) * invDir;
   float3 t1 = (boxMax - origin) * invDir;
@@ -89,7 +69,7 @@ GPU_FUNC GPU_INLINE float3 ClipRayToAABB(float3 origin, float3 dir, float3 invDi
 }
 
 // Aligns ipos to the cell boundary in the direction the ray is travelling.
-GPU_FUNC GPU_INLINE void AlignToCellBoundaries(thread int3 &ipos, float3 dir, int lod) {
+inline void AlignToCellBoundaries(thread int3 &ipos, float3 dir, int lod) {
   int cellMask = lod - 1;
   ipos.x = (dir.x < 0) ? (ipos.x & ~cellMask) : (ipos.x | cellMask);
   ipos.y = (dir.y < 0) ? (ipos.y & ~cellMask) : (ipos.y | cellMask);
@@ -104,8 +84,8 @@ GPU_FUNC GPU_INLINE void AlignToCellBoundaries(thread int3 &ipos, float3 dir, in
  *              Voxel at world position `v` maps to indirection cell
  *              `(v/32 - worldOrigin) mod indirectionSize`.
  */
-GPU_FUNC GPU_INLINE bool GetStepPos(thread int3 &ipos, float3 dir,
-                       TEX3D_U32_R indirection,
+inline bool GetStepPos(thread int3 &ipos, float3 dir,
+                       texture3d<uint, access::read> indirection,
                        device SectorInfo *sectors, device ulong *occupancy,
                        device uchar *data, device ulong *sectorMasks,
                        int3 worldOrigin, thread uint8_t &outMatID) {
@@ -122,9 +102,9 @@ GPU_FUNC GPU_INLINE bool GetStepPos(thread int3 &ipos, float3 dir,
   int3 worldSector = int3(ipos.x >> 5, ipos.y >> 5, ipos.z >> 5);
 
   // Toroidal wrapping: convert world sector to indirection cell
-  uint indW = IND_X / 4;
-  uint indH = IND_Y / 4;
-  uint indD = IND_Z / 4;
+  uint indW = indirection.get_width();
+  uint indH = indirection.get_height();
+  uint indD = indirection.get_depth();
 
   // Wrap to indirection texture coordinates
   int3 relSector = worldSector - worldOrigin;
@@ -142,7 +122,7 @@ GPU_FUNC GPU_INLINE bool GetStepPos(thread int3 &ipos, float3 dir,
   uint wy = (worldSector.y % int(indH) + int(indH)) % int(indH);
   uint wz = (worldSector.z % int(indD) + int(indD)) % int(indD);
   uint3 sectorPos = uint3(wx, wy, wz);
-  uint sectorIndex = ReadIndirection(indirection, sectorPos);
+  uint sectorIndex = indirection.read(sectorPos).r;
 
   // Empty sector
   if (sectorIndex == SECTOR_HANDLE_EMPTY) {
@@ -233,8 +213,8 @@ GPU_FUNC GPU_INLINE bool GetStepPos(thread int3 &ipos, float3 dir,
 // MAIN TRACE FUNCTIONS (with worldOrigin for streaming)
 // =================================================================================
 
-GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
-                     TEX3D_U32_R indirection,
+inline hitInfo trace(float3 rayPos, float3 rayDir,
+                     texture3d<uint, access::read> indirection,
                      device SectorInfo *sectors, device ulong *occupancy,
                      device uchar *data, device ulong *sectorMasks,
                      int3 worldOrigin,
@@ -253,9 +233,9 @@ GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
 
   // World bounds: defined by the loaded region around the world origin
   float3 worldMin = float3(worldOrigin) * 32.0f;
-  float3 worldMax = float3(worldOrigin.x + int(IND_X / 4),
-                           worldOrigin.y + int(IND_Y / 4),
-                           worldOrigin.z + int(IND_Z / 4)) *
+  float3 worldMax = float3(worldOrigin.x + int(indirection.get_width()),
+                           worldOrigin.y + int(indirection.get_height()),
+                           worldOrigin.z + int(indirection.get_depth())) *
                     32.0f;
 
   // Clip ray to world AABB
@@ -373,9 +353,9 @@ GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
       // Compare voxel intersection distance vs character intersection
       if (closestCharT < tEntry) {
           hit.pos = rayPos + rayDir * closestCharT;
-          hit.normal = make_half3(closestCharNormal);
+          hit.normal = half3(closestCharNormal);
           hit.matID = closestCharMatID;
-          hit.uv = make_half2(0.0f);
+          hit.uv = half2(0.0h);
           return hit;
       }
 
@@ -383,23 +363,23 @@ GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
 
       float3 center = cellMin + 0.5f;
       float3 d = hit.pos - center;
-      float3 ad = abs3(d);
+      float3 ad = abs(d);
 
       if (ad.x > ad.y && ad.x > ad.z)
-        hit.normal = make_half3((d.x > 0.0f ? 1.0f : -1.0f), 0.0f, 0.0f);
+        hit.normal = half3(sign(d.x), 0, 0);
       else if (ad.y > ad.z)
-        hit.normal = make_half3(0.0f, (d.y > 0.0f ? 1.0f : -1.0f), 0.0f);
+        hit.normal = half3(0, sign(d.y), 0);
       else
-        hit.normal = make_half3(0.0f, 0.0f, (d.z > 0.0f ? 1.0f : -1.0f));
+        hit.normal = half3(0, 0, sign(d.z));
 
-      float3 fpos = floor3(hit.pos);
+      float3 fpos = floor(hit.pos);
       float3 localPos = hit.pos - fpos;
-      if (abs((float)hit.normal.x) > 0.5f)
-        hit.uv = make_half2(localPos.y, localPos.z);
-      else if (abs((float)hit.normal.y) > 0.5f)
-        hit.uv = make_half2(localPos.x, localPos.z);
+      if (abs(hit.normal.x) > 0.5h)
+        hit.uv = half2(localPos.y, localPos.z);
+      else if (abs(hit.normal.y) > 0.5h)
+        hit.uv = half2(localPos.x, localPos.z);
       else
-        hit.uv = make_half2(localPos.x, localPos.y);
+        hit.uv = half2(localPos.x, localPos.y);
 
       hit.matID = matID;
       return hit;
@@ -442,9 +422,9 @@ GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
   if (closestCharT < 1e20f) {
       hit.hit = true;
       hit.pos = rayPos + rayDir * closestCharT;
-      hit.normal = make_half3(closestCharNormal);
+      hit.normal = half3(closestCharNormal);
       hit.matID = closestCharMatID;
-      hit.uv = make_half2(0.0f);
+      hit.uv = half2(0.0h);
       return hit;
   }
 
@@ -452,8 +432,8 @@ GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
 }
 
 // Optimized Shadow Trace (Boolean) with worldOrigin
-GPU_FUNC GPU_INLINE bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
-                        int maxIters, TEX3D_U32_R indirection,
+inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
+                        int maxIters, texture3d<uint, access::read> indirection,
                         device SectorInfo *sectors, device ulong *occupancy,
                         device uchar *data, device ulong *sectorMasks,
                         int3 worldOrigin,
@@ -462,12 +442,12 @@ GPU_FUNC GPU_INLINE bool traceShadow(float3 rayPos, float3 rayDir, float maxDist
   safeDir.x = (abs(safeDir.x) < 1e-8f) ? copysign(1e-8f, safeDir.x) : safeDir.x;
   safeDir.y = (abs(safeDir.y) < 1e-8f) ? copysign(1e-8f, safeDir.y) : safeDir.y;
   safeDir.z = (abs(safeDir.z) < 1e-8f) ? copysign(1e-8f, safeDir.z) : safeDir.z;
-  float3 invDir = make_float3(1.0f / safeDir.x, 1.0f / safeDir.y, 1.0f / safeDir.z);
+  float3 invDir = 1.0f / safeDir;
 
-  float3 worldMin = make_float3(worldOrigin) * 32.0f;
-  float3 worldMax = make_float3(worldOrigin.x + int(IND_X / 4),
-                           worldOrigin.y + int(IND_Y / 4),
-                           worldOrigin.z + int(IND_Z / 4)) *
+  float3 worldMin = float3(worldOrigin) * 32.0f;
+  float3 worldMax = float3(worldOrigin.x + int(indirection.get_width()),
+                           worldOrigin.y + int(indirection.get_height()),
+                           worldOrigin.z + int(indirection.get_depth())) *
                     32.0f;
 
   float3 startPos = ClipRayToAABB(rayPos, safeDir, invDir, worldMin, worldMax);
@@ -477,20 +457,18 @@ GPU_FUNC GPU_INLINE bool traceShadow(float3 rayPos, float3 rayDir, float maxDist
   if (charData != nullptr) {
       #if CHARACTER_MODELS
       for (int i = 0; i < charData->numCharacters; ++i) {
-          mat4 invBBox = charData->invBoundingBoxes[i];
-          float4 localBDir4 = invBBox * make_float4(rayDir.x, rayDir.y, rayDir.z, 0.0f);
-          float3 localBDir = make_float3(localBDir4.x, localBDir4.y, localBDir4.z);
-          float4 localBPos4 = invBBox * make_float4(rayPos.x, rayPos.y, rayPos.z, 1.0f);
-          float3 localBPos = make_float3(localBPos4.x, localBPos4.y, localBPos4.z);
+          float4x4 invBBox = charData->invBoundingBoxes[i];
+          float3 localBDir = (invBBox * float4(rayDir, 0.0f)).xyz;
+          float3 localBPos = (invBBox * float4(rayPos, 1.0f)).xyz;
           
           float3 safeLocalBDir = localBDir;
           safeLocalBDir.x = (abs(safeLocalBDir.x) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.x) : safeLocalBDir.x;
           safeLocalBDir.y = (abs(safeLocalBDir.y) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.y) : safeLocalBDir.y;
           safeLocalBDir.z = (abs(safeLocalBDir.z) < 1e-8f) ? copysign(1e-8f, safeLocalBDir.z) : safeLocalBDir.z;
-          float3 invLocalBDir = make_float3(1.0f / safeLocalBDir.x, 1.0f / safeLocalBDir.y, 1.0f / safeLocalBDir.z);
+          float3 invLocalBDir = 1.0f / safeLocalBDir;
           
-          float3 bt0 = (make_float3(-0.5f) - localBPos) * invLocalBDir;
-          float3 bt1 = (make_float3(0.5f) - localBPos) * invLocalBDir;
+          float3 bt0 = (-0.5f - localBPos) * invLocalBDir;
+          float3 bt1 = ( 0.5f - localBPos) * invLocalBDir;
           float3 btmin = min(bt0, bt1);
           float3 btmax = max(bt0, bt1);
           float bNear = max(max(btmin.x, btmin.y), btmin.z);
@@ -500,20 +478,18 @@ GPU_FUNC GPU_INLINE bool traceShadow(float3 rayPos, float3 rayDir, float maxDist
           if (bNear > bFar || bFar < 0.0f || (bStartDist * bStartDist) > maxDistSq) continue;
           
           for (int p = 0; p < 6; ++p) {
-              mat4 invPart = charData->invBodyParts[i * 6 + p];
-              float4 localDir4 = invPart * make_float4(rayDir.x, rayDir.y, rayDir.z, 0.0f);
-              float3 localDir = make_float3(localDir4.x, localDir4.y, localDir4.z);
-              float4 localPos4 = invPart * make_float4(rayPos.x, rayPos.y, rayPos.z, 1.0f);
-              float3 localPos = make_float3(localPos4.x, localPos4.y, localPos4.z);
+              float4x4 invPart = charData->invBodyParts[i * 6 + p];
+              float3 localDir = (invPart * float4(rayDir, 0.0f)).xyz;
+              float3 localPos = (invPart * float4(rayPos, 1.0f)).xyz;
               
               float3 safeLocalDir = localDir;
               safeLocalDir.x = (abs(safeLocalDir.x) < 1e-8f) ? copysign(1e-8f, safeLocalDir.x) : safeLocalDir.x;
               safeLocalDir.y = (abs(safeLocalDir.y) < 1e-8f) ? copysign(1e-8f, safeLocalDir.y) : safeLocalDir.y;
               safeLocalDir.z = (abs(safeLocalDir.z) < 1e-8f) ? copysign(1e-8f, safeLocalDir.z) : safeLocalDir.z;
-              float3 invLocalDir = make_float3(1.0f / safeLocalDir.x, 1.0f / safeLocalDir.y, 1.0f / safeLocalDir.z);
+              float3 invLocalDir = 1.0f / safeLocalDir;
               
-              float3 t0 = (make_float3(-0.5f) - localPos) * invLocalDir;
-              float3 t1 = (make_float3(0.5f) - localPos) * invLocalDir;
+              float3 t0 = (-0.5f - localPos) * invLocalDir;
+              float3 t1 = ( 0.5f - localPos) * invLocalDir;
               float3 tmin = min(t0, t1);
               float3 tmax = max(t0, t1);
               float tNear = max(max(tmin.x, tmin.y), tmin.z);
@@ -590,16 +566,16 @@ GPU_FUNC GPU_INLINE bool traceShadow(float3 rayPos, float3 rayDir, float maxDist
 }
 
 // Legacy overloads (without worldOrigin — default to origin 0,0,0)
-GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
-                     TEX3D_U32_R indirection,
+inline hitInfo trace(float3 rayPos, float3 rayDir,
+                     texture3d<uint, access::read> indirection,
                      device SectorInfo *sectors, device ulong *occupancy,
                      device uchar *data, device ulong *sectorMasks) {
   return trace(rayPos, rayDir, indirection, sectors, occupancy, data,
                sectorMasks, int3(0), nullptr);
 }
 
-GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
-                     TEX3D_U32_R indirection,
+inline hitInfo trace(float3 rayPos, float3 rayDir,
+                     texture3d<uint, access::read> indirection,
                      device SectorInfo *sectors, device ulong *occupancy,
                      device uchar *data) {
   return trace(rayPos, rayDir, indirection, sectors, occupancy, data, nullptr,
@@ -607,7 +583,7 @@ GPU_FUNC GPU_INLINE hitInfo trace(float3 rayPos, float3 rayDir,
 }
 
 inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
-                        int maxIters, TEX3D_U32_R indirection,
+                        int maxIters, texture3d<uint, access::read> indirection,
                         device SectorInfo *sectors, device ulong *occupancy,
                         device uchar *data, device ulong *sectorMasks) {
   return traceShadow(rayPos, rayDir, maxDist, maxIters, indirection, sectors,
@@ -615,7 +591,7 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
 }
 
 inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
-                        int maxIters, TEX3D_U32_R indirection,
+                        int maxIters, texture3d<uint, access::read> indirection,
                         device SectorInfo *sectors, device ulong *occupancy,
                         device uchar *data) {
   return traceShadow(rayPos, rayDir, maxDist, maxIters, indirection, sectors,

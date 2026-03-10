@@ -1,12 +1,8 @@
 #pragma once
-#if defined(__METAL_VERSION__)
 #include <metal_stdlib>
 using namespace metal;
-#else
-#include <cstdint>
-typedef uint64_t ulong;
-#define constant const
-#endif
+
+// Precomputed Ray-Cell Interaction Mask LUT
 // Size: 8 octants * 64 entry points * 8 bytes = 4096 bytes
 static constant ulong RayMaskOptimizationLUT[512] = {
     // Octant #0 (-1 -1 -1)
