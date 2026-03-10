@@ -13,6 +13,12 @@ typedef void *id;
 #include <simd/simd.h>
 #include <vector>
 
+// Forward declaration of implementation
+namespace MaterialMapImpl {
+    struct SectorState;
+    struct AsyncResult;
+}
+
 /**
  * MaterialMap — Manages the voxel world with streaming and LOD.
  *

@@ -1,26 +1,12 @@
 #pragma once
 
-#define BRICK_SIZE 8
-#define BRICK_SIZE_SHIFT 3
-#define BRICK_MASK 7
+// Include shared system configuration first
+#include "renderer/SystemConfig.h"
 
 // Indirection Grid Flags (32-bit uint)
 // 0 = Empty (Implicit)
 #define FLAG_SOLID_GENERIC 1 // Fully solid (optimization, e.g. bedrock)
 #define IND_OFFSET 2         // Indices start here
-
-// We map the virtual world (e.g., 2048^3) to the Indirection Grid
-// Indirection Resolution = World / 8
-#define IND_X (SIZEX >> BRICK_SIZE_SHIFT)
-#define IND_Y (SIZEY >> BRICK_SIZE_SHIFT)
-#define IND_Z (SIZEZ >> BRICK_SIZE_SHIFT)
-#define IND_SIZE (IND_X * IND_Y * IND_Z)
-
-// Packing: 1 pixel (R32Uint) holds a 4x4x2 voxel block.
-// To store an 8x8x8 brick, we need 2x2x4 pixels in the Geometry Atlas.
-#define GEO_PACK_X 4
-#define GEO_PACK_Y 4
-#define GEO_PACK_Z 2
 
 #if defined(PLATFORM_METAL)
 #define GLOBAL_CONST constant
@@ -651,25 +637,29 @@ GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {
 #define SHIX 12
 #define SHIY 9
 #define SHIZ 12
-#define MODX ((1u << SHIX) - 1u)
-#define MODY ((1u << SHIY) - 1u)
-#define MODZ ((1u << SHIZ) - 1u)
-#define SIZEX (1u << SHIX)
-#define SIZEY (1u << SHIY)
-#define SIZEZ (1u << SHIZ)
-#define BYTESIZE (SIZEX * SIZEY * SIZEZ / 8u)
+// World dimension aliases from SystemConfig.h
+#define SHIX WORLD_SHIFT_X
+#define SHIY WORLD_SHIFT_Y
+#define SHIZ WORLD_SHIFT_Z
+#define MODX WORLD_MASK_X
+#define MODY WORLD_MASK_Y
+#define MODZ WORLD_MASK_Z
+#define SIZEX WORLD_SIZE_X
+#define SIZEY WORLD_SIZE_Y
+#define SIZEZ WORLD_SIZE_Z
+#define BYTESIZE WORLD_BYTE_SIZE
 #else
-// For C++/CUDA, constexpr is typesafe and preferred
-constexpr uint64_t SHIX = 12;
-constexpr uint64_t SHIY = 9;
-constexpr uint64_t SHIZ = 12;
-constexpr uint64_t MODX = (1ULL << SHIX) - 1;
-constexpr uint64_t MODY = (1ULL << SHIY) - 1;
-constexpr uint64_t MODZ = (1ULL << SHIZ) - 1;
-constexpr uint64_t SIZEX = 1ULL << SHIX;
-constexpr uint64_t SIZEY = 1ULL << SHIY;
-constexpr uint64_t SIZEZ = 1ULL << SHIZ;
-constexpr uint64_t BYTESIZE = SIZEX * SIZEY * SIZEZ / 8;
+// For C++/CUDA, constexpr aliases from SystemConfig.h
+constexpr uint64_t SHIX = WORLD_SHIFT_X;
+constexpr uint64_t SHIY = WORLD_SHIFT_Y;
+constexpr uint64_t SHIZ = WORLD_SHIFT_Z;
+constexpr uint64_t MODX = WORLD_MASK_X;
+constexpr uint64_t MODY = WORLD_MASK_Y;
+constexpr uint64_t MODZ = WORLD_MASK_Z;
+constexpr uint64_t SIZEX = WORLD_SIZE_X;
+constexpr uint64_t SIZEY = WORLD_SIZE_Y;
+constexpr uint64_t SIZEZ = WORLD_SIZE_Z;
+constexpr uint64_t BYTESIZE = WORLD_BYTE_SIZE;
 #endif
 
 GPU_FUNC GPU_INLINE uint64_t toIndex(int3 p) {
@@ -701,52 +691,9 @@ GPU_FUNC GPU_INLINE uint64_t toIndex(uint64_t x, uint64_t y, uint64_t z) {
 #endif
 
 // =========================================================
-// 1. MATERIAL IDs (Stored in your Brick Pool)
-// based on Beta 1.7.3 / Release 1.0 IDs
-// =========================================================
-#define MAT_AIR 0
-#define MAT_STONE 1
-#define MAT_GRASS 2
-#define MAT_DIRT 3
-#define MAT_COBBLE 4
-#define MAT_PLANKS 5
-#define MAT_BEDROCK 7
-#define MAT_SAND 12
-#define MAT_GRAVEL 13
-#define MAT_GOLD_ORE 14
-#define MAT_IRON_ORE 15
-#define MAT_COAL_ORE 16
-#define MAT_LOG 17
-#define MAT_LEAVES 18
-#define MAT_GLASS 20
-#define MAT_SANDSTONE 24
-#define MAT_WOOL 35
-#define MAT_GOLD_BLK 41
-#define MAT_IRON_BLK 42
-#define MAT_BRICK 45
-#define MAT_TNT 46
-#define MAT_MOSSY 48
-#define MAT_OBSIDIAN 49
-#define MAT_DIAM_ORE 56
-#define MAT_DIAM_BLK 57
-#define MAT_SNOW 66
-#define MAT_ICE 79
-#define MAT_CACTUS 81
-#define MAT_CLAY 82
-#define MAT_PUMPKIN 86
-#define MAT_NETHERRACK 87
-#define MAT_SOULSAND 88
-#define MAT_GLOWSTONE 89
-
-// =========================================================
-// 2. TEXTURE ATLAS INDICES
+// TEXTURE ATLAS INDICES (Additional texture-specific indices)
 // =========================================================
 // row 0
-#define TEX_GRASS_TOP 40
-#define TEX_STONE 1
-#define TEX_DIRT 2
-#define TEX_GRASS_SIDE 3
-#define TEX_PLANKS 4
 #define TEX_SLAB_SIDE 5
 #define TEX_SLAB_TOP 6
 #define TEX_BRICK 7

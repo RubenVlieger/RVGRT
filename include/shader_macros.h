@@ -192,3 +192,181 @@
     // CUDA uses explicit <<<grid, block>>>
     #define WORKGROUP_SIZE_2D(x, y) /* Passed at kernel launch */
 #endif
+
+// ============================================================================
+// BUFFER OPERATIONS (NEW)
+// Read/write operations for buffer arrays
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define BUFFER_READ(buf, idx) buf[idx]
+    #define BUFFER_WRITE(buf, idx, val) buf[idx] = val
+    #define BUFFER_ATOMICS_SUPPORTED 1
+#elif defined(PLATFORM_CUDA)
+    #define BUFFER_READ(buf, idx) buf[idx]
+    #define BUFFER_WRITE(buf, idx, val) buf[idx] = val
+    #define BUFFER_ATOMICS_SUPPORTED 1
+#endif
+
+// ============================================================================
+// 3D TEXTURE OPERATIONS (Expanded)
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define TEX_READ_3D_F32(tex, coord) tex.read(coord)
+    #define TEX_WRITE_3D(tex, val, coord) tex.write(val, coord)
+    #define TEX_READ_3D_UINT(tex, coord) tex.read(coord).r
+#elif defined(PLATFORM_CUDA)
+    #define TEX_READ_3D_F32(tex, coord) tex3D<float4>(tex, (coord).x, (coord).y, (coord).z)
+    #define TEX_WRITE_3D(surf, val, coord) surf3Dwrite(val, surf, (coord).x * sizeof(float4), (coord).y, (coord).z)
+    #define TEX_READ_3D_UINT(tex, coord) tex3D<uint>(tex, (coord).x, (coord).y, (coord).z)
+#endif
+
+// ============================================================================
+// MATH FUNCTIONS (NEW)
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define MATH_POW(x, y) pow(x, y)
+    #define MATH_SQRT(x) sqrt(x)
+    #define MATH_RSQR(x) rsqrt(x)
+    #define MATH_SIN(x) sin(x)
+    #define MATH_COS(x) cos(x)
+    #define MATH_TAN(x) tan(x)
+    #define MATH_ASIN(x) asin(x)
+    #define MATH_ACOS(x) acos(x)
+    #define MATH_ATAN(x) atan(x)
+    #define MATH_ATAN2(y, x) atan2(y, x)
+    #define MATH_EXP(x) exp(x)
+    #define MATH_LOG(x) log(x)
+    #define MATH_LOG2(x) log2(x)
+    #define MATH_FMA(a, b, c) fma(a, b, c)
+    #define MATH_MIN(x, y) min(x, y)
+    #define MATH_MAX(x, y) max(x, y)
+    #define MATH_CLAMP(x, lo, hi) clamp(x, lo, hi)
+    #define MATH_SATURATE(x) saturate(x)
+    #define MATH_FRACT(x) fract(x)
+    #define MATH_FLOOR(x) floor(x)
+    #define MATH_CEIL(x) ceil(x)
+    #define MATH_ABS(x) abs(x)
+    #define MATH_DOT(a, b) dot(a, b)
+    #define MATH_CROSS(a, b) cross(a, b)
+    #define MATH_LENGTH(v) length(v)
+    #define MATH_NORMALIZE(v) normalize(v)
+    #define MATH_REFLECT(i, n) reflect(i, n)
+    #define MATH_REFRACT(i, n, eta) refract(i, n, eta)
+#elif defined(PLATFORM_CUDA)
+    #define MATH_POW(x, y) powf(x, y)
+    #define MATH_SQRT(x) sqrtf(x)
+    #define MATH_RSQR(x) rsqrtf(x)
+    #define MATH_SIN(x) sinf(x)
+    #define MATH_COS(x) cosf(x)
+    #define MATH_TAN(x) tanf(x)
+    #define MATH_ASIN(x) asinf(x)
+    #define MATH_ACOS(x) acosf(x)
+    #define MATH_ATAN(x) atanf(x)
+    #define MATH_ATAN2(y, x) atan2f(y, x)
+    #define MATH_EXP(x) expf(x)
+    #define MATH_LOG(x) logf(x)
+    #define MATH_LOG2(x) log2f(x)
+    #define MATH_FMA(a, b, c) fmaf(a, b, c)
+    #define MATH_MIN(x, y) fminf(x, y)
+    #define MATH_MAX(x, y) fmaxf(x, y)
+    #define MATH_CLAMP(x, lo, hi) fminf(fmaxf(x, lo), hi)
+    #define MATH_SATURATE(x) MATH_CLAMP(x, 0.0f, 1.0f)
+    #define MATH_FRACT(x) (x - floorf(x))
+    #define MATH_FLOOR(x) floorf(x)
+    #define MATH_CEIL(x) ceilf(x)
+    #define MATH_ABS(x) fabsf(x)
+    #define MATH_DOT(a, b) dot(a, b)
+    #define MATH_CROSS(a, b) cross(a, b)
+    #define MATH_LENGTH(v) length(v)
+    #define MATH_NORMALIZE(v) normalize(v)
+    #define MATH_REFLECT(i, n) reflect(i, n)
+    #define MATH_REFRACT(i, n, eta) refract(i, n, eta)
+#endif
+
+// ============================================================================
+// MEMORY QUALIFIERS (NEW)
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define MEM_DEVICE device
+    #define MEM_CONSTANT constant
+    #define MEM_THREAD thread
+    #define MEM_THREADGROUP threadgroup
+#elif defined(PLATFORM_CUDA)
+    #define MEM_DEVICE __device__
+    #define MEM_CONSTANT __constant__
+    #define MEM_THREAD
+    #define MEM_THREADGROUP __shared__
+#endif
+
+// ============================================================================
+// OPTIMIZATION HINTS (NEW)
+// Loop unrolling and branch prediction hints
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define UNROLL_LOOP [[unroll]]
+    #define NO_UNROLL_LOOP [[dont_unroll]]
+#elif defined(PLATFORM_CUDA)
+    #define UNROLL_LOOP #pragma unroll
+    #define NO_UNROLL_LOOP
+#endif
+
+// ============================================================================
+// BRANCH PREDICTION (NEW)
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define LIKELY(x) (x)
+    #define UNLIKELY(x) (x)
+#elif defined(PLATFORM_CUDA)
+    #define LIKELY(x) __builtin_expect((x), 1)
+    #define UNLIKELY(x) __builtin_expect((x), 0)
+#endif
+
+// ============================================================================
+// MATRIX OPERATIONS (NEW)
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define MAT4_MUL(m, v) ((m) * (v))
+    #define MAT4_IDENTITY() float4x4(1.0f)
+#elif defined(PLATFORM_CUDA)
+    #define MAT4_MUL(m, v) mul((m), (v))
+    #define MAT4_IDENTITY() mat4_identity()
+#endif
+
+// ============================================================================
+// FLOAT VECTOR CONSTRUCTORS (NEW)
+// Unified constructors for float vectors
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define FLOAT2(x, y) float2(x, y)
+    #define FLOAT3(x, y, z) float3(x, y, z)
+    #define FLOAT4(x, y, z, w) float4(x, y, z, w)
+    #define INT2(x, y) int2(x, y)
+    #define INT3(x, y, z) int3(x, y, z)
+#elif defined(PLATFORM_CUDA)
+    #define FLOAT2(x, y) make_float2(x, y)
+    #define FLOAT3(x, y, z) make_float3(x, y, z)
+    #define FLOAT4(x, y, z, w) make_float4(x, y, z, w)
+    #define INT2(x, y) make_int2(x, y)
+    #define INT3(x, y, z) make_int3(x, y, z)
+#endif
+
+// ============================================================================
+// CONDITIONAL COMPILATION HELPERS (NEW)
+// ============================================================================
+
+#define IF_METAL(...) IF_DEFINED(PLATFORM_METAL, __VA_ARGS__)
+#define IF_CUDA(...) IF_DEFINED(PLATFORM_CUDA, __VA_ARGS__)
+
+#if defined(PLATFORM_METAL)
+    #define IF_DEFINED(platform, code) code
+#else
+    #define IF_DEFINED(platform, code)
+#endif
