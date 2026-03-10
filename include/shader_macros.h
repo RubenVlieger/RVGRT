@@ -5,15 +5,32 @@
 // 
 // These macros abstract the differences between Metal and CUDA syntax.
 // They are processed by the C preprocessor before compilation.
+//
+// IMPORTANT: This header MUST be included FIRST in all .shader files.
+// Example usage:
+//   #include "shader_macros.h"
+//   #if defined(PLATFORM_METAL)
+//   #include <metal_stdlib>
+//   using namespace metal;
+//   #endif
+//   #include "cumath.h"
 // ============================================================================
 
-#if defined(__METAL_VERSION__)
+// Force platform detection if not already set
+#if defined(__METAL_VERSION__) && !defined(PLATFORM_METAL)
     #define PLATFORM_METAL 1
-    #include <metal_stdlib>
-    using namespace metal;
-#elif defined(__CUDA_ARCH__)
+#elif defined(__CUDA_ARCH__) && !defined(PLATFORM_CUDA)
     #define PLATFORM_CUDA 1
 #endif
+
+// Metal-specific block (only compiled by Metal compiler)
+#if defined(PLATFORM_METAL) && defined(__METAL_VERSION__)
+    #include <metal_stdlib>
+    using namespace metal;
+#endif
+
+// Note: For CUDA, we rely on the CUDA compiler defining __CUDA_ARCH__
+// and the CMake preprocessing step setting PLATFORM_CUDA
 
 // ============================================================================
 // KERNEL DECLARATION

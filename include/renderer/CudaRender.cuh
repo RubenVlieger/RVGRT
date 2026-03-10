@@ -5,6 +5,11 @@
 #include "Texturepack.h"
 #include <cuda_runtime.h>
 
+#ifdef _WIN32
+// Forward declaration for Windows-specific interop
+class CudaD3D12Texture;
+#endif
+
 class Character;
 
 /**
@@ -12,6 +17,11 @@ class Character;
  * 
  * Mirrors MetalRenderer exactly for maintainability and feature parity.
  * Uses CUDA Runtime API with the same pass order and buffer management.
+ * 
+ * Features:
+ * - 8-pass deferred rendering pipeline
+ * - DLSS support via NVIDIA Streamline SDK (optional)
+ * - CUDA-D3D12 interop for Windows
  */
 class CudaRenderer : public Renderer {
 public:
@@ -25,15 +35,27 @@ public:
     void OnResize(uint32_t newWidth, uint32_t newHeight);
     void ResetScaler();
     
-    // For D3D12 interop - get final output surface
-    cudaSurfaceObject_t GetOutputSurface() const { return _texCompositeResult.surface; }
-    cudaTextureObject_t GetOutputTexture() const { return _texCompositeResult.texture; }
+    // DLSS Support
+    void InitializeDLSS(void* d3dDevice, uint32_t width, uint32_t height);
+    void UpdateDLSSConstants(float jitterX, float jitterY, bool reset);
+    bool IsDLSSAvailable() const { return _dlssAvailable; }
+    
+    // Post-draw copy to output (D3D12 interop or DLSS input)
+    void PostDraw(cudaSurfaceObject_t outputSurface, 
+                  uint32_t width, uint32_t height,
+                  bool useDLSS = false);
+    
+    // Getters for interop
+    cudaSurfaceObject_t GetCompositeSurface() const { return _texCompositeResult.surface; }
+    cudaTextureObject_t GetCompositeTexture() const { return _texCompositeResult.texture; }
+    cudaSurfaceObject_t GetFinalSurface() const { return _texFinal.surface; }
+    cudaTextureObject_t GetFinalTexture() const { return _texFinal.texture; }
 
 private:
     void createRenderTarget(uint32_t width, uint32_t height);
     void freeRenderTargets();
     
-    // Helper struct bundling array + surface + texture (mirrors MTLTexture concept)
+    // Helper struct bundling array + surface + texture
     struct CudaRenderTarget {
         cudaArray_t array = nullptr;
         cudaSurfaceObject_t surface = 0;
@@ -46,13 +68,13 @@ private:
                         cudaChannelFormatDesc format);
     void freeTarget(CudaRenderTarget& target);
     
-    // Same member name as MetalRenderer
+    // Texturepack (mirrors MetalRenderer)
     Texturepack _texturepack;
     
-    // --- Render Targets (mirroring MetalRenderer.hpp lines 64-86) ---
+    // --- Render Targets (mirroring MetalRenderer) ---
     CudaRenderTarget _texDirectLight;      // RGBA16F
     CudaRenderTarget _texAlbedo;           // RGBA8
-    CudaRenderTarget _texNormal;           // RGBA16F (was RGBA8Snorm in Metal, using 16F for simplicity)
+    CudaRenderTarget _texNormal;           // RGBA16F
     CudaRenderTarget _texMotion;           // RG16F
     CudaRenderTarget _texRawIndirect;      // RGBA16F
     CudaRenderTarget _texDenoised;         // RGBA16F
@@ -67,19 +89,24 @@ private:
     
     CudaRenderTarget _halfDistTexture;     // R32F, half-res
     
-    // --- Buffers (mirroring MetalRenderer) ---
+    // --- Buffers ---
     void* _exposureBuffer = nullptr;       // Device pointer to ExposureData
     void* _characterBuffer = nullptr;      // Device pointer to CharacterGPUData
     
     // --- Core Systems ---
     CudaMaterialMap _materialMap;
     
-    // --- State (mirroring MetalRenderer.hpp lines 94-97) ---
+    // --- State ---
     uint32_t _frameIndex = 0;
     uint32_t _width = 0;
     uint32_t _height = 0;
     bool _scalerNeedsReset = true;
+    bool _dlssAvailable = false;
     
-    // CUDA stream for all rendering operations (like MTLCommandQueue)
+    // DLSS state
+    float _jitterX = 0.0f;
+    float _jitterY = 0.0f;
+    
+    // CUDA stream for all rendering operations
     cudaStream_t _cudaStream = nullptr;
 };

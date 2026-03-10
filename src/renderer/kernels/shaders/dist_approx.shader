@@ -1,13 +1,14 @@
-#include <metal_stdlib>
-#include "cumath.h"
 #include "shader_macros.h"
+
+#if defined(PLATFORM_METAL)
+#include <metal_stdlib>
+using namespace metal;
+#endif
+
+#include "cumath.h"
 #include "raytracing_functions.h"
 #include "renderer/ShaderTypes.h"
 #include "TerrainGeneration.h"
-
-#if defined(PLATFORM_METAL)
-using namespace metal;
-#endif
 
 // ============================================================================
 // KERNEL: Distance Approximation (Half-Resolution)

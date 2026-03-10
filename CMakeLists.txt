@@ -47,8 +47,8 @@ if(WIN32)
         message(STATUS "Found C preprocessor: ${CPP_TOOL}")
     endif()
 
-    # --- Shader preprocessing ---
-    if(CPP_TOOL)
+        # --- Shader preprocessing ---
+        if(CPP_TOOL)
         set(SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/renderer/kernels/shaders")
         set(CUDA_KERNEL_DIR "${CMAKE_CURRENT_BINARY_DIR}/cuda_kernels")
         file(MAKE_DIRECTORY ${CUDA_KERNEL_DIR})
@@ -72,13 +72,16 @@ if(WIN32)
             set(CUDA_PATH "${CUDA_KERNEL_DIR}/${SHADER}.cu")
             list(APPEND CUDA_KERNEL_FILES ${CUDA_PATH})
             
-            # Preprocess shader: strip metal_stdlib, define __CUDA_ARCH__
+            # Preprocess shader: define PLATFORM_CUDA, include shader_macros.h first
+            # Note: shader_macros.h handles platform detection and conditional metal_stdlib include
             add_custom_command(
                 OUTPUT ${CUDA_PATH}
-                COMMAND ${CPP_TOOL} -E -P -D__CUDA_ARCH__=750 
+                COMMAND ${CPP_TOOL} -E -P 
+                    -D__CUDA_ARCH__=750 
+                    -DPLATFORM_CUDA=1
                     -I${CMAKE_SOURCE_DIR}/include 
                     "${SHADER_PATH}" > "${CUDA_PATH}"
-                DEPENDS "${SHADER_PATH}"
+                DEPENDS "${SHADER_PATH}" "${CMAKE_SOURCE_DIR}/include/shader_macros.h"
                 COMMENT "Preprocessing ${SHADER} for CUDA"
             )
         endforeach()
@@ -104,6 +107,7 @@ if(WIN32)
         src/renderer/CudaRenderer.cu
         src/renderer/CudaMaterialMap.cu
         src/renderer/CudaBrickPool.cu
+        src/CudaD3D12Texture.cu
     )
     
     # Add preprocessed kernel files if available

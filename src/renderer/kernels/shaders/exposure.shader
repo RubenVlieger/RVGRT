@@ -1,11 +1,12 @@
-#include <metal_stdlib>
-#include "cumath.h"
 #include "shader_macros.h"
-#include "renderer/ShaderTypes.h"
 
 #if defined(PLATFORM_METAL)
+#include <metal_stdlib>
 using namespace metal;
 #endif
+
+#include "cumath.h"
+#include "renderer/ShaderTypes.h"
 
 // ============================================================================
 // KERNEL: Compute Exposure (Log-Average Luminance)
