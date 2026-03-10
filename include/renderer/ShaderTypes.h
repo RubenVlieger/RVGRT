@@ -1,9 +1,38 @@
 #ifndef ShaderTypes_h
 #define ShaderTypes_h
 
+// Include shared system configuration first
+#include "SystemConfig.h"
+
 // The simd library provides C++ types like `simd_float3` that are
 // directly memory-compatible with Metal's `float3`.
+#if defined(__METAL_VERSION__)
+// Metal shader path - use Metal's native types
+#include <metal_stdlib>
+using namespace metal;
+// Metal shaders use float4x4 directly, not simd_float4x4
+using simd_float4x4 = float4x4;
+using simd_float3 = float3;
+using simd_float4 = float4;
+using simd_float2 = float2;
+using simd_int3 = int3;
+#elif defined(__APPLE__)
+// macOS C++ path - use system simd library
 #include <simd/simd.h>
+#else
+// Windows/CUDA path - use cumath types
+#include "../cumath.h"
+using simd_float2 = float2;
+using simd_float3 = float3;
+using simd_float4 = float4;
+using simd_int3 = int3;
+using simd_float4x4 = mat4;
+
+// Utility functions that Metal provides natively
+inline float3 simd_normalize(float3 v) { return normalize(v); }
+inline float3 simd_make_float3(float x, float y, float z) { return make_float3(x, y, z); }
+inline float2 simd_make_float2(float x, float y) { return make_float2(x, y); }
+#endif
 
 // This struct is now defined in a plain C++ header.
 // Both your .metal file and your .mm file will include this.
@@ -19,8 +48,6 @@ struct CameraData {
   simd_float2 jitter;
   simd_float2 padding; // 16-byte aligned
 };
-
-#define MAX_CHARACTERS 16
 
 struct CharacterGPUData {
   int numCharacters;
@@ -45,37 +72,8 @@ struct ExposureData {
   float padding[3];
 };
 
-#define BRICK_SIZE 8
-#define SECTOR_SIZE 32 // 4 bricks * 8 voxels
-
-// =========================================================
-// Streaming Configuration
-// =========================================================
-
-// Brick pool capacity — how many 8x8x8 bricks can exist simultaneously.
-// Each brick uses 576 bytes (64 occupancy + 512 data).
-// At 6M bricks: ~3.3GB total.
-#define BRICK_POOL_CAPACITY (6 * 1024 * 1024)
-
-// Maximum number of sectors that can be active simultaneously.
-// Must be >= the total cells in the indirection texture.
-// 256 * 16 * 256 = 1,048,576 sectors.
-#define MAX_ACTIVE_SECTORS (256 * 16 * 256)
-
-// Radius (in sectors) within which full-detail bricks are generated.
-// 125 sectors * 32 voxels = 4000 blocks.
-#define DETAIL_RADIUS_SECTORS 125
-
-// =========================================================
-// Sector Handle Sentinel Values
-// Stored in the indirection 3D texture (R32Uint).
-// =========================================================
-// 0 = empty (no geometry, not yet loaded or truly empty)
-#define SECTOR_HANDLE_EMPTY 0u
-// 0xFFFFFFFE = LOD solid (all bricks treated as solid based on brickMask, no
-// brick data)
-#define SECTOR_HANDLE_LOD 0xFFFFFFFEu
-// Valid sector handles: 1..0xFFFFFFFD (index into SectorBuffer)
+// Sector handle and flag values are now defined in SystemConfig.h
+// SECTOR_HANDLE_EMPTY, SECTOR_HANDLE_LOD, SECTOR_FLAG_DETAIL, SECTOR_FLAG_LOD
 
 struct SectorInfo {
   // Offset into the Brick Arrays (Occupancy and Data)
@@ -89,10 +87,6 @@ struct SectorInfo {
   // 64 bits = 4x4x4 bricks.
   uint64_t brickMask;
 };
-
-// Flag values for SectorInfo.flags
-#define SECTOR_FLAG_DETAIL 0u
-#define SECTOR_FLAG_LOD 1u
 
 // Struct to tell the GPU which brick to generate
 struct BrickWorkItem {

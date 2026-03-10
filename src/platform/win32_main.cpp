@@ -3,14 +3,21 @@
 #include <atomic>
 #include <thread>
 #include <windows.h>
+#include <iostream>
 
 #include "State.hpp"
-#include "StateRender.cuh" // For the render loop
 #include "platform/NetworkClient.hpp"
 #include "platform/WindowsPlatform.hpp"
-#include "renderer/D3D12Device.hpp"
+#include "renderer/D3D12/D3D12Device.hpp"
+#include "renderer/CUDA/CudaRender.cuh"
+#include "CudaD3D12Texture.cuh"
 
-// Forward declaration of the render loop
+#ifdef HAS_STREAMLINE
+#include <sl.h>
+#include <sl_dlss.h>
+#endif
+
+// Forward declarations
 void renderLoop();
 std::atomic<bool> running = true;
 
@@ -32,18 +39,25 @@ int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     State::state.graphicsDevice->Initialize(
         State::state.platform->GetWindowHandle());
 
-    // 3. Perform engine-specific (platform-agnostic) initialization
+    // 3. Create the CUDA renderer (mirrors macOS MetalRenderer creation)
     State::state.renderer = std::make_unique<CudaRenderer>();
+    
+    // Initialize DLSS if available
+    D3D12Device* d3d12Device = static_cast<D3D12Device*>(State::state.graphicsDevice.get());
+    CudaRenderer* cudaRenderer = static_cast<CudaRenderer*>(State::state.renderer.get());
+    cudaRenderer->InitializeDLSS(d3d12Device->GetD3D12Device(), 
+                                  State::dispWIDTH, State::dispHEIGHT);
 
+    // 4. Network client setup
     State::state.networkClient = NetworkClient::Create();
     if (State::state.networkClient) {
       State::state.networkClient->Connect("ws://rvgrt.rubenvlieger.nl/ws");
     }
 
-    // 4. Start the render thread
+    // 5. Start the render thread
     std::thread renderThread(renderLoop);
 
-    // 5. Run the message loop
+    // 6. Run the message loop
     MSG msg = {};
     while (running) {
       if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE)) {
@@ -66,74 +80,94 @@ int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance,
   }
 }
 
+// Streamline helper functions
+#ifdef HAS_STREAMLINE
+static inline void successCheck(sl::Result result, const char* msg) {
+  if(result != sl::Result::eOk) {
+    std::cerr << "sl error (" << msg << "): " << (int)result << "\n";
+    throw std::runtime_error(msg);
+  }
+}
+
+// Constants for DLSS
+static constexpr sl::DLSSOptions kDlssOptions = {
+  sl::DLSSMode::eMaxPerformance,
+  sl::DLSSPreset::eDefault,
+  sl::DLSSPreset::eDefault,
+  0.0f, 0.0f,
+  0.0f,
+  0.0f, 0.0f,
+  false
+};
+#endif
+
 void renderLoop() {
-  // Get the concrete device type for D3D12-specific operations
   D3D12Device *d3d12Device =
       static_cast<D3D12Device *>(State::state.graphicsDevice.get());
-
-  // The rest of this loop is nearly identical to your original,
-  // just using the new device and platform objects.
+  CudaRenderer *cudaRenderer =
+      static_cast<CudaRenderer *>(State::state.renderer.get());
+  
+  // Create interop texture for CUDA -> D3D12 output
+  CudaD3D12Texture interopTexture;
+  interopTexture.Initialize(
+      d3d12Device->GetD3D12Device(),
+      State::dispWIDTH,
+      State::dispHEIGHT,
+      DXGI_FORMAT_R16G16B16A16_FLOAT,
+      D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+      L"CUDA-D3D12 Interop"
+  );
 
   using clock = std::chrono::steady_clock;
   auto lastTime = clock::now();
   double frameTimeMs = 16.6f;
   unsigned int frameCount = 0;
-
-  // --- Initialize DLSS resources once the device is created ---
-  // (This part is moved from WndCreate to here, after device init)
-  // The command list must be open to record commands for tagging.
-  d3d12Device->BeginFrame(); // This will reset the allocator and command list
-  ID3D12GraphicsCommandList *cmdList = d3d12Device->GetCommandList();
-
-  // Tag resources for Streamline... (Your existing slSetTag logic goes here)
-
-  d3d12Device->EndFrame(); // Execute the tagging commands
+  float npcTime = 0.0f;
 
   while (running) {
     State::state.graphicsDevice->BeginFrame();
 
-    // The core rendering logic
+    // Update game state
     State::state.character.Update(frameCount);
     State::state.platform->deltaTime = (float)frameTimeMs / 1000.f;
 
+    // Network updates
     if (State::state.networkClient) {
       State::state.networkClient->SendState(State::state.character);
       State::state.networkClient->PollUpdates(State::state.otherCharacters);
     } else {
-      static float npcTime = 0.0f;
       npcTime += frameTimeMs / 1000.0f;
       for (auto &npc : State::state.otherCharacters) {
         npc.UpdateTestNPC(npcTime, frameTimeMs / 1000.0f);
       }
     }
 
-    State::state.render->GIdata.UpdateGIData(State::state.render->cArray,
-                                             State::state.render->csdf,
-                                             State::state.render->texturepack);
-
+    // MAIN RENDER CALL
     if (State::state.renderer) {
-      State::state.renderer->Draw(State::state.character, frameCount);
+      cudaRenderer->Draw(State::state.character, frameCount);
     }
+    
+    // Copy CUDA output to D3D12 interop texture
+    cudaRenderer->PostDraw(interopTexture.getCudaSurfObject(), 
+                            State::dispWIDTH, State::dispHEIGHT, false);
 
-    // ... Your full slSetConstants and slEvaluateFeature logic ...
-    // ... then copy to the back buffer ...
-
+    // Copy to backbuffer
     ID3D12Resource *backBuffer = d3d12Device->GetCurrentBackBuffer();
-    ID3D12Resource *outputTexture =
-        State::state.render->upscaledColorBuffer.GetD3D12Resource();
+    ID3D12GraphicsCommandList *cmdList = d3d12Device->GetCommandList();
+    ID3D12Resource *outputResource = interopTexture.GetD3D12Resource();
 
     D3D12_RESOURCE_BARRIER copyBarriers[] = {
         CD3DX12_RESOURCE_BARRIER::Transition(
-            outputTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+            outputResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
             D3D12_RESOURCE_STATE_COPY_SOURCE),
         CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
                                              D3D12_RESOURCE_STATE_PRESENT,
                                              D3D12_RESOURCE_STATE_COPY_DEST)};
     cmdList->ResourceBarrier(_countof(copyBarriers), copyBarriers);
-    cmdList->CopyResource(backBuffer, outputTexture);
+    cmdList->CopyResource(backBuffer, outputResource);
 
     D3D12_RESOURCE_BARRIER finalBarriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(outputTexture,
+        CD3DX12_RESOURCE_BARRIER::Transition(outputResource,
                                              D3D12_RESOURCE_STATE_COPY_SOURCE,
                                              D3D12_RESOURCE_STATE_COMMON),
         CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
@@ -143,7 +177,7 @@ void renderLoop() {
 
     State::state.graphicsDevice->EndFrame();
 
-    // --- Frame Timing ---
+    // Frame Timing
     frameTimeMs =
         std::chrono::duration<double, std::milli>(clock::now() - lastTime)
             .count();

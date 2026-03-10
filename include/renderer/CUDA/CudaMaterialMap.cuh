@@ -1,29 +1,18 @@
 #pragma once
 
-#ifdef __OBJC__
-#import <Metal/Metal.h>
-#else
-typedef void *id;
-#endif
-
-#include "renderer/BrickPool.hpp"
+#include "renderer/CUDA/CudaBrickPool.cuh"
 #include "renderer/ShaderTypes.h"
 #include <cstdint>
 #include <mutex>
-#include <simd/simd.h>
 #include <vector>
 
-// Forward declaration of implementation
-namespace MaterialMapImpl {
-    struct SectorState;
-    struct AsyncResult;
-}
-
 /**
- * MaterialMap — Manages the voxel world with streaming and LOD.
+ * CudaMaterialMap — Manages the voxel world with streaming and LOD.
+ *
+ * Mirrors the Metal MaterialMap implementation exactly.
  *
  * Owns:
- *   - Indirection 3D texture (toroidal, wraps around camera)
+ *   - Indirection 3D texture (toroidal, wraps around camera) as flat buffer
  *   - SectorInfo buffer (per-sector metadata)
  *   - BrickPool (occupancy + data buffers)
  *   - Super-sector mask buffer
@@ -32,10 +21,10 @@ namespace MaterialMapImpl {
  * Returns true if new sectors were loaded (caller should reset temporal
  * accumulation).
  */
-class MaterialMap {
+class CudaMaterialMap {
 public:
-  MaterialMap();
-  ~MaterialMap();
+  CudaMaterialMap();
+  ~CudaMaterialMap();
 
   /// Initial world generation around spawn point.
   void GenerateDynamic();
@@ -43,37 +32,34 @@ public:
   /// Per-frame streaming update. Returns true if any sectors changed.
   bool UpdateStreaming(simd_float3 cameraPos);
 
-  // Getters for rendering bindings
-  id GetIndirectionTexture();
-  id GetSectorBuffer();
-  id GetOccupancyBuffer();
-  id GetDataBuffer();
-  id GetSectorMaskBuffer();
+  // Getters for rendering bindings (device pointers)
+  uint32_t* GetIndirectionPtr() const { return d_indirection; }
+  SectorInfo* GetSectorBufferPtr() const { return d_sectors; }
+  uint64_t* GetOccupancyPtr() const { return _brickPool.GetOccupancyPtr(); }
+  uint8_t* GetDataPtr() const { return _brickPool.GetDataPtr(); }
+  uint64_t* GetSectorMaskPtr() const { return d_sectorMasks; }
 
   /// Get the world origin (world-space coordinate of indirection cell (0,0,0))
-  simd_int3 GetWorldOrigin() const { return _worldOrigin; }
+  int3 GetWorldOrigin() const { return _worldOrigin; }
+  
+  /// Get indirection dimensions
+  int GetIndirectionWidth() const { return _indW; }
+  int GetIndirectionHeight() const { return _indH; }
+  int GetIndirectionDepth() const { return _indD; }
 
 private:
-  id _device;
-
   // --- GPU Resources ---
-  // L1: 3D Texture (R32Uint). Value = sector handle (index into SectorBuffer)
-  id _indirectionTexture;
+  // L1: 3D Texture as flat buffer (R32Uint). Value = sector handle (index into SectorBuffer)
+  uint32_t* d_indirection;
 
   // L2: Buffer of SectorInfo structs
-  id _sectorBuffer;
+  SectorInfo* d_sectors;
 
   // L3+L4: Brick data (owned by BrickPool)
-  MetalBrickPool _brickPool;
+  CudaBrickPool _brickPool;
 
   // Super-sector masks: one uint64_t per 4x4x4 group of sectors
-  id _sectorMaskBuffer;
-
-  // --- Compute Pipelines ---
-  id _psoAnalyze;          // Analyze sectors (determine brick activity)
-  id _psoFill;             // Fill brick data (occupancy + materials)
-  id _psoAnalyzeLOD;       // LOD analysis (16 samples per brick for solid/air)
-  id _psoAnalyzeStreaming; // Async streaming analysis of sectors
+  uint64_t* d_sectorMasks;
 
   // --- Async Compute Results ---
   struct AsyncResult {
@@ -84,8 +70,8 @@ private:
   std::vector<AsyncResult> _asyncResults;
 
   // --- Streaming State ---
-  simd_int3 _worldOrigin; // World-space coordinate of indirection cell (0,0,0)
-  simd_int3 _lastCameraSector; // Camera's sector position at last update
+  int3 _worldOrigin; // World-space coordinate of indirection cell (0,0,0)
+  int3 _lastCameraSector; // Camera's sector position at last update
   bool _firstUpdate;
 
   // Indirection dimensions
@@ -106,12 +92,11 @@ private:
   // Sector buffer management
   uint32_t _nextSectorHandle;
   std::vector<uint32_t> _freeSectorHandles;
-  std::vector<SectorInfo>
-      _sectorInfoCPU; // CPU mirror of sector buffer (for updates)
+  std::vector<SectorInfo> _sectorInfoCPU; // CPU mirror of sector buffer (for updates)
   std::vector<uint32_t> _indirectionCPU; // CPU mirror of indirection texture
 
-  // Command queue for async generation
-  id _commandQueue;
+  // CUDA stream for async compute
+  void* _cudaStream;  // cudaStream_t
 
   // --- Internal Methods ---
 
@@ -140,12 +125,15 @@ private:
   /// Upload a single SectorInfo to the GPU buffer
   void UploadSectorInfo(uint32_t handle, const SectorInfo &info);
 
-  /// Generate full-detail bricks for a batch of sectors
-  void GenerateDetailBatch(const std::vector<SectorWorkItem> &sectors);
-
-  /// Generate LOD brickMasks for a batch of sectors
-  void GenerateLODBatch(const std::vector<SectorWorkItem> &sectors);
-
   /// Rebuild super-sector masks for affected regions
   void RebuildSectorMasks();
+
+  /// Dispatch async analysis on GPU
+  void DispatchAsyncAnalysis(const std::vector<SectorWorkItem> &items);
+
+  /// Process completed async results
+  void ProcessAsyncResults(std::vector<BrickWorkItem> &workList);
+
+  /// Generate brick data on GPU
+  void GenerateBrickData(const std::vector<BrickWorkItem> &workList);
 };

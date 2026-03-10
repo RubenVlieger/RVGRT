@@ -2,7 +2,7 @@
 #import "State.hpp"
 #import "TerrainGeneration.h"
 #import "cumath.h"
-#import "renderer/MetalDevice.hpp"
+#import "renderer/Metal/MetalDevice.hpp"
 #include <algorithm>
 #include <cmath>
 #include <vector>

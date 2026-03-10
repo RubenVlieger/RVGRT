@@ -6,7 +6,7 @@
 #include "texturepackdata.h" // The embedded PNG data
 #include "State.hpp"
 #include "renderer/GraphicsDevice.hpp"
-#include "renderer/MetalDevice.hpp"
+#include "renderer/Metal/MetalDevice.hpp"
 
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
