@@ -1,395 +1,678 @@
-#include "renderer/CudaRenderer.cuh"
-#include "CArray.cuh"
+// ============================================================================
+// CudaRenderer.cu - CUDA implementation mirroring MetalRenderer
+// ============================================================================
+
+#include "renderer/CudaRender.cuh"
+#include "Character.hpp"
+#include "State.hpp"
+#include "cumath.h"
+#include "renderer/ShaderTypes.h"
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
-#include "cumath.cuh"
-#include "CoarseArray.cuh"
-#include "cuda_fp16.h"
-#include "raytracing_functions.cuh"
-#include "TerrainGeneration.cuh"
-#include <chrono>
+#include <cmath>
+#include <cstdio>
+#include <cstring>
 
-#define INCLUDEGI
+// Error checking macro
+#define CUDA_CHECK(call) do { \
+    cudaError_t err = call; \
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "CUDA error in %s at line %d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
+        exit(1); \
+    } \
+} while(0)
 
+// ============================================================================
+// CONSTANT MEMORY (matching Metal's constant buffers)
+// ============================================================================
 
-__constant__ float c_cam[19];
-__constant__ glm::mat4 c_currentViewProjection_unjittered;
-__constant__ glm::mat4 c_previousViewProjection_unjittered;
+__constant__ CameraData c_camera;
+__constant__ FrameData c_frame;
 
-__constant__ float3 c_waterColor = {0.0f, 0.1f, 0.3f};
-__constant__ float c_waterReflectivity = 0.08f;
+// ============================================================================
+// KERNEL DECLARATIONS (from preprocessed .shader files)
+// ============================================================================
 
-#define c_camPos *((float3*)&c_cam)
-#define c_cam_fo *(((float3*)&c_cam) + 1)
-#define c_cam_ri *(((float3*)&c_cam) + 2)
-#define c_cam_up *(((float3*)&c_cam) + 3)
-#define c_sunDir *(((float3*)&c_cam) + 4)
-#define c_time *(((float*)&c_cam) + 17)
-#define c_jitterX *(((float*)&c_cam) + 18)
-#define c_jitterY *(((float*)&c_cam) + 19)
+// These will be defined in the preprocessed shader files
+// We declare them here as extern since they'll be included at the bottom
 
+// ============================================================================
+// CONSTRUCTOR & DESTRUCTOR
+// ============================================================================
 
-// Function which returns the color of a pixel, first casting a primary ray, and depending on this result a shadow ray/ reflections.
-    __device__ float3 computeColor(float x,
-                                float y,
-                                float distance,
-                                float shadowValue,
-                                hitInfo& hit,
-                                const uint32_t* __restrict__ bits,
-                                const unsigned char* __restrict__ csdf,
-                                 texObj,
-                                const uchar4* __restrict__ GIdata)
-    {
-        // --- Primary ray direction ---
-        float2 NDC = make_float2(x * 2.0f - 1.0f + c_jitterX, y * 2.0f - 1.0f + c_jitterY);
-        float3 dir = normalize(c_cam_fo + NDC.x * c_cam_ri + NDC.y * c_cam_up);
-
-        // --- Trace primary ray ---
-        hit = trace(c_camPos, dir, distance, bits, csdf);
-
-        float3 color = make_float3(0.0f, 0.0f, 0.0f);
-
-        //If it hits water, compute the reflection!
-        if(hit.hit && hit.pos.y < 31.001f)
-        {
-            // Add wave distortion to the normal for a wavy look
-            float nx_wave = fbm3D(hit.pos.x, hit.pos.z, c_time, 3, 0.06f, 2.0f, 0.6f);
-            float ny_wave = fbm3D(hit.pos.z, hit.pos.x, c_time + 112.0f, 3, 0.06f, 2.0f, 0.6f);
-            float3 distortedNormal = normalize(hit.normal + make_float3(nx_wave * 0.1f, ny_wave * 0.1f, 0.0f));
-
-            float3 reflDir = reflect(dir, distortedNormal);
-
-            hitInfo reflHit = trace(hit.pos, reflDir, 0.001h, bits, csdf);
-
-            float3 finalReflectionColor;
-            if (reflHit.hit) {
-                // We hit a voxel, get its texture and shadow it
-                float3 reflColor = sampleTexture(reflHit.uv, reflHit.pos, texObj);
-                hitInfo reflShadow = trace(reflHit.pos + reflHit.normal * 1e-3f, c_sunDir, 0.001f, bits, csdf);
-                if (reflShadow.hit) {
-                    reflColor = reflColor * 0.1f; // Apply shadow to the reflection
-                }
-                finalReflectionColor = reflColor;
-            } else {
-                // The reflection ray hit the sky
-                finalReflectionColor = sampleSky(reflDir, c_sunDir);
-            }
-
-            // *** PROBLEM 2 FIX: Calculate Fresnel effect for realistic reflectivity. ***
-            // (Using Schlick's approximation)
-            float NdotV = fmaxf(dot(hit.normal, -dir), 0.0f); // Use original normal for stable Fresnel
-            float fresnelFactor = c_waterReflectivity + (1.0f - c_waterReflectivity) * powf(1.0f - NdotV, 5.0f);
-
-            // The final color is a mix of the water's base color and the reflected scene,
-            // controlled by the Fresnel factor.
-            color = lerp(c_waterColor, finalReflectionColor, fresnelFactor);
-        }
-        else if (hit.hit)
-        {
-            // --- Get surface properties ---
-            float3 baseColor = sampleTexture(hit.uv, hit.pos, texObj);
-
-            // --- Direct lighting (Lambertian diffuse) ---
-            float diffuse = fmaxf(dot(hit.normal, c_sunDir), 0.0f);
-            float3 directLight = baseColor * diffuse * shadowValue;
-
-            // ==================================================
-            // --- GLOBAL ILLUMINATION VIA VOXEL CONE TRACING ---
-            // ==================================================
-    #ifdef INCLUDEGI
-            float3 indirectLight = make_float3(0.0f, 0.0f, 0.0f);
-
-            // Define cone directions in a hemisphere around the surface normal.
-            float3 up = hit.normal;
-            float3 right = normalize(cross(up, make_float3(0.577f, 0.577f, 0.577f))); // Arbitrary non-parallel vector
-            float3 forward = normalize(cross(up, right));
-
-            // Trace cones in the hemisphere
-            indirectLight += traceCone(hit.pos, up, GIdata, csdf);
-            indirectLight += traceCone(hit.pos, lerp(up, right, 0.5f), GIdata, csdf);
-            indirectLight += traceCone(hit.pos, lerp(up, -right, 0.5f), GIdata, csdf);
-            indirectLight += traceCone(hit.pos, lerp(up, forward, 0.5f), GIdata, csdf);
-            indirectLight += traceCone(hit.pos, lerp(up, -forward, 0.5f), GIdata, csdf);
-            // Add one more cone for a total of 6
-            indirectLight += traceCone(hit.pos, lerp(up, lerp(right, forward, 0.5f), 0.5f), GIdata, csdf);
-
-
-            // Average the result and modulate by the surface color (albedo)
-            // The GI_STRENGTH is an artistic control to balance GI
-            const float GI_STRENGTH = 0.6f;
-            indirectLight = (indirectLight / (float)NUM_CONES) * baseColor * GI_STRENGTH;
-
-            // --- Final Color Composition ---
-            // Combine direct and indirect lighting.
-            // Also add a tiny bit of ambient light from the sky for areas that get no light.
-            float3 ambient = sampleSky(hit.normal, c_sunDir) * 0.05f * baseColor;
-            color = directLight + indirectLight + ambient;
-    #else
-        color = directLight;
-    #endif
-
-        }
-        else
-        {
-            // No hit, sample sky
-            color = sampleSky(dir, c_sunDir);
-        }
-
-
-        float fogfactor = 0.0f;
-        if(hit.hit)
-            fogfactor = powf(1.0 / 2.71828, (length(hit.pos - c_camPos) * 0.0004f));
-        else fogfactor = 1.0f;
-
-        return fogfactor * color + (1.0f - fogfactor) * make_float3(0.95f, 0.95f, 1.0f);
-    }
-
-__device__ inline float bilinear(half* buffer, size_t pitchInBytes, float x, float y, int fullWidth, int fullHeight)
-{
-    int halfWidth = fullWidth >> 1;
-    int halfHeight = fullHeight >> 1;
-
-    // Use floating point coordinates for accuracy
-    float hx = x * (float)halfWidth;
-    float hy = y * (float)halfHeight;
-
-    int ix = floorf(hx);
-    int iy = floorf(hy);
-
-    float fx = hx - (float)ix;
-    float fy = hy - (float)iy;
-
-    int ix1 = min(ix + 1, halfWidth - 1);
-    int iy1 = min(iy + 1, halfHeight - 1);
-
-    // ROBUST PITCH-CORRECT ACCESS
-    const half* row0 = (const half*)((const char*)buffer + iy * pitchInBytes);
-    const half* row1 = (const half*)((const char*)buffer + iy1 * pitchInBytes);
-
-    half s00 = row0[ix];
-    half s10 = row0[ix1];
-    half s01 = row1[ix];
-    half s11 = row1[ix1];
+CudaRenderer::CudaRenderer() : _texturepack() {
+    // Create CUDA stream for all rendering operations
+    CUDA_CHECK(cudaStreamCreate(&_cudaStream));
     
-    // Bilinear interpolation
-    half s0 = __hadd(__hmul(s00, __float2half(1.0f - fx)), __hmul(s10, __float2half(fx)));
-    half s1 = __hadd(__hmul(s01, __float2half(1.0f - fx)), __hmul(s11, __float2half(fx)));
-    return __half2float(__hadd(__hmul(s0, __float2half(1.0f - fy)), __hmul(s1, __float2half(fy))));
-}
-
-
-__device__ inline float minDist(cudaTextureObject_t tex, float x, float y)
-{
-    float half_pixel_x = 1.0f / (float)640;
-    float half_pixel_y = 1.0f / (float)400;
-
-    // Find the bottom-left texel for the quad
-    float u_low = floor(x * (float)640) / (float)640;
-    float v_low = floor(y * (float)400) / (float)400;
-
-    float dist1 = tex2D<float>(tex, u_low, v_low);
-    float dist2 = tex2D<float>(tex, u_low + half_pixel_x, v_low);
-    float dist3 = tex2D<float>(tex, u_low, v_low + half_pixel_y);
-    float dist4 = tex2D<float>(tex, u_low + half_pixel_x, v_low + half_pixel_y);
-
-    // Find the minimum of the four distances
-    return fminf(fminf(dist1, dist2), fminf(dist3, dist4));
-}
-
-__global__ void renderKernel(
-                            uchar4* framebuffer, 
-                            half2* motionVectorBuffer, // Stays half2*
-                            half* depthBuffer,          // Stays half*
-                            cudaTextureObject_t halfDepthTex, 
-                            cudaTextureObject_t shadowTex,
-
-                            size_t fbPitchInBytes,
-                            size_t mvPitchInBytes,
-                            size_t depthPitchInBytes,
-
-                            int width, 
-                            int height, 
-
-                            const uint32_t* __restrict__ bits,
-                            const unsigned char* __restrict__ csdf,
-                            uchar4* __restrict__ GIdata,
-                            cudaTextureObject_t texObj) 
-{
-    int ix = blockIdx.x * blockDim.x + threadIdx.x;
-    int iy = blockIdx.y * blockDim.y + threadIdx.y;
-    if (ix >= width || iy >= height) return;
-
-    float2 motionVector = make_float2(0.0f, 0.0f);
-    hitInfo hit;
-    float x = (float)ix / (float)width;
-    float y = (float)iy / (float)height;
-  
-    float dist = minDist(halfDepthTex, x, y);
-    //tex2D<float>(halfDepthTex, x, y );
-    float shadowValue = tex2D<float>(shadowTex, x , y);
-    float final_depth = 1.0f;
+    // Initialize exposure buffer with default value
+    ExposureData initialExp = {0.5f};
+    CUDA_CHECK(cudaMalloc(&_exposureBuffer, sizeof(ExposureData)));
+    CUDA_CHECK(cudaMemcpy(_exposureBuffer, &initialExp, sizeof(ExposureData), cudaMemcpyHostToDevice));
     
-    float3 col = computeColor(x, y, dist, shadowValue, hit, bits, csdf, texObj, GIdata);
-    if (hit.hit) {
-        float4 previousClipPos = mat_mul_vec(c_previousViewProjection_unjittered, make_float4(hit.pos.x, hit.pos.y, hit.pos.z, 1.0f));
-        float4 currentClipPos = mat_mul_vec(c_currentViewProjection_unjittered, make_float4(hit.pos.x, hit.pos.y, hit.pos.z, 1.0f));        
-        if (previousClipPos.w > 0.0f && currentClipPos.w > 0.0f) {
-            float2 previousNDC = make_float2(previousClipPos.x / previousClipPos.w, previousClipPos.y / previousClipPos.w);
-            float2 currentNDC = make_float2(currentClipPos.x / currentClipPos.w, currentClipPos.y / currentClipPos.w);
-            
-            motionVector = make_float2(currentNDC.x - previousNDC.x, currentNDC.y - previousNDC.y);
-        }
-        if (currentClipPos.w > 0.0f) {
-            final_depth = currentClipPos.z / currentClipPos.w;
-        }
-    }
-    col = clamp(col, make_float3(0.0f, 0.0f, 0.0f), make_float3(1.0f, 1.0f, 1.0f));
-    uchar4 pixel = make_uchar4((unsigned char)(col.x * 255.0f), (unsigned char)(col.y * 255.0f), (unsigned char)(col.z * 255.0f), 255);
-
-    *((uchar4*)((char*)framebuffer + iy * fbPitchInBytes) + ix) = pixel;
-    *((half2*)((char*)motionVectorBuffer + iy * mvPitchInBytes) + ix) = __float22half2_rn(make_float2(motionVector.x, -motionVector.y));
-    *((half*)((char*)depthBuffer + iy * depthPitchInBytes) + ix) = __float2half(final_depth);
-}
-
-__global__ void distApproximationKernel(cudaSurfaceObject_t distSurf, 
-                                        cudaSurfaceObject_t shadowSurf,
-
-                                        int width, 
-                                        int height, 
-
-                                        const uint32_t* __restrict__ bits,
-                                        const unsigned char* __restrict__ csdf) 
-{
-    uint64_t ix = blockIdx.x * blockDim.x + threadIdx.x;
-    uint64_t iy = blockIdx.y * blockDim.y + threadIdx.y;
-    if (ix >= width || iy >= height) return;
-
-    float x = ((float)ix + 0.5f) / (float)width;
-    float y = ((float)iy + 0.5f) / (float)height;
-
-
-    float2 NDC = make_float2(x * 2.0f - 1.0f + c_jitterX, y * 2.0f - 1.0f + c_jitterY);
-    float3 dir = normalize(c_cam_fo + NDC.x * c_cam_ri + NDC.y * c_cam_up);
-
-    hitInfo hit = trace(c_camPos, dir, (half)0.0f, bits, csdf);
-    float dist = hit.hit ? distance(hit.pos, c_camPos) : 300;
-
-    float shadowValue = 1.0f;
-    if(hit.hit)
-    {
-        hitInfo shadow = trace(hit.pos + hit.normal * 1e-1f, c_sunDir, (half)0.0f, bits, csdf);
-        shadowValue = shadow.hit ? (half)0.2f : (half)1.0f;
-    }
-    surf2Dwrite(dist - 8.0f, distSurf, ix * sizeof(float), iy); 
-    surf2Dwrite(shadowValue, shadowSurf, ix * sizeof(float), iy);
-}
-
-
-
-void drawCUDA(const glm::vec3& pos, const glm::vec3& fo,
-                           const glm::vec3& up, const glm::vec3& ri, 
-                           glm::mat4* unjitteredViewProjectionMatrix, 
-                           glm::mat4* prevUnjitteredViewProjectionMatrix,
-                           float jitterX, float jitterY) 
-{    
-    cudaMemcpyToSymbol(c_previousViewProjection_unjittered, prevUnjitteredViewProjectionMatrix, sizeof(glm::mat4));
-    cudaMemcpyToSymbol(c_currentViewProjection_unjittered, unjitteredViewProjectionMatrix, sizeof(glm::mat4));
-
-    float _currentTime = (float)(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count() % 1000000)* 0.001f; 
-    glm::vec3 _sunDir = glm::normalize(glm::vec3(10.f, 5.f, -4.f));
-
-    float _c_cam[18] = {pos.x, pos.y, pos.z,
-                        fo.x, fo.y, fo.z,
-                        ri.x, ri.y, ri.z,
-                        up.x, up.y, up.z,
-                        _sunDir.x, _sunDir.y, _sunDir.z,
-                        _currentTime, jitterX, jitterY};
+    // Initialize character buffer
+    CUDA_CHECK(cudaMalloc(&_characterBuffer, sizeof(CharacterGPUData)));
     
-    cudaMemcpyToSymbol(c_cam, _c_cam, sizeof(_c_cam));
-
-    dim3 block(8, 8);
-    dim3 grid((unsigned int)((lowResColorBuffer.getWidth() / 2) + block.x - 1) / block.x,
-              ((unsigned int)(lowResColorBuffer.getHeight() / 2) + block.y - 1) / block.y);
-
-    distApproximationKernel<<<grid, block>>>(
-                            halfDistBuffer.getCudaSurfObject(),
-                            shadowTex.getCudaSurfObject(),
-
-                            lowResColorBuffer.getWidth() / 2,
-                            lowResColorBuffer.getHeight() / 2,
-                            cArray.getPtr(), 
-                            csdf.getPtr());
-
-     block = dim3(8, 8);
-     grid = dim3((unsigned int)(lowResColorBuffer.getWidth() + block.x - 1) / block.x,
-                (unsigned int)(lowResColorBuffer.getHeight() + block.y - 1) / block.y);
-
-    renderKernel<<<grid, block>>>(
-                              (uchar4*)lowResColorBuffer.GetCudaDevicePtr(),
-                              (half2*)motionVectorTex.GetCudaDevicePtr(),
-                              (half*)depthTex.GetCudaDevicePtr(),
-                              halfDistBuffer.getCudaTexObject(),
-                              shadowTex.getCudaTexObject(),
-
-                              // FIX: Divide by the size of the element, not the pointer.
-                              lowResColorBuffer.getPitch(), 
-                              motionVectorTex.getPitch(),
-                              depthTex.getPitch(),
-
-                              lowResColorBuffer.getWidth(),
-                              lowResColorBuffer.getHeight(),
-
-                              cArray.getPtr(), 
-                              csdf.getPtr(),
-                              (uchar4*)GIdata.getPtr(),
-                              texturepack.texObject() );
+    // Generate world (exactly like MetalRenderer line 73-75)
+    printf("Starting Dynamic World Generation (XBrickMap)...\n");
+    _materialMap.GenerateDynamic();
+    printf("World Generation Complete.\n");
+    
+    // Create render targets
+    createRenderTarget(State::dispWIDTH, State::dispHEIGHT);
 }
 
-void CudaRenderer::Draw(const Character& character, unsigned int frameCount)
-{
-    // This is the public interface function. It calls the internal drawCUDA.
-    drawCUDA(
-        character.camera.pos,
-        character.camera.forward,
-        character.camera.up,
-        character.camera.right,
-        character.unjitteredViewProjectionMatrix,
-        character.prevUnjitteredViewProjectionMatrix,
-        character.jitterX,
-        character.jitterY
+CudaRenderer::~CudaRenderer() {
+    freeRenderTargets();
+    
+    if (_exposureBuffer) {
+        cudaFree(_exposureBuffer);
+    }
+    if (_characterBuffer) {
+        cudaFree(_characterBuffer);
+    }
+    if (_cudaStream) {
+        cudaStreamDestroy(_cudaStream);
+    }
+}
+
+// ============================================================================
+// RENDER TARGET MANAGEMENT
+// ============================================================================
+
+void CudaRenderer::allocateTarget(CudaRenderTarget& target, uint32_t width, 
+                                   uint32_t height, cudaChannelFormatDesc format) {
+    // 1. Allocate CUDA array
+    CUDA_CHECK(cudaMallocArray(&target.array, &format, width, height, cudaArraySurfaceLoadStore));
+    
+    // 2. Create surface object (for kernel write)
+    cudaResourceDesc surfRes = {};
+    surfRes.resType = cudaResourceTypeArray;
+    surfRes.res.array.array = target.array;
+    CUDA_CHECK(cudaCreateSurfaceObject(&target.surface, &surfRes));
+    
+    // 3. Create texture object (for kernel read with filtering)
+    cudaResourceDesc texRes = {};
+    texRes.resType = cudaResourceTypeArray;
+    texRes.res.array.array = target.array;
+    
+    cudaTextureDesc texDesc = {};
+    texDesc.addressMode[0] = cudaAddressModeClamp;
+    texDesc.addressMode[1] = cudaAddressModeClamp;
+    texDesc.filterMode = cudaFilterModeLinear;
+    texDesc.readMode = cudaReadModeElementType;
+    texDesc.normalizedCoords = 0;  // false - pixel coordinates
+    
+    CUDA_CHECK(cudaCreateTextureObject(&target.texture, &texRes, &texDesc, nullptr));
+}
+
+void CudaRenderer::freeTarget(CudaRenderTarget& target) {
+    if (target.texture) {
+        cudaDestroyTextureObject(target.texture);
+        target.texture = 0;
+    }
+    if (target.surface) {
+        cudaDestroySurfaceObject(target.surface);
+        target.surface = 0;
+    }
+    if (target.array) {
+        cudaFreeArray(target.array);
+        target.array = nullptr;
+    }
+}
+
+void CudaRenderer::createRenderTarget(uint32_t width, uint32_t height) {
+    _width = width;
+    _height = height;
+    
+    // Format definitions matching Metal
+    cudaChannelFormatDesc rgba16f = cudaCreateChannelDescHalf4();
+    cudaChannelFormatDesc rgba8 = cudaCreateChannelDesc(8, 8, 8, 8, cudaChannelFormatKindUnsigned);
+    cudaChannelFormatDesc rg16f = cudaCreateChannelDescHalf2();
+    cudaChannelFormatDesc r32f = cudaCreateChannelDesc<float>();
+    
+    // Full resolution targets (matching MetalRenderer.hpp lines 64-70)
+    allocateTarget(_texDirectLight, width, height, rgba16f);
+    allocateTarget(_texAlbedo, width, height, rgba8);
+    allocateTarget(_texNormal, width, height, rgba16f);
+    allocateTarget(_texMotion, width, height, rg16f);
+    allocateTarget(_texRawIndirect, width, height, rgba16f);
+    allocateTarget(_texDenoised, width, height, rgba16f);
+    allocateTarget(_texFinal, width, height, rgba8);
+    allocateTarget(_texDenoiseTemp, width, height, rgba16f);
+    allocateTarget(_texCompositeResult, width, height, rgba16f);
+    
+    // Ping-pong buffers (lines 72-76)
+    for (int i = 0; i < 2; i++) {
+        allocateTarget(_texDepth[i], width, height, r32f);
+        allocateTarget(_texAccum[i], width, height, rgba16f);
+        allocateTarget(_texFinalHistory[i], width, height, rgba16f);
+    }
+    
+    // Volumetric buffers (half-res, lines 78-79)
+    for (int i = 0; i < 2; i++) {
+        allocateTarget(_texVolumetric[i], width / 2, height / 2, rgba16f);
+    }
+    
+    // Half-resolution distance texture (line 86)
+    allocateTarget(_halfDistTexture, width / 2, height / 2, r32f);
+    
+    _scalerNeedsReset = true;
+}
+
+void CudaRenderer::freeRenderTargets() {
+    freeTarget(_texDirectLight);
+    freeTarget(_texAlbedo);
+    freeTarget(_texNormal);
+    freeTarget(_texMotion);
+    freeTarget(_texRawIndirect);
+    freeTarget(_texDenoised);
+    freeTarget(_texFinal);
+    freeTarget(_texDenoiseTemp);
+    freeTarget(_texCompositeResult);
+    
+    for (int i = 0; i < 2; i++) {
+        freeTarget(_texDepth[i]);
+        freeTarget(_texAccum[i]);
+        freeTarget(_texFinalHistory[i]);
+        freeTarget(_texVolumetric[i]);
+    }
+    
+    freeTarget(_halfDistTexture);
+}
+
+void CudaRenderer::OnResize(uint32_t newWidth, uint32_t newHeight) {
+    State::dispWIDTH = newWidth;
+    State::dispHEIGHT = newHeight;
+    State::screenHEIGHT = newWidth;
+    State::screenWIDTH = newHeight;
+    
+    if (_width != newWidth || _height != newHeight) {
+        freeRenderTargets();
+        createRenderTarget(newWidth, newHeight);
+    }
+}
+
+void CudaRenderer::ResetScaler() {
+    _scalerNeedsReset = true;
+}
+
+void CudaRenderer::GenerateWorld() {
+    _materialMap.GenerateDynamic();
+}
+
+// ============================================================================
+// MAIN DRAW LOOP (mirroring MetalRenderer.mm lines 197-549)
+// ============================================================================
+
+void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
+    int currIdx = _frameIndex % 2;
+    int prevIdx = (_frameIndex + 1) % 2;
+    
+    // Lines 202-219: Prepare CameraData
+    CameraData camData;
+    camData.position = make_float3(
+        (float)character.position.x,
+        (float)character.position.y,
+        (float)character.position.z
     );
-}
-
-__host__ CudaRenderer::CudaRenderer() 
-{
-    Timer t1("allocating");
+    camData.forward = make_float3(
+        (float)character.direction.x,
+        (float)character.direction.y,
+        (float)character.direction.z
+    );
     
-    cArray.Allocate(BYTESIZE);
-    bitsArray = new uint32_t[BYTESIZE / 4];
-    csdf.AllocateSDF();
-    GIdata.AllocateGI();
-
-    t1.s();
-
-    Timer t2("BUILDING FINE ARRAY");
-    cArray.fill();
-    cArray.readback(bitsArray);
-    t2.s();
-
-    Timer t3("BUILDING CSDF");
-    csdf.GenerateSDF(cArray);
-    t3.s();
-
-    Timer t4("Building GI");
-    // The constructor for Texturepack already loads the texture
-    GIdata.InitializeGIData(cArray, csdf, texturepack);
-    t4.s();
+    float tanHalfFov = tanf(glm::radians(character.FOV) * 0.5f);
+    float aspect = (float)State::dispWIDTH / (float)State::dispHEIGHT;
+    glm::vec3 sRight = character.camera.right * tanHalfFov * aspect;
+    glm::vec3 sUp = character.camera.up * tanHalfFov;
     
-    std::cout << "CudaRenderer initialized and world generated." << std::endl;
+    camData.right = make_float3(sRight.x, sRight.y, sRight.z);
+    camData.up = make_float3(sUp.x, sUp.y, sUp.z);
+    camData.jitter = make_float2(character.jitterX, character.jitterY);
+    memcpy(&camData.unjitteredViewProjection,
+           &character.unjitteredViewProjectionMatrix, sizeof(simd_float4x4));
+    memcpy(&camData.prevUnjitteredViewProjection,
+           &character.lastRenderedViewProjectionMatrix, sizeof(simd_float4x4));
+    
+    // Lines 221-227: Prepare FrameData
+    FrameData frameData;
+    frameData.sunDirection = normalize(make_float3(10.f, 5.f, -4.f));
+    // Use system clock for time
+    #ifdef _WIN32
+    frameData.time = (float)(clock() % (CLOCKS_PER_SEC * 3600)) / CLOCKS_PER_SEC;
+    #else
+    frameData.time = (float)(clock() % (CLOCKS_PER_SEC * 3600)) / CLOCKS_PER_SEC;
+    #endif
+    frameData.deltaTime = 0.016f;  // TODO: Calculate actual delta time
+    
+    // Lines 229-236: Update material map streaming
+    float3 camPosSimd = make_float3(
+        (float)character.position.x,
+        (float)character.position.y,
+        (float)character.position.z
+    );
+    bool sectorsChanged = _materialMap.UpdateStreaming(camPosSimd);
+    if (sectorsChanged) {
+        _scalerNeedsReset = true;
+    }
+    frameData.worldOrigin = _materialMap.GetWorldOrigin();
+    
+    // Lines 238-268: Prepare character data
+    CharacterGPUData charData;
+    memset(&charData, 0, sizeof(CharacterGPUData));
+    
+    int activeChars = 0;
+    auto appendCharacter = [&](const Character& c) {
+        if (activeChars < MAX_CHARACTERS) {
+            memcpy(&charData.invBoundingBoxes[activeChars],
+                   &c.boundingBox.inverseModelMatrix, sizeof(simd_float4x4));
+            memcpy(&charData.invBodyParts[activeChars * 6 + 0],
+                   &c.head.inverseModelMatrix, sizeof(simd_float4x4));
+            memcpy(&charData.invBodyParts[activeChars * 6 + 1],
+                   &c.trunk.inverseModelMatrix, sizeof(simd_float4x4));
+            memcpy(&charData.invBodyParts[activeChars * 6 + 2],
+                   &c.leftArm.inverseModelMatrix, sizeof(simd_float4x4));
+            memcpy(&charData.invBodyParts[activeChars * 6 + 3],
+                   &c.rightArm.inverseModelMatrix, sizeof(simd_float4x4));
+            memcpy(&charData.invBodyParts[activeChars * 6 + 4],
+                   &c.leftLeg.inverseModelMatrix, sizeof(simd_float4x4));
+            memcpy(&charData.invBodyParts[activeChars * 6 + 5],
+                   &c.rightLeg.inverseModelMatrix, sizeof(simd_float4x4));
+            activeChars++;
+        }
+    };
+    
+    appendCharacter(character);
+    for (const auto& npc : State::state.otherCharacters) {
+        appendCharacter(npc);
+    }
+    charData.numCharacters = activeChars;
+    
+    // Upload character data to GPU
+    CUDA_CHECK(cudaMemcpyAsync(_characterBuffer, &charData, sizeof(CharacterGPUData),
+                               cudaMemcpyHostToDevice, _cudaStream));
+    
+    // Upload constant data
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(c_camera, &camData, sizeof(CameraData),
+                                       0, cudaMemcpyHostToDevice, _cudaStream));
+    CUDA_CHECK(cudaMemcpyToSymbolAsync(c_frame, &frameData, sizeof(FrameData),
+                                       0, cudaMemcpyHostToDevice, _cudaStream));
+    
+    // Grid and block sizes matching Metal
+    dim3 gridSizeFull((_width + 15) / 16, (_height + 15) / 16);
+    dim3 gridSizeHalf((_width / 2 + 7) / 8, (_height / 2 + 7) / 8);
+    dim3 groupSize16(16, 16);
+    dim3 groupSize8(8, 8);
+    
+    // ============================================================================
+    // PASS 0: Distance Approximation (half-res, 8x8 threads)
+    // Lines 283-305
+    // ============================================================================
+    {
+        // Kernel arguments
+        void* args[] = {
+            &_halfDistTexture.surface,
+            &_materialMap.GetIndirectionPtr(),
+            &_materialMap.GetSectorBufferPtr(),
+            &_materialMap.GetOccupancyPtr(),
+            &_materialMap.GetDataPtr(),
+            &_materialMap.GetSectorMaskPtr(),
+            &_characterBuffer,
+            &_width,
+            &_height
+        };
+        
+        // Launch kernel - kernel defined in preprocessed dist_approx.shader
+        extern __global__ void distApproximationKernel(
+            cudaSurfaceObject_t distSurf,
+            const uint32_t* indirection,
+            const SectorInfo* sectorBuffer,
+            const uint64_t* occupancyBuffer,
+            const uint8_t* dataBuffer,
+            const uint64_t* sectorMaskBuffer,
+            const CharacterGPUData* charData,
+            int width,
+            int height
+        );
+        
+        CUDA_CHECK(cudaLaunchKernel(
+            (const void*)distApproximationKernel,
+            gridSizeHalf, groupSize8,
+            args, 0, _cudaStream
+        ));
+        CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+    }
+    
+    // ============================================================================
+    // PASS 1: GBuffer + Direct Light (full-res, 16x16 threads)
+    // Lines 317-345
+    // ============================================================================
+    {
+        void* args[] = {
+            &_texDirectLight.surface,
+            &_texAlbedo.surface,
+            &_texNormal.surface,
+            &_texMotion.surface,
+            &_texDepth[currIdx].surface,
+            &_halfDistTexture.texture,
+            &_texturepack.getTextureObject(),
+            &_materialMap.GetIndirectionPtr(),
+            &_materialMap.GetSectorBufferPtr(),
+            &_materialMap.GetOccupancyPtr(),
+            &_materialMap.GetDataPtr(),
+            &_materialMap.GetSectorMaskPtr(),
+            &_characterBuffer,
+            &_width,
+            &_height
+        };
+        
+        extern __global__ void GBufferAndDirectLight(
+            cudaSurfaceObject_t texDirectLight,
+            cudaSurfaceObject_t texAlbedo,
+            cudaSurfaceObject_t texNormal,
+            cudaSurfaceObject_t texMotion,
+            cudaSurfaceObject_t texDepth,
+            cudaTextureObject_t halfDistTex,
+            cudaTextureObject_t textureAtlas,
+            const uint32_t* indirection,
+            const SectorInfo* sectorBuffer,
+            const uint64_t* occupancyBuffer,
+            const uint8_t* dataBuffer,
+            const uint64_t* sectorMaskBuffer,
+            const CharacterGPUData* charData,
+            int width,
+            int height
+        );
+        
+        CUDA_CHECK(cudaLaunchKernel(
+            (const void*)GBufferAndDirectLight,
+            gridSizeFull, groupSize16,
+            args, 0, _cudaStream
+        ));
+        CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+    }
+    
+    // ============================================================================
+    // PASS 2: Indirect Bounce (full-res)
+    // Lines 355-380
+    // ============================================================================
+    {
+        void* args[] = {
+            &_texRawIndirect.surface,
+            &_texNormal.texture,
+            &_texDepth[currIdx].texture,
+            &_materialMap.GetIndirectionPtr(),
+            &_materialMap.GetSectorBufferPtr(),
+            &_materialMap.GetOccupancyPtr(),
+            &_materialMap.GetDataPtr(),
+            &_materialMap.GetSectorMaskPtr(),
+            &_characterBuffer,
+            &_width,
+            &_height
+        };
+        
+        extern __global__ void IndirectBounce(
+            cudaSurfaceObject_t texRawIndirect,
+            cudaTextureObject_t texNormal,
+            cudaTextureObject_t texDepth,
+            const uint32_t* indirection,
+            const SectorInfo* sectorBuffer,
+            const uint64_t* occupancyBuffer,
+            const uint8_t* dataBuffer,
+            const uint64_t* sectorMaskBuffer,
+            const CharacterGPUData* charData,
+            int width,
+            int height
+        );
+        
+        CUDA_CHECK(cudaLaunchKernel(
+            (const void*)IndirectBounce,
+            gridSizeFull, groupSize16,
+            args, 0, _cudaStream
+        ));
+        CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+    }
+    
+    // ============================================================================
+    // PASS 3: Temporal Accumulation
+    // Lines 390-405
+    // ============================================================================
+    {
+        void* args[] = {
+            &_texAccum[currIdx].surface,
+            &_texRawIndirect.texture,
+            &_texAccum[prevIdx].texture,
+            &_texMotion.texture,
+            &_texDepth[currIdx].texture,
+            &_texDepth[prevIdx].texture,
+            &_texDirectLight.texture,
+            &_width,
+            &_height
+        };
+        
+        extern __global__ void TemporalAccumulation(
+            cudaSurfaceObject_t texAccum,
+            cudaTextureObject_t texRawIndirect,
+            cudaTextureObject_t texHistory,
+            cudaTextureObject_t texMotion,
+            cudaTextureObject_t texDepth,
+            cudaTextureObject_t texPrevDepth,
+            cudaTextureObject_t texDirect,
+            int width,
+            int height
+        );
+        
+        CUDA_CHECK(cudaLaunchKernel(
+            (const void*)TemporalAccumulation,
+            gridSizeFull, groupSize16,
+            args, 0, _cudaStream
+        ));
+        CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+    }
+    
+    // ============================================================================
+    // PASS 4: Bilateral Denoise (3 iterations: step 1, 2, 4)
+    // Lines 412-436
+    // ============================================================================
+    {
+        extern __global__ void BilateralDenoise(
+            cudaSurfaceObject_t output,
+            cudaTextureObject_t input,
+            cudaTextureObject_t texNormal,
+            cudaTextureObject_t texDepth,
+            int stepWidth,
+            int width,
+            int height
+        );
+        
+        // Iteration 1: step = 1
+        {
+            int stepWidth = 1;
+            void* args[] = {
+                &_texDenoiseTemp.surface,
+                &_texAccum[currIdx].texture,
+                &_texNormal.texture,
+                &_texDepth[currIdx].texture,
+                &stepWidth,
+                &_width,
+                &_height
+            };
+            CUDA_CHECK(cudaLaunchKernel(
+                (const void*)BilateralDenoise,
+                gridSizeFull, groupSize16,
+                args, 0, _cudaStream
+            ));
+            CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+        }
+        
+        // Iteration 2: step = 2
+        {
+            int stepWidth = 2;
+            void* args[] = {
+                &_texDenoised.surface,
+                &_texDenoiseTemp.texture,
+                &_texNormal.texture,
+                &_texDepth[currIdx].texture,
+                &stepWidth,
+                &_width,
+                &_height
+            };
+            CUDA_CHECK(cudaLaunchKernel(
+                (const void*)BilateralDenoise,
+                gridSizeFull, groupSize16,
+                args, 0, _cudaStream
+            ));
+            CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+        }
+        
+        // Iteration 3: step = 4
+        {
+            int stepWidth = 4;
+            void* args[] = {
+                &_texDenoiseTemp.surface,
+                &_texDenoised.texture,
+                &_texNormal.texture,
+                &_texDepth[currIdx].texture,
+                &stepWidth,
+                &_width,
+                &_height
+            };
+            CUDA_CHECK(cudaLaunchKernel(
+                (const void*)BilateralDenoise,
+                gridSizeFull, groupSize16,
+                args, 0, _cudaStream
+            ));
+            CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+        }
+    }
+    
+    // ============================================================================
+    // PASS 5: Volumetric Fog (half-res)
+    // Lines 448-468
+    // ============================================================================
+    {
+        void* args[] = {
+            &_texVolumetric[currIdx].surface,
+            &_texDepth[currIdx].texture,
+            &_texVolumetric[prevIdx].texture,
+            &_materialMap.GetIndirectionPtr(),
+            &_materialMap.GetSectorBufferPtr(),
+            &_materialMap.GetSectorMaskPtr(),
+            &_characterBuffer,
+            &_width,
+            &_height
+        };
+        
+        extern __global__ void VolumetricFog(
+            cudaSurfaceObject_t texVolumetric,
+            cudaTextureObject_t texDepth,
+            cudaTextureObject_t texHistory,
+            const uint32_t* indirection,
+            const SectorInfo* sectorBuffer,
+            const uint64_t* sectorMaskBuffer,
+            const CharacterGPUData* charData,
+            int width,
+            int height
+        );
+        
+        CUDA_CHECK(cudaLaunchKernel(
+            (const void*)VolumetricFog,
+            gridSizeHalf, groupSize8,
+            args, 0, _cudaStream
+        ));
+        CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+    }
+    
+    // ============================================================================
+    // PASS 6: Compute Exposure (single workgroup)
+    // Lines 478-486
+    // ============================================================================
+    {
+        void* args[] = {
+            &_exposureBuffer,
+            &_texDirectLight.texture,
+            &_texAccum[currIdx].texture,
+            &_texAlbedo.texture,
+            &_width,
+            &_height
+        };
+        
+        extern __global__ void ComputeExposure(
+            ExposureData* exposure,
+            cudaTextureObject_t texDirect,
+            cudaTextureObject_t texAccum,
+            cudaTextureObject_t texAlbedo,
+            int width,
+            int height
+        );
+        
+        dim3 singleGroup(16, 16);
+        CUDA_CHECK(cudaLaunchKernel(
+            (const void*)ComputeExposure,
+            singleGroup, singleGroup,
+            args, 0, _cudaStream
+        ));
+        // No sync needed - runs parallel until composite
+    }
+    
+    // ============================================================================
+    // PASS 7: Composite (full-res)
+    // Lines 496-506
+    // ============================================================================
+    {
+        void* args[] = {
+            &_texCompositeResult.surface,
+            &_texDirectLight.texture,
+            &_texDenoiseTemp.texture,  // Output from final denoise iteration
+            &_texAlbedo.texture,
+            &_texDepth[currIdx].texture,
+            &_texVolumetric[currIdx].texture,
+            &_exposureBuffer,
+            &_width,
+            &_height
+        };
+        
+        extern __global__ void Composite(
+            cudaSurfaceObject_t texFinal,
+            cudaTextureObject_t texDirect,
+            cudaTextureObject_t texAccum,
+            cudaTextureObject_t texAlbedo,
+            cudaTextureObject_t texDepth,
+            cudaTextureObject_t texVolumetric,
+            const ExposureData* exposure,
+            int width,
+            int height
+        );
+        
+        CUDA_CHECK(cudaLaunchKernel(
+            (const void*)Composite,
+            gridSizeFull, groupSize16,
+            args, 0, _cudaStream
+        ));
+        CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
+    }
+    
+    // Lines 546-548: Update frame state
+    _frameIndex++;
+    const_cast<Character&>(character).lastRenderedViewProjectionMatrix =
+        character.unjitteredViewProjectionMatrix;
 }
 
-CudaRenderer::~CudaRenderer()
-{
-    // Make sure to free the host-side memory
-    delete[] bitsArray;
-}
+// ============================================================================
+// KERNEL INCLUDES (preprocessed shader files)
+// These will be generated by CMake from .shader sources
+// ============================================================================
+
+// Note: These includes are placeholders. The actual .cu files will be generated
+// by CMake preprocessing the .shader files. For now, we declare the kernels
+// as extern above and they will be linked from the preprocessed files.
+
+// #include "cuda_kernels/tables.cu"
+// #include "cuda_kernels/dist_approx.cu"
+// #include "cuda_kernels/direct_light.cu"
+// #include "cuda_kernels/indirect_bounce.cu"
+// #include "cuda_kernels/temporal_acc.cu"
+// #include "cuda_kernels/denoise.cu"
+// #include "cuda_kernels/volumetric.cu"
+// #include "cuda_kernels/exposure.cu"
+// #include "cuda_kernels/composite.cu"

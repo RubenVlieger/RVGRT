@@ -33,6 +33,59 @@ if(WIN32)
     find_package(CUDAToolkit REQUIRED)
     message(STATUS "Found CUDA Toolkit: ${CUDAToolkit_INCLUDE_DIRS}")
 
+    # --- Find C preprocessor for shader preprocessing ---
+    find_program(CPP_TOOL cpp NAMES cpp clang-cpp 
+        PATHS "C:/Program Files/LLVM/bin" 
+              "C:/msys64/mingw64/bin"
+              "C:/mingw64/bin"
+        DOC "C preprocessor for shader files")
+    
+    if(NOT CPP_TOOL)
+        message(WARNING "C preprocessor (cpp) not found. Shader preprocessing disabled.")
+        message(STATUS "Install LLVM or MinGW to enable shader preprocessing")
+    else()
+        message(STATUS "Found C preprocessor: ${CPP_TOOL}")
+    endif()
+
+    # --- Shader preprocessing ---
+    if(CPP_TOOL)
+        set(SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/renderer/kernels/shaders")
+        set(CUDA_KERNEL_DIR "${CMAKE_CURRENT_BINARY_DIR}/cuda_kernels")
+        file(MAKE_DIRECTORY ${CUDA_KERNEL_DIR})
+
+        set(SHADER_FILES
+            tables.shader
+            dist_approx.shader
+            direct_light.shader
+            indirect_bounce.shader
+            temporal_acc.shader
+            denoise.shader
+            volumetric.shader
+            exposure.shader
+            composite.shader
+            material_gen.shader
+        )
+
+        set(CUDA_KERNEL_FILES "")
+        foreach(SHADER ${SHADER_FILES})
+            set(SHADER_PATH "${SHADER_SOURCE_DIR}/${SHADER}")
+            set(CUDA_PATH "${CUDA_KERNEL_DIR}/${SHADER}.cu")
+            list(APPEND CUDA_KERNEL_FILES ${CUDA_PATH})
+            
+            # Preprocess shader: strip metal_stdlib, define __CUDA_ARCH__
+            add_custom_command(
+                OUTPUT ${CUDA_PATH}
+                COMMAND ${CPP_TOOL} -E -P -D__CUDA_ARCH__=750 
+                    -I${CMAKE_SOURCE_DIR}/include 
+                    "${SHADER_PATH}" > "${CUDA_PATH}"
+                DEPENDS "${SHADER_PATH}"
+                COMMENT "Preprocessing ${SHADER} for CUDA"
+            )
+        endforeach()
+
+        add_custom_target(GenerateCudaKernels DEPENDS ${CUDA_KERNEL_FILES})
+    endif()
+
     # --- ALL SOURCES for the Windows build ---
     set(WIN_SOURCES
         src/main.cpp
@@ -42,37 +95,74 @@ if(WIN32)
         src/platform/win32_main.cpp
         src/platform/WindowsPlatform.cpp
         src/renderer/D3D12Device.cpp
+        src/renderer/TexturePack_impl.cu
         src/platform/Win32NetworkClient.cpp
     )
-    file(GLOB_RECURSE WIN_CUDA_SOURCES CONFIGURE_DEPENDS "src/*.cu")
+    
+    # Core CUDA renderer files
+    set(WIN_CUDA_SOURCES
+        src/renderer/CudaRenderer.cu
+        src/renderer/CudaMaterialMap.cu
+        src/renderer/CudaBrickPool.cu
+    )
+    
+    # Add preprocessed kernel files if available
+    if(CUDA_KERNEL_FILES)
+        list(APPEND WIN_CUDA_SOURCES ${CUDA_KERNEL_FILES})
+        message(STATUS "Using preprocessed CUDA kernels from shaders")
+    else()
+        message(WARNING "Shader preprocessing disabled. Kernels must be provided manually.")
+    endif()
 
     # --- Create the Windows Executable ---
     add_executable(${APP_NAME} WIN32
         ${WIN_SOURCES}
         ${WIN_CUDA_SOURCES}
     )
+    
+    # Add dependency on shader preprocessing
+    if(CPP_TOOL AND CUDA_KERNEL_FILES)
+        add_dependencies(${APP_NAME} GenerateCudaKernels)
+    endif()
+    
     target_sources(${APP_NAME} PRIVATE exports.def)
 
     # --- CUDA Properties ---
     set_property(TARGET ${APP_NAME} PROPERTY CUDA_SEPARABLE_COMPILATION ON)
     set_property(TARGET ${APP_NAME} PROPERTY CUDA_ARCHITECTURES native)
 
-    # --- DirectX and Streamline Linking ---
+    # --- DirectX Linking ---
     target_link_libraries(${APP_NAME} PRIVATE d3d12 dxgi dxguid)
     add_compile_definitions(D3D12)
     
-    set(STREAMLINE_SDK_PATH "${CMAKE_SOURCE_DIR}/vendor/streamline-sdk-v2.9.0")
-    target_include_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/include")
-    target_link_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/lib/x64")
-    target_link_libraries(${APP_NAME} PRIVATE sl.interposer)
-    
-    add_custom_command(
-        TARGET ${APP_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/sl.interposer.dll" $<TARGET_FILE_DIR:${APP_NAME}>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/sl.dlss.dll" $<TARGET_FILE_DIR:${APP_NAME}>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/nvngx_dlss.dll" $<TARGET_FILE_DIR:${APP_NAME}>
-        COMMENT "Copying Streamline DLLs to output directory..."
-    )
+    # --- Optional Streamline SDK ---
+    option(USE_STREAMLINE "Enable NVIDIA Streamline SDK (DLSS)" OFF)
+    if(USE_STREAMLINE)
+        set(STREAMLINE_SDK_PATH "${CMAKE_SOURCE_DIR}/vendor/streamline-sdk-v2.9.0")
+        if(EXISTS "${STREAMLINE_SDK_PATH}/include/sl.h")
+            message(STATUS "Streamline SDK found, enabling DLSS support")
+            target_compile_definitions(${APP_NAME} PRIVATE HAS_STREAMLINE)
+            target_include_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/include")
+            target_link_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/lib/x64")
+            target_link_libraries(${APP_NAME} PRIVATE sl.interposer)
+            
+            add_custom_command(
+                TARGET ${APP_NAME} POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+                    "${STREAMLINE_SDK_PATH}/bin/x64/sl.interposer.dll" 
+                    $<TARGET_FILE_DIR:${APP_NAME}>
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+                    "${STREAMLINE_SDK_PATH}/bin/x64/sl.dlss.dll" 
+                    $<TARGET_FILE_DIR:${APP_NAME}>
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different 
+                    "${STREAMLINE_SDK_PATH}/bin/x64/nvngx_dlss.dll" 
+                    $<TARGET_FILE_DIR:${APP_NAME}>
+                COMMENT "Copying Streamline DLLs to output directory..."
+            )
+        else()
+            message(WARNING "Streamline SDK not found at ${STREAMLINE_SDK_PATH}, DLSS disabled")
+        endif()
+    endif()
 
 elseif(APPLE)
     #======================================#

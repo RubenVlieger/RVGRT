@@ -1,43 +1,85 @@
 #pragma once
-#include <cstdint>
-#include <glm/glm.hpp>
-#include "CArray.cuh"
-#include "CudaD3D12Texture.cuh"
-#include "CoarseArray.cuh"
-#include "Texturepack.cuh"
-#include "renderer/Renderer.hpp" // Inherit from the new interface
 
-// This is the concrete implementation of the Renderer for CUDA/D3D12.
+#include "renderer/Renderer.hpp"
+#include "renderer/CudaMaterialMap.cuh"
+#include "Texturepack.h"
+#include <cuda_runtime.h>
+
+class Character;
+
+/**
+ * CudaRenderer - CUDA implementation of the 8-pass deferred pipeline.
+ * 
+ * Mirrors MetalRenderer exactly for maintainability and feature parity.
+ * Uses CUDA Runtime API with the same pass order and buffer management.
+ */
 class CudaRenderer : public Renderer {
 public:
     CudaRenderer();
-    ~CudaRenderer();
+    ~CudaRenderer() override;
 
-    // The implementation of the virtual Draw function
     void Draw(const Character& character, unsigned int frameCount) override;
-
-    // All the CUDA/D3D12 specific data remains here
-    uint32_t* bitsArray;
-    CArray cArray;
-    Texturepack texturepack;
-    CoarseArray csdf;
-    CoarseArray GIdata;
-    CudaD3D12Texture lowResColorBuffer;
-    CudaD3D12Texture upscaledColorBuffer;
-    CudaD3D12Texture motionVectorTex;
-    CudaD3D12Texture depthTex;
-    CudaD3D12Texture shadowTex;
-    CudaD3D12Texture halfDistBuffer;
+    
+    // Matching MetalRenderer interface
+    void GenerateWorld();
+    void OnResize(uint32_t newWidth, uint32_t newHeight);
+    void ResetScaler();
+    
+    // For D3D12 interop - get final output surface
+    cudaSurfaceObject_t GetOutputSurface() const { return _texCompositeResult.surface; }
+    cudaTextureObject_t GetOutputTexture() const { return _texCompositeResult.texture; }
 
 private:
-    void drawCUDA(const glm::vec3& pos,
-                  const glm::vec3& fo,
-                  const glm::vec3& up,
-                  const glm::vec3& ri,
-                  const glm::mat4& unjitteredViewProjectionMatrix,
-                  const glm::mat4& prevUnjitteredViewProjectionMatrix,
-                  float jitterX, float jitterY);
-
-    CudaRenderer(const CudaRenderer&) = delete;
-    CudaRenderer& operator=(const CudaRenderer&) = delete;
+    void createRenderTarget(uint32_t width, uint32_t height);
+    void freeRenderTargets();
+    
+    // Helper struct bundling array + surface + texture (mirrors MTLTexture concept)
+    struct CudaRenderTarget {
+        cudaArray_t array = nullptr;
+        cudaSurfaceObject_t surface = 0;
+        cudaTextureObject_t texture = 0;
+        
+        bool isValid() const { return array != nullptr; }
+    };
+    
+    void allocateTarget(CudaRenderTarget& target, uint32_t width, uint32_t height, 
+                        cudaChannelFormatDesc format);
+    void freeTarget(CudaRenderTarget& target);
+    
+    // Same member name as MetalRenderer
+    Texturepack _texturepack;
+    
+    // --- Render Targets (mirroring MetalRenderer.hpp lines 64-86) ---
+    CudaRenderTarget _texDirectLight;      // RGBA16F
+    CudaRenderTarget _texAlbedo;           // RGBA8
+    CudaRenderTarget _texNormal;           // RGBA16F (was RGBA8Snorm in Metal, using 16F for simplicity)
+    CudaRenderTarget _texMotion;           // RG16F
+    CudaRenderTarget _texRawIndirect;      // RGBA16F
+    CudaRenderTarget _texDenoised;         // RGBA16F
+    CudaRenderTarget _texFinal;            // RGBA8
+    CudaRenderTarget _texDenoiseTemp;      // RGBA16F
+    CudaRenderTarget _texCompositeResult;  // RGBA16F
+    
+    CudaRenderTarget _texDepth[2];         // R32F, ping-pong
+    CudaRenderTarget _texAccum[2];         // RGBA16F, ping-pong
+    CudaRenderTarget _texFinalHistory[2];  // RGBA16F
+    CudaRenderTarget _texVolumetric[2];    // RGBA16F, half-res, ping-pong
+    
+    CudaRenderTarget _halfDistTexture;     // R32F, half-res
+    
+    // --- Buffers (mirroring MetalRenderer) ---
+    void* _exposureBuffer = nullptr;       // Device pointer to ExposureData
+    void* _characterBuffer = nullptr;      // Device pointer to CharacterGPUData
+    
+    // --- Core Systems ---
+    CudaMaterialMap _materialMap;
+    
+    // --- State (mirroring MetalRenderer.hpp lines 94-97) ---
+    uint32_t _frameIndex = 0;
+    uint32_t _width = 0;
+    uint32_t _height = 0;
+    bool _scalerNeedsReset = true;
+    
+    // CUDA stream for all rendering operations (like MTLCommandQueue)
+    cudaStream_t _cudaStream = nullptr;
 };

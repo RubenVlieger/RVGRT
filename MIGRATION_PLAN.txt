@@ -535,32 +535,25 @@ Expected: Zero compilation errors
 - ❌ include/renderer/intersections_cuda.h - MERGED into intersections.h
 - ❌ All .metal kernel files (replaced by unified .shader sources)
 
+**COMPLETED Files (Phase 5):**
+1. ✅ include/renderer/CudaRender.cuh (COMPLETE REWRITE)
+2. ✅ src/renderer/CudaRenderer.cu (COMPLETE REWRITE - ~550 lines)
+3. ✅ CMakeLists.txt (shader preprocessing + optional Streamline)
+
 **REMAINING to implement:**
-1. ⏳ include/renderer/CudaRender.cuh (rewrite)
-2. ⏳ src/renderer/CudaRenderer.cu (rewrite)
-3. ⏳ src/platform/win32_main.cpp (update)
-4. ⏳ CMakeLists.txt (shader preprocessing + make Streamline optional)
+1. ⏳ src/platform/win32_main.cpp (update for new Renderer API)
+2. ⏳ CUDA-D3D12 zero-copy interop implementation
 
 **Summary:**
 - ✅ Phase 1: Foundation headers (DONE)
 - ✅ Phase 2: Cross-platform intersections.h (DONE)
 - ✅ Phase 3: CUDA data structures (DONE)
 - ✅ Phase 4: Unified Shader System (DONE - 10 shaders, ~2000 lines)
-- ⏳ Phase 5: CUDA Renderer Integration (PENDING)
+- ✅ Phase 5: CUDA Renderer Integration (DONE - ~550 lines)
 - ⏳ Phase 6: Platform integration (PENDING)
 - ⏳ Phase 7: Verification (PENDING)
 
-Current code: ~3800 lines written
----
-Implementation Timeline
-Suggested Order:
-1. x Phase 1 (1-2 hours): Foundation headers
-2. x Phase 2 (3-4 hours): CUDA data structures
-3. x Phase 3 (8-12 hours): Render pipeline kernels (biggest task)
-4. x Phase 4 (1-2 hours): Platform integration
-5. x Phase 5 (30 min): CMake updates
-6. X Phase 6 (variable): Verification
-Total Estimated Time: 15-20 hours of focused work
+
 ---
 Risk Mitigation
 What could go wrong:
@@ -570,3 +563,218 @@ What could go wrong:
 4. Streamline SDK licensing → Make it optional from the start
 ---
 Would you like me to proceed with implementation? I recommend starting with Phase 1 (foundation headers) to get the shared code compiling, then moving through the phases sequentially"
+
+## Phase 5: CUDA Renderer Integration (COMPLETED 2026-03-10)
+
+### Design Philosophy
+Mirrored MetalRenderer exactly for maintainability and future feature parity. Same class structure, method names, and 8-pass pipeline order.
+
+### Architecture Mapping: Metal → CUDA
+
+| Metal Concept | CUDA Equivalent |
+|---------------|-----------------|
+| `id<MTLDevice>` | Implicit (CUDA context) |
+| `id<MTLTexture>` | `cudaArray_t` + `cudaSurfaceObject_t` (write) + `cudaTextureObject_t` (read) |
+| `id<MTLBuffer>` | `void*` (device pointer) |
+| `id<MTLComputePipelineState>` | Direct kernel function pointers (Runtime API) |
+| `MTLComputeCommandEncoder` | Kernel launch configuration |
+| `[encoder dispatchThreads:]` | `cudaLaunchKernel` |
+| `MTLSize` | `dim3` |
+
+### Files Modified:
+
+**CMakeLists.txt** (MODIFIED - Windows section)
+- Added shader preprocessing with C preprocessor detection
+- Made Streamline SDK optional via `USE_STREAMLINE` option
+- Organized CUDA source files explicitly (removed GLOB pattern)
+- Added build dependencies for generated kernel files
+- Improved error messages and warnings
+
+**include/renderer/CudaRender.cuh** (COMPLETE REWRITE)
+- New interface mirroring MetalRenderer exactly
+- `CudaRenderTarget` struct bundles array + surface + texture (mirrors MTLTexture)
+- Same render target naming: `_texDirectLight`, `_texAlbedo`, `_texNormal`, etc.
+- Same member variables: `_texturepack`, `_materialMap`, `_frameIndex`, `_scalerNeedsReset`
+- Methods: `GenerateWorld()`, `OnResize()`, `ResetScaler()`, `GetOutputSurface()`
+
+**src/renderer/CudaRenderer.cu** (COMPLETE REWRITE - ~550 lines)
+- Constructor: Creates CUDA stream, initializes exposure/character buffers, generates world
+- Destructor: Properly frees all CUDA resources (surfaces, textures, arrays)
+- `createRenderTarget()`: EXACT format mapping from Metal (RGBA16F, RGBA8, RG16F, R32F)
+- `allocateTarget()` / `freeTarget()`: Helper methods for CUDA array management
+- `Draw()`: Line-by-line mirror of MetalRenderer::Draw() with same pass order
+
+### Pass Execution Order (identical to Metal):
+
+1. **Pass 0: Distance Approximation** (half-res, 8x8 threads)
+   - Kernel: `distApproximationKernel`
+   - Output: `_halfDistTexture`
+   - Barrier: Full sync before GBuffer
+
+2. **Pass 1: GBuffer + Direct Light** (full-res, 16x16 threads)
+   - Kernel: `GBufferAndDirectLight`
+   - Outputs: `_texDirectLight`, `_texAlbedo`, `_texNormal`, `_texMotion`, `_texDepth[currIdx]`
+   - Inputs: Half-res distance, texture atlas, material map buffers
+
+3. **Pass 2: Indirect Bounce** (full-res)
+   - Kernel: `IndirectBounce`
+   - Output: `_texRawIndirect`
+   - Inputs: Normal, depth, material map
+
+4. **Pass 3: Temporal Accumulation**
+   - Kernel: `TemporalAccumulation`
+   - Output: `_texAccum[currIdx]`
+   - Inputs: Raw indirect, history, motion vectors, depth (current & prev)
+
+5. **Pass 4: Bilateral Denoise** (3 iterations: step 1, 2, 4)
+   - Kernel: `BilateralDenoise`
+   - Ping-pong between `_texDenoiseTemp` and `_texDenoised`
+   - Barrier after each iteration
+
+6. **Pass 5: Volumetric Fog** (half-res)
+   - Kernel: `VolumetricFog`
+   - Output: `_texVolumetric[currIdx]`
+   - Inputs: Depth, history, material map
+
+7. **Pass 6: Compute Exposure** (single workgroup)
+   - Kernel: `ComputeExposure`
+   - Output: `_exposureBuffer`
+   - Inputs: Direct light, accumulation, albedo
+   - No sync (runs parallel until composite)
+
+8. **Pass 7: Composite** (full-res)
+   - Kernel: `Composite`
+   - Output: `_texCompositeResult`
+   - Inputs: Direct, denoised temp, albedo, depth, volumetric, exposure
+
+### Key Implementation Details:
+
+**Constant Memory:**
+- `__constant__ CameraData c_camera` - Updated per frame via `cudaMemcpyToSymbolAsync`
+- `__constant__ FrameData c_frame` - Updated per frame via `cudaMemcpyToSymbolAsync`
+
+**Error Handling:**
+- Uses `CUDA_CHECK` macro for all CUDA calls
+- Prints error message and exits on failure (consistent with existing codebase)
+
+**Render Target Formats (matching Metal exactly):**
+- RGBA16F: `cudaCreateChannelDescHalf4()`
+- RGBA8: `cudaCreateChannelDesc(8,8,8,8, cudaChannelFormatKindUnsigned)`
+- RG16F: `cudaCreateChannelDescHalf2()`
+- R32F: `cudaCreateChannelDesc<float>()`
+
+**Texture/Surface Objects:**
+- Surfaces for kernel write access (stores pixel data)
+- Textures for kernel read access (with filtering)
+- Both reference the same underlying `cudaArray_t`
+
+**Synchronization:**
+- Single CUDA stream (`_cudaStream`) for all rendering
+- `cudaStreamSynchronize` after each pass (matching Metal barriers)
+- Ensures sequential execution like Metal command buffer
+
+### CMakeLists.txt Updates (REQUIRED - see CMakeLists_cuda.txt):
+
+**Shader Preprocessing:**
+```cmake
+find_program(CPP_TOOL cpp)
+set(SHADER_FILES tables.shader dist_approx.shader ...)
+foreach(SHADER ${SHADER_FILES})
+    add_custom_command(
+        OUTPUT ${CUDA_PATH}
+        COMMAND ${CPP_TOOL} -E -P -D__CUDA_ARCH__=750 
+            -I${CMAKE_SOURCE_DIR}/include ${SHADER} > ${CUDA_PATH}
+    )
+endforeach()
+add_custom_target(GenerateCudaKernels DEPENDS ${CUDA_KERNEL_FILES})
+add_dependencies(${APP_NAME} GenerateCudaKernels)
+```
+
+**Optional Streamline SDK:**
+```cmake
+option(USE_STREAMLINE "Enable NVIDIA Streamline SDK (DLSS)" OFF)
+if(USE_STREAMLINE AND EXISTS "${STREAMLINE_SDK_PATH}/include/sl.h")
+    target_compile_definitions(${APP_NAME} PRIVATE HAS_STREAMLINE)
+    # ... link and copy DLLs
+endif()
+```
+
+**CUDA Source Files:**
+```cmake
+set(WIN_CUDA_SOURCES
+    src/renderer/CudaRenderer.cu
+    src/renderer/CudaMaterialMap.cu
+    src/renderer/CudaBrickPool.cu
+    ${CUDA_KERNEL_FILES}  # Preprocessed shaders
+)
+```
+
+### CMakeLists.txt Changes (COMPLETE):
+
+**Shader Preprocessing (lines 35-76):**
+- Finds C preprocessor (`cpp` or `clang-cpp`) in common Windows locations
+- Preprocesses all 10 `.shader` files to generate `.cu` files in `${CMAKE_BINARY_DIR}/cuda_kernels/`
+- Strips Metal-specific code, defines `__CUDA_ARCH__=750`
+- Creates `GenerateCudaKernels` build target with proper dependencies
+- Build fails gracefully if preprocessor not found (with warning message)
+
+**Source File Organization (lines 79-99):**
+- Separates core CUDA files from preprocessed shaders
+- Explicitly lists: `CudaRenderer.cu`, `CudaMaterialMap.cu`, `CudaBrickPool.cu`
+- Adds `TexturePack_impl.cu` to WIN_SOURCES
+- Removes old GLOB pattern that included obsolete files
+
+**Build Dependencies (lines 108-110):**
+- Makes executable depend on shader preprocessing via `add_dependencies()`
+- Ensures kernels are generated before CUDA compilation
+
+**Optional Streamline SDK (lines 116-143):**
+- New `USE_STREAMLINE` CMake option (default OFF)
+- Only attempts to link if SDK files actually exist
+- Copies required DLLs post-build if enabled
+- Clean fallback with helpful messages if SDK not present
+
+**CUDA Architecture (line 113):**
+- Uses `native` to auto-detect GPU architecture
+- Can be manually set to: 75 (Turing), 80 (Ampere), 86 (Ada)
+
+### Status:
+- ✅ CudaRender.cuh header (COMPLETE)
+- ✅ CudaRenderer.cu implementation (COMPLETE - ~550 lines)
+- ✅ 8-pass pipeline matching Metal exactly (COMPLETE)
+- ✅ CMakeLists.txt shader preprocessing (COMPLETE)
+- ⏳ Compilation testing (PENDING Phase 6)
+
+### Build Requirements:
+
+**Required:**
+- CMake 3.10+
+- CUDA Toolkit (11.0+)
+- Visual Studio 2022 or compatible compiler
+- C Preprocessor (cpp/clang-cpp) - Install LLVM or MinGW
+
+**Optional:**
+- NVIDIA Streamline SDK v2.9.0 (for DLSS support)
+  - Download from: https://github.com/NVIDIAGameWorks/Streamline/releases
+  - Extract to: `vendor/streamline-sdk-v2.9.0/`
+  - Enable with: `cmake .. -DUSE_STREAMLINE=ON`
+
+### Build Commands:
+```bash
+mkdir build && cd build
+
+# Without DLSS:
+cmake .. -G "Visual Studio 17 2022" -A x64
+cmake --build . --config Release
+
+# With DLSS (requires Streamline SDK):
+cmake .. -G "Visual Studio 17 2022" -A x64 -DUSE_STREAMLINE=ON
+cmake --build . --config Release
+```
+
+### Next Steps (Phase 6):
+1. Install C preprocessor (LLVM or MinGW) if not already present
+2. Test compilation on Windows
+3. Implement CUDA-D3D12 zero-copy interop
+4. Update win32_main.cpp for new Renderer API
+
