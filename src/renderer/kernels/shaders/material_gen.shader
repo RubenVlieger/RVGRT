@@ -84,16 +84,10 @@ inline uint GetSectorIndex(uint3 pos, uint sx, uint sy) {
 }
 
 // Kernel: Analyze sectors for initial generation
-#if defined(PLATFORM_METAL)
-kernel void XMap_AnalyzeSectors(
+KERNEL(XMap_AnalyzeSectors)(
     PARAM_BUFFER(uint64_t, resultBuffer, 0),
-    uint3 gid [[thread_position_in_grid]]
+    DECLARE_GID()
 )
-#else
-__global__ void XMap_AnalyzeSectors(
-    ulong* resultBuffer
-)
-#endif
 {
 #if defined(PLATFORM_METAL)
     uint sx = IND_X / 4;
@@ -108,15 +102,23 @@ __global__ void XMap_AnalyzeSectors(
     if (gid.x >= sx || gid.y >= sy || gid.z >= sz) return;
 #endif
 
-    uint sectorIndex = GetSectorIndex(gid, sx, sy);
+    uint sectorIndex = GetSectorIndex(uint3(gid.x, gid.y, gid.z), sx, sy);
+#if defined(PLATFORM_METAL)
     float3 sectorWorldPos = float3(gid) * 32.0f;
+#else
+    float3 sectorWorldPos = make_float3(gid.x, gid.y, gid.z) * 32.0f;
+#endif
     uint64_t activeBricksMask = 0;
 
     for(int i = 0; i < 64; i++) {
         int bx = i & 3;
         int bz = (i >> 2) & 3;
         int by = (i >> 4) & 3;
+#if defined(PLATFORM_METAL)
         float3 brickPos = sectorWorldPos + float3(bx, by, bz) * 8.0f;
+#else
+        float3 brickPos = sectorWorldPos + make_float3(bx, by, bz) * 8.0f;
+#endif
 
         bool active = false;
         for(int dz = 0; dz < 8; dz += 3) {
@@ -138,20 +140,12 @@ __global__ void XMap_AnalyzeSectors(
 }
 
 // Kernel: Analyze sectors for streaming
-#if defined(PLATFORM_METAL)
-kernel void XMap_AnalyzeStreaming(
+KERNEL(XMap_AnalyzeStreaming)(
     PARAM_BUFFER(SectorWorkItem, workItems, 0),
     PARAM_BUFFER(uint64_t, resultBuffer, 1),
     PARAM_CONSTANT(uint, totalItems, 2),
-    uint gid [[thread_position_in_grid]]
+    DECLARE_GID()
 )
-#else
-__global__ void XMap_AnalyzeStreaming(
-    SectorWorkItem* workItems,
-    ulong* resultBuffer,
-    uint totalItems
-)
-#endif
 {
 #if !defined(PLATFORM_METAL)
     uint gid = blockIdx.x * blockDim.x + threadIdx.x;
@@ -159,14 +153,22 @@ __global__ void XMap_AnalyzeStreaming(
     if (gid >= totalItems) return;
 
     SectorWorkItem item = workItems[gid];
+#if defined(PLATFORM_METAL)
     float3 sectorWorldPos = float3(item.worldX, item.worldY, item.worldZ) * 32.0f;
+#else
+    float3 sectorWorldPos = make_float3(item.worldX, item.worldY, item.worldZ) * 32.0f;
+#endif
     uint64_t activeBricksMask = 0;
 
     for(int i = 0; i < 64; i++) {
         int bx = i & 3;
         int bz = (i >> 2) & 3;
         int by = (i >> 4) & 3;
+#if defined(PLATFORM_METAL)
         float3 brickPos = sectorWorldPos + float3(bx, by, bz) * 8.0f;
+#else
+        float3 brickPos = sectorWorldPos + make_float3(bx, by, bz) * 8.0f;
+#endif
 
         bool active = false;
         for(int dz = 0; dz < 8; dz += 3) {
@@ -188,26 +190,14 @@ __global__ void XMap_AnalyzeStreaming(
 }
 
 // Kernel: Fill brick data
-#if defined(PLATFORM_METAL)
 KERNEL(XMap_FillBricks)(
     PARAM_BUFFER(BrickWorkItem, workList, 0),
     PARAM_BUFFER(SectorInfo, sectorBuffer, 1),
     PARAM_BUFFER(uint64_t, occupancyBuffer, 2),
     PARAM_BUFFER(uchar, dataBuffer, 3),
     PARAM_CONSTANT(int3, worldOrigin, 4),
-    
-    uint groupID [[threadgroup_position_in_grid]],
-    uint threadID [[thread_position_in_threadgroup]]
+    DECLARE_GID()
 )
-#else
-KERNEL(XMap_FillBricks)(
-    PARAM_BUFFER(BrickWorkItem, workList, 0),
-    PARAM_BUFFER(SectorInfo, sectorBuffer, 1),
-    PARAM_BUFFER(uint64_t, occupancyBuffer, 2),
-    PARAM_BUFFER(uchar, dataBuffer, 3),
-    PARAM_CONSTANT(int3, worldOrigin, 4)
-)
-#endif
 {
 #if defined(PLATFORM_METAL)
     uint workItemIndex = groupID / 8;
@@ -230,27 +220,45 @@ KERNEL(XMap_FillBricks)(
     uint s_y = s_rem % sy;
     uint s_z = s_rem / sy;
     
+#if defined(PLATFORM_METAL)
     float3 sectorPos = float3(int(s_x) + worldOrigin.x,
                                int(s_y) + worldOrigin.y,
                                int(s_z) + worldOrigin.z) * 32.0f;
+#else
+    float3 sectorPos = make_float3(s_x + worldOrigin.x,
+                                    s_y + worldOrigin.y,
+                                    s_z + worldOrigin.z) * 32.0f;
+#endif
     
     uint b_x = item.localBrickIndex & 3;
     uint b_z = (item.localBrickIndex >> 2) & 3;
     uint b_y = (item.localBrickIndex >> 4) & 3;
     
+#if defined(PLATFORM_METAL)
     float3 brickPos = sectorPos + float3(b_x, b_y, b_z) * 8.0f;
+#else
+    float3 brickPos = sectorPos + make_float3(b_x, b_y, b_z) * 8.0f;
+#endif
     
     uint sb_x = subBrickIndex & 1;
     uint sb_z = (subBrickIndex >> 1) & 1;
     uint sb_y = (subBrickIndex >> 2) & 1;
     
+#if defined(PLATFORM_METAL)
     float3 subBrickPos = brickPos + float3(sb_x, sb_y, sb_z) * 4.0f;
+#else
+    float3 subBrickPos = brickPos + make_float3(sb_x, sb_y, sb_z) * 4.0f;
+#endif
     
     uint v_x = threadID_local & 3;
     uint v_z = (threadID_local >> 2) & 3;
     uint v_y = (threadID_local >> 4) & 3;
     
+#if defined(PLATFORM_METAL)
     float3 voxelPos = subBrickPos + float3(v_x, v_y, v_z);
+#else
+    float3 voxelPos = subBrickPos + make_float3(v_x, v_y, v_z);
+#endif
     
     float density = Evaluate(voxelPos.x, voxelPos.y, voxelPos.z);
     bool isSolid = density > 0.0f;
@@ -339,20 +347,12 @@ ulong pack_4x4x4_block(float3 startPos) {
 }
 
 // Kernel: Fill dynamic atlases
-#if defined(PLATFORM_METAL)
-kernel void FillDynamicAtlases(
+KERNEL(FillDynamicAtlases)(
     PARAM_TEXTURE_READ(tex3d_u32, indirection, 0),
     PARAM_BUFFER(uint, geoPool, 0),
     PARAM_BUFFER(uchar, matPool, 1),
-    uint3 gid [[thread_position_in_grid]]
+    DECLARE_GID()
 )
-#else
-__global__ void FillDynamicAtlases(
-    cudaTextureObject_t indirection,
-    uint* geoPool,
-    uchar* matPool
-)
-#endif
 {
 #if !defined(PLATFORM_METAL)
     int3 gid = make_int3(blockIdx.x * blockDim.x + threadIdx.x,
@@ -375,12 +375,20 @@ __global__ void FillDynamicAtlases(
     uint64_t geoBaseIdx = (uint64_t)brickIdx * 8;
     uint64_t matBaseIdx = (uint64_t)brickIdx * 512;
 
+#if defined(PLATFORM_METAL)
     float3 worldBase = float3(gid) * 8.0f;
+#else
+    float3 worldBase = make_float3(gid.x, gid.y, gid.z) * 8.0f;
+#endif
 
     for(int z=0; z<2; z++) {
         for(int y=0; y<2; y++) {
             for(int x=0; x<2; x++) {
+#if defined(PLATFORM_METAL)
                 float3 chunkPos = worldBase + float3(x*4, y*4, z*4);
+#else
+                float3 chunkPos = worldBase + make_float3(x*4, y*4, z*4);
+#endif
                 ulong packed = pack_4x4x4_block(chunkPos);
                 uint localChunkIdx = x + (y * 2) + (z * 4);
                 geoPool64[geoBaseIdx + localChunkIdx] = packed;
@@ -391,7 +399,11 @@ __global__ void FillDynamicAtlases(
     for(int z=0; z<8; z++) {
         for(int y=0; y<8; y++) {
             for(int x=0; x<8; x++) {
+#if defined(PLATFORM_METAL)
                 float3 voxelPos = worldBase + float3(x,y,z);
+#else
+                float3 voxelPos = worldBase + make_float3(x,y,z);
+#endif
                 uint8_t matID = 0;
                 
                 if (Evaluate(voxelPos.x, voxelPos.y, voxelPos.z) > 0.0f) {

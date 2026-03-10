@@ -1,10 +1,17 @@
 #pragma once
+#if defined(__METAL_VERSION__)
 #include <metal_stdlib>
 using namespace metal;
+#define TABLE_CONST static constant
+#else
+#include <stdint.h>
+#define TABLE_CONST static const
+typedef uint64_t ulong;
+#endif
 
 // Precomputed Ray-Cell Interaction Mask LUT
 // Size: 8 octants * 64 entry points * 8 bytes = 4096 bytes
-static constant ulong RayMaskOptimizationLUT[512] = {
+TABLE_CONST ulong RayMaskOptimizationLUT[512] = {
     // Octant #0 (-1 -1 -1)
     0x0000000000000001ull, 0x0000000000000003ull, 0x0000000000000007ull, 0x000000000000000Full, 0x0000000000000011ull, 0x0000000000000033ull, 0x0000000000000077ull, 0x00000000000000FFull, 
     0x0000000000000111ull, 0x0000000000000333ull, 0x0000000000000777ull, 0x0000000000000FFFull, 0x0000000000001111ull, 0x0000000000003333ull, 0x0000000000007777ull, 0x000000000000FFFFull, 

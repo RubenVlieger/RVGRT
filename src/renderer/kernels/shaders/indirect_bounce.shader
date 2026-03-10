@@ -19,26 +19,15 @@ using namespace metal;
 // ============================================================================
 
 KERNEL(IndirectBounce)(
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_WRITE(tex2d_f32_w, texRawIndirect, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texNormal, 1),
     PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 2),
-#else
-    PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texRawIndirect, 0),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texNormal, 1),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 2),
-#endif
     
     PARAM_CONSTANT(CameraData, camera, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
     
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_READ(tex2d_arr_f32_s, textureAtlas, 8),
     PARAM_TEXTURE_READ(tex3d_u32, indirection, 3),
-#else
-    PARAM_TEXTURE_READ(texture2d_array<float, access::sample>, textureAtlas, 8),
-    PARAM_TEXTURE_READ(texture3d<uint, access::read>, indirection, 3),
-#endif
     PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(uchar, dataBuffer, 5),
@@ -70,8 +59,8 @@ KERNEL(IndirectBounce)(
         return;
     }
 
-    half3 normal = (half3)TEX_READ_2D(texNormal, gid).rgb;
-    float2 uv = (float2(gid) + 0.5f) / float2(width, height);
+    half3 normal = HALF3_FROM_FLOAT3(TEX_READ_2D(texNormal, gid).rgb);
+    float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);
     float3 pos = reconstructPos(depth, uv, camera);
 
     uint voxelHash = hash3_to_1(int3(pos * 1024.f));
@@ -101,7 +90,7 @@ KERNEL(IndirectBounce)(
     hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer,
                         occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
     
-    half3 incomingLight = half3(0.0h);
+    half3 incomingLight = HALF3(0.0f, 0.0f, 0.0f);
 
     if (hit.hit) {
 #if SHADOWS
@@ -118,14 +107,14 @@ KERNEL(IndirectBounce)(
         float distSq = (depth * depth) + dot(hit.pos - pos, hit.pos - pos);
         half3 bouncedAlbedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, distSq);
         
-        half NdotL = max(dot(hit.normal, (half3)frame.sunDirection), 0.0h);
-        half3 directLightAtHit = c_sunColor * NdotL * (isShadowed ? 0.0h : 1.0h);
+        half NdotL = max(dot(hit.normal, HALF3_FROM_FLOAT3(frame.sunDirection)), HALF_LITERAL(0.0f));
+        half3 directLightAtHit = c_sunColor * NdotL * (isShadowed ? HALF_LITERAL(0.0f) : HALF_LITERAL(1.0f));
         
-        incomingLight = (directLightAtHit * bouncedAlbedo) + (bouncedAlbedo * 0.05h);
+        incomingLight = (directLightAtHit * bouncedAlbedo) + (bouncedAlbedo * HALF_LITERAL(0.05f));
     } else {
         half3 skyLight = sampleSky(rayDir, frame.sunDirection);
-        float luma = dot((float3)skyLight, float3(0.3f, 0.59f, 0.11f));
-        incomingLight = mix(skyLight, half3(luma), 0.6h) * 0.25h;
+        float luma = dot((float3)skyLight, make_float3(0.3f, 0.59f, 0.11f));
+        incomingLight = mix(skyLight, HALF3(luma, luma, luma), HALF_LITERAL(0.6f)) * HALF_LITERAL(0.25f);
     }
     
     TEX_WRITE_2D(texRawIndirect, float4((float3)incomingLight, 1.0f), gid);

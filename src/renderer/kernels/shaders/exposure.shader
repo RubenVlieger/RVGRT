@@ -16,21 +16,19 @@ using namespace metal;
 // ============================================================================
 
 inline float getLuminance(float3 color) {
+#if defined(PLATFORM_METAL)
     return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
+#else
+    return dot(color, make_float3(0.2126f, 0.7152f, 0.0722f));
+#endif
 }
 
 KERNEL(ComputeExposure)(
     PARAM_BUFFER(ExposureData, exposure, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_READ(tex2d_f32_r, texDirect, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texAccum, 1),
     PARAM_TEXTURE_READ(tex2d_f32_r, texAlbedo, 2),
-#else
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDirect, 0),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texAccum, 1),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texAlbedo, 2),
-#endif
     DECLARE_GID(),
     DECLARE_TID()
 )
@@ -67,15 +65,24 @@ KERNEL(ComputeExposure)(
             if (coords.x >= width || coords.y >= height) continue;
 #endif
 
+#if defined(PLATFORM_METAL)
             float3 direct = TEX_READ_2D(texDirect, coords).rgb;
             float3 indirect = TEX_READ_2D(texAccum, coords).rgb;
             float3 albedo = TEX_READ_2D(texAlbedo, coords).rgb;
+#else
+            float4 direct4 = TEX_READ_2D(texDirect, coords);
+            float4 indirect4 = TEX_READ_2D(texAccum, coords);
+            float4 albedo4 = TEX_READ_2D(texAlbedo, coords);
+            float3 direct = make_float3(direct4.x, direct4.y, direct4.z);
+            float3 indirect = make_float3(indirect4.x, indirect4.y, indirect4.z);
+            float3 albedo = make_float3(albedo4.x, albedo4.y, albedo4.z);
+#endif
             
             float3 color = (direct + indirect) * albedo;
             float lum = getLuminance(color);
             
             // Center weighting
-            float2 uv = float2(x, y) / float2(width, height);
+            float2 uv = make_float2(x, y) / make_float2(width, height);
             float dist = length(uv - 0.5f);
             float weight = 1.0f - smoothstep(0.2f, 0.6f, dist);
             weight = max(weight, 0.1f);

@@ -208,11 +208,6 @@ void CudaRendererTraits::DispatchKernel(ComputeEncoder encoder, PipelineState ps
     (void)group;
 }
 
-void CudaRendererTraits::DispatchKernel(ComputeEncoder encoder, GridSize grid, GroupSize group) {
-    (void)encoder;
-    (void)grid;
-    (void)group;
-}
 
 void CudaRendererTraits::MemoryBarrier(ComputeEncoder encoder) {
     // CUDA memory barrier (sync across all threads)

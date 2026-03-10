@@ -24,10 +24,10 @@ public:
     int height() const { return height_; }
 
     // Device sampling helpers (platform-specific definitions)
-    #if defined(__METAL_VERSION__)
+    #if defined(PLATFORM_METAL)
     // For Metal, the TEXTURE_OBJECT is a texture2d, which is a value type.
     GPU_FUNC static float3 sampleFloat3(TEXTURE_OBJECT tex, sampler s, float u, float v);
-    #elif defined(__CUDA_ARCH__)
+    #elif defined(PLATFORM_CUDA)
     // For CUDA, TEXTURE_OBJECT is a cudaTextureObject_t (a handle).
     __device__ static float3 sampleFloat3(TEXTURE_OBJECT tex, float u, float v);
     #endif
@@ -44,7 +44,7 @@ public:
 private:
     void uploadRGBAData(const unsigned char* rgba8, int w, int h);
     void releaseResources(); 
-    TEXTURE_OBJECT texObj_ = nullptr;
+    TEXTURE_OBJECT texObj_ = 0;
     ARRAY_OBJECT cuArray_ = nullptr;
     int width_ = 0, height_ = 0;
 };

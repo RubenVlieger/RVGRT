@@ -16,17 +16,10 @@ using namespace metal;
 // ============================================================================
 
 KERNEL(BilateralDenoise)(
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_WRITE(tex2d_f32_w, texDenoised, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texAccum, 1),
     PARAM_TEXTURE_READ(tex2d_f32_r, texNormal, 2),
     PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 3),
-#else
-    PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texDenoised, 0),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texAccum, 1),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texNormal, 2),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 3),
-#endif
     PARAM_CONSTANT(int, step_width, 0),
     DECLARE_GID()
 )
@@ -43,9 +36,18 @@ KERNEL(BilateralDenoise)(
 #endif
 
     // Center tap data
+#if defined(PLATFORM_METAL)
     float3 centerC = TEX_READ_2D(texAccum, gid).rgb;
     float3 centerN = TEX_READ_2D(texNormal, gid).rgb;
     float centerD = TEX_READ_2D(texDepth, gid).r;
+#else
+    float4 centerC4 = TEX_READ_2D(texAccum, gid);
+    float4 centerN4 = TEX_READ_2D(texNormal, gid);
+    float4 centerD4 = TEX_READ_2D(texDepth, gid);
+    float3 centerC = make_float3(centerC4.x, centerC4.y, centerC4.z);
+    float3 centerN = make_float3(centerN4.x, centerN4.y, centerN4.z);
+    float centerD = centerD4.x;
+#endif
 
     // Gaussian-approximate weights for 3x3
     const float kernelWeights[3] = { 1.0f, 2.0f / 1.0f, 4.0f / 1.0f };
@@ -70,9 +72,18 @@ KERNEL(BilateralDenoise)(
             }
 #endif
 
+#if defined(PLATFORM_METAL)
             float3 tapC = TEX_READ_2D(texAccum, tapCoord).rgb;
             float3 tapN = TEX_READ_2D(texNormal, tapCoord).rgb;
             float tapD = TEX_READ_2D(texDepth, tapCoord).r;
+#else
+            float4 tapC4 = TEX_READ_2D(texAccum, tapCoord);
+            float4 tapN4 = TEX_READ_2D(texNormal, tapCoord);
+            float4 tapD4 = TEX_READ_2D(texDepth, tapCoord);
+            float3 tapC = make_float3(tapC4.x, tapC4.y, tapC4.z);
+            float3 tapN = make_float3(tapN4.x, tapN4.y, tapN4.z);
+            float tapD = tapD4.x;
+#endif;
 
             // Normal weight
             float dotN = max(dot(centerN, tapN), 0.0f);
@@ -95,5 +106,10 @@ KERNEL(BilateralDenoise)(
         sumWeight = 1.0f;
     }
     
+#if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texDenoised, float4(sumColor / sumWeight, 1.0f), gid);
+#else
+    float3 finalColor = sumColor / sumWeight;
+    TEX_WRITE_2D(texDenoised, make_float4(finalColor.x, finalColor.y, finalColor.z, 1.0f), gid);
+#endif
 }

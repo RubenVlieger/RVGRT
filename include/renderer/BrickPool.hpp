@@ -109,6 +109,9 @@ public:
     auto GetOccupancyPtr() { return _occupancyBuffer; }
     auto GetDataPtr() { return _dataBuffer; }
 
+    auto GetOccupancyPtr() const { return _occupancyBuffer; }
+    auto GetDataPtr() const { return _dataBuffer; }
+
     uint32_t GetCapacity() const { return _capacity; }
     uint32_t GetUsedCount() const { return _usedCount; }
     uint32_t GetFreeCount() const { return _capacity - _usedCount; }

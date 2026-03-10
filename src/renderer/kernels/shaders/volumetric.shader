@@ -19,7 +19,7 @@ using namespace metal;
 // ============================================================================
 
 inline float InterleavedGradientNoise(float2 pos) {
-    return fract(52.9829189f * fract(0.06711056f * pos.x + 0.00583715f * pos.y));
+    return MATH_FRACT(52.9829189f * MATH_FRACT(0.06711056f * pos.x + 0.00583715f * pos.y));
 }
 
 inline float phaseFunction(float3 viewDir, float3 lightDir, float g) {
@@ -29,24 +29,14 @@ inline float phaseFunction(float3 viewDir, float3 lightDir, float g) {
 }
 
 KERNEL(VolumetricFog)(
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_WRITE(tex2d_f32_w, texVolumetric, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 1),
     PARAM_TEXTURE_READ(tex2d_f32_s, texHistory, 2),
-#else
-    PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texVolumetric, 0),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 1),
-    PARAM_TEXTURE_READ(texture2d<float, access::sample>, texHistory, 2),
-#endif
     
     PARAM_CONSTANT(CameraData, camera, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
     
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_READ(tex3d_u32, indirection, 3),
-#else
-    PARAM_TEXTURE_READ(texture3d<uint, access::read>, indirection, 3),
-#endif
     PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
@@ -75,7 +65,7 @@ KERNEL(VolumetricFog)(
 #if defined(PLATFORM_METAL)
     uint2 fullResCoord = gid * 2;
 #else
-    int2 fullResCoord = make_int2(gid.x * 2, gid.y * 2);
+    uint2 fullResCoord = AS_UINT2(gid) * make_uint2(2, 2);
 #endif
 
     // Clamp to valid depth coord
@@ -83,7 +73,7 @@ KERNEL(VolumetricFog)(
     if (fullResCoord.y >= height * 2) fullResCoord.y = height * 2 - 1;
 
     float depth = TEX_READ_2D(texDepth, fullResCoord).r;
-    float2 uv = (float2(gid) + 0.5f) / float2(width, height);
+    float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);
 
     float fogMaxDist = VOLUMETRIC_MAXDIST;
     float clampedDepth = min(depth, fogMaxDist);
@@ -96,7 +86,7 @@ KERNEL(VolumetricFog)(
     float3 rayDir = normalize(rayVec);
 
     // Ray marching with dithering
-    float dither = InterleavedGradientNoise(float2(gid) + float2(frame.time * 5.588f));
+    float dither = InterleavedGradientNoise(AS_FLOAT2(gid) + make_float2(frame.time * 5.588f));
     
     const int STEPS = VOLUMETRIC_STEPS;
     float stepSize = rayLength / float(STEPS);

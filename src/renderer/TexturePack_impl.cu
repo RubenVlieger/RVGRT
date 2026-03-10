@@ -49,15 +49,15 @@ Texturepack::Texturepack(const unsigned char* pngData, size_t pngSize)
 }
 
 Texturepack::Texturepack(Texturepack&& other) noexcept
-    : texObj_(std::exchange(other.texObj_, nullptr)),
-      cuArray_(std::exchange(other.cuArray_, nullptr)), // cuArray is unused on Metal but we move it for consistency
+    : texObj_(std::exchange(other.texObj_, 0)),
+      cuArray_(std::exchange(other.cuArray_, nullptr)), 
       width_(std::exchange(other.width_, 0)),
       height_(std::exchange(other.height_, 0)) {}
 
 Texturepack& Texturepack::operator=(Texturepack&& other) noexcept {
     if (this != &other) {
         releaseResources();
-        texObj_ = std::exchange(other.texObj_, nullptr);
+        texObj_ = std::exchange(other.texObj_, 0);
         cuArray_ = std::exchange(other.cuArray_, nullptr);
         width_ = std::exchange(other.width_, 0);
         height_ = std::exchange(other.height_, 0);
@@ -66,6 +66,11 @@ Texturepack& Texturepack::operator=(Texturepack&& other) noexcept {
 }
 
 Texturepack::~Texturepack()
+{
+    releaseResources();
+}
+
+void Texturepack::releaseResources()
 {
     if (texObj_) {
         cudaDestroyTextureObject(texObj_);

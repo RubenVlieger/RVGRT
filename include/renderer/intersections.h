@@ -515,6 +515,28 @@ using uint = unsigned int;
 using uchar = unsigned char;
 using ulong = uint64_t;
 
+// Helper functions for float3 min/max (fminf/fmaxf don't work with float3 in CUDA)
+__device__ inline float3 cuda_fmin(float3 a, float3 b) {
+    return make_float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
+}
+__device__ inline float3 cuda_fmax(float3 a, float3 b) {
+    return make_float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z));
+}
+
+// Make half3/half2 work as float3/float2 in CUDA
+#define make_half3 make_float3
+#define make_half2 make_float2
+
+// mat4 transpose for CUDA
+__device__ inline mat4 mat4_transpose(mat4 m) {
+    mat4 result;
+    result.cols[0] = make_float4(m.cols[0].x, m.cols[1].x, m.cols[2].x, m.cols[3].x);
+    result.cols[1] = make_float4(m.cols[0].y, m.cols[1].y, m.cols[2].y, m.cols[3].y);
+    result.cols[2] = make_float4(m.cols[0].z, m.cols[1].z, m.cols[2].z, m.cols[3].z);
+    result.cols[3] = make_float4(m.cols[0].w, m.cols[1].w, m.cols[2].w, m.cols[3].w);
+    return result;
+}
+
 __device__ inline uint GetLinearIndex4(uint3 p) {
   return (p.x & 3) + ((p.z & 3) << 2) + ((p.y & 3) << 4);
 }
@@ -551,8 +573,8 @@ __device__ inline float3 ClipRayToAABB(float3 origin, float3 dir, float3 invDir,
                                         float3 boxMin, float3 boxMax) {
   float3 t0 = (boxMin - origin) * invDir;
   float3 t1 = (boxMax - origin) * invDir;
-  float3 tmin = fminf(t0, t1);
-  float3 tmax = fmaxf(t0, t1);
+  float3 tmin = cuda_fmin(t0, t1);
+  float3 tmax = cuda_fmax(t0, t1);
   float tNear = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
   float tFar = fminf(fminf(tmax.x, tmax.y), tmax.z);
   if (tNear <= tFar && tFar > 0) {
@@ -707,8 +729,8 @@ __device__ inline hitInfo trace(float3 rayPos, float3 rayDir,
           float3 bt1 = make_float3(( 0.5f - localBPos.x) * invLocalBDir.x,
                                    ( 0.5f - localBPos.y) * invLocalBDir.y,
                                    ( 0.5f - localBPos.z) * invLocalBDir.z);
-          float3 btmin = fminf(bt0, bt1);
-          float3 btmax = fmaxf(bt0, bt1);
+          float3 btmin = cuda_fmin(bt0, bt1);
+          float3 btmax = cuda_fmax(bt0, bt1);
           float bNear = fmaxf(fmaxf(btmin.x, btmin.y), btmin.z);
           float bFar = fminf(fminf(btmax.x, btmax.y), btmax.z);
           
@@ -732,8 +754,8 @@ __device__ inline hitInfo trace(float3 rayPos, float3 rayDir,
               float3 t1 = make_float3(( 0.5f - localPos.x) * invLocalDir.x,
                                       ( 0.5f - localPos.y) * invLocalDir.y,
                                       ( 0.5f - localPos.z) * invLocalDir.z);
-              float3 tmin = fminf(t0, t1);
-              float3 tmax = fmaxf(t0, t1);
+              float3 tmin = cuda_fmin(t0, t1);
+              float3 tmax = cuda_fmax(t0, t1);
               float tNear = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
               float tFar = fminf(fminf(tmax.x, tmax.y), tmax.z);
               
@@ -788,7 +810,7 @@ __device__ inline hitInfo trace(float3 rayPos, float3 rayDir,
       float3 t1 = make_float3((cellMin.x + 1.0f - rayPos.x) * invDir.x,
                               (cellMin.y + 1.0f - rayPos.y) * invDir.y,
                               (cellMin.z + 1.0f - rayPos.z) * invDir.z);
-      float3 tmin_v = fminf(t0, t1);
+      float3 tmin_v = cuda_fmin(t0, t1);
       float tEntry = fmaxf(fmaxf(tmin_v.x, tmin_v.y), tmin_v.z);
       
       if (closestCharT < tEntry) {
@@ -914,8 +936,8 @@ __device__ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
           float3 bt1 = make_float3(( 0.5f - localBPos.x) * invLocalBDir.x,
                                    ( 0.5f - localBPos.y) * invLocalBDir.y,
                                    ( 0.5f - localBPos.z) * invLocalBDir.z);
-          float3 btmin = fminf(bt0, bt1);
-          float3 btmax = fmaxf(bt0, bt1);
+          float3 btmin = cuda_fmin(bt0, bt1);
+          float3 btmax = cuda_fmax(bt0, bt1);
           float bNear = fmaxf(fmaxf(btmin.x, btmin.y), btmin.z);
           float bFar = fminf(fminf(btmax.x, btmax.y), btmax.z);
           
@@ -939,8 +961,8 @@ __device__ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
               float3 t1 = make_float3(( 0.5f - localPos.x) * invLocalDir.x,
                                       ( 0.5f - localPos.y) * invLocalDir.y,
                                       ( 0.5f - localPos.z) * invLocalDir.z);
-              float3 tmin = fminf(t0, t1);
-              float3 tmax = fmaxf(t0, t1);
+              float3 tmin = cuda_fmin(t0, t1);
+              float3 tmax = cuda_fmax(t0, t1);
               float tNear = fmaxf(fmaxf(tmin.x, tmin.y), tmin.z);
               float tFar = fminf(fminf(tmax.x, tmax.y), tmax.z);
               

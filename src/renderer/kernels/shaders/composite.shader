@@ -28,7 +28,7 @@ inline float3 ACESFilm(float3 x) {
 }
 
 inline float3 LinearToSRGB(float3 color) {
-    return select(1.055f * pow(color, 1.0f / 2.4f) - 0.055f,
+    return SELECT(1.055f * pow(color, 1.0f / 2.4f) - 0.055f,
                   12.92f * color,
                   color <= 0.0031308f);
 }
@@ -38,27 +38,18 @@ inline float3 applySaturation(float3 color, float saturation) {
     return mix(float3(luma), color, saturation);
 }
 
-#if defined(PLATFORM_METAL)
 float3 SampleFogBilateral(
-    texture2d<float, access::sample> texVolumetric,
-    texture2d<float, access::read> texDepth,
+    tex2d_f32_s texVolumetric,
+    tex2d_f32_r texDepth,
     float2 uv,
     float currentDepth,
     float2 screenSize)
-#else
-float3 SampleFogBilateral(
-    texture2d<float, access::sample> texVolumetric,
-    texture2d<float, access::read> texDepth,
-    float2 uv,
-    float currentDepth,
-    float2 screenSize)
-#endif
 {
     float2 lowResSize = screenSize * 0.5f;
     float2 pixelPos = uv * lowResSize - 0.5f;
     
     int2 basePos = int2(floor(pixelPos));
-    float2 weights = fract(pixelPos);
+    float2 weights = MATH_FRACT(pixelPos);
     
     float3 sumColor = float3(0.0f);
     float sumWeight = 0.0f;
@@ -75,8 +66,9 @@ float3 SampleFogBilateral(
             float3 fogColor = texVolumetric.read(uint2(coord)).rgb;
             uint2 depthCoord = uint2(coord) * 2;
 #else
-            float3 fogColor = texVolumetric.read(coord).rgb;
-            int2 depthCoord = make_int2(coord.x * 2, coord.y * 2);
+            float4 fogColor4 = texVolumetric.read(coord);
+            float3 fogColor = make_float3(fogColor4.x, fogColor4.y, fogColor4.z);
+            uint2 depthCoord = AS_UINT2(coord) * make_uint2(2, 2);
 #endif
             float neighborDepth = texDepth.read(depthCoord).r;
             
@@ -96,21 +88,12 @@ float3 SampleFogBilateral(
 }
 
 KERNEL(Composite)(
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_WRITE(tex2d_f32_w, texFinal, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texDirect, 1),
     PARAM_TEXTURE_READ(tex2d_f32_r, texAccum, 2),
     PARAM_TEXTURE_READ(tex2d_f32_r, texAlbedo, 3),
     PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 4),
     PARAM_TEXTURE_READ(tex2d_f32_s, texVolumetric, 5),
-#else
-    PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texFinal, 0),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDirect, 1),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texAccum, 2),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texAlbedo, 3),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 4),
-    PARAM_TEXTURE_READ(texture2d<float, access::sample>, texVolumetric, 5),
-#endif
     
     PARAM_BUFFER(ExposureData, exposure, 0),
 
@@ -134,8 +117,8 @@ KERNEL(Composite)(
     float3 albedo = TEX_READ_2D(texAlbedo, gid).rgb;
     float depth = TEX_READ_2D(texDepth, gid).r;
     
-    float2 uv = (float2(gid) + 0.5f) / float2(width, height);
-    float2 screenSize = float2(width, height);
+    float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);
+    float2 screenSize = make_float2(width, height);
     float3 fog = SampleFogBilateral(texVolumetric, texDepth, uv, depth, screenSize);
 
     // Apply material (Linear Space)
@@ -148,7 +131,11 @@ KERNEL(Composite)(
         const float fogDensity = COMPOSITE_FOG_DENSITY;
         float dist = max(depth - fogStart, 0.0f);
         float fogFactor = 1.0f - exp(-dist * fogDensity);
+#if defined(PLATFORM_METAL)
         float3 fogColor = float3(COMPOSITE_FOG_COLOR);
+#else
+        float3 fogColor = make_float3(COMPOSITE_FOG_COLOR);
+#endif
         linearColor = mix(linearColor, fogColor, fogFactor);
     }
 
@@ -166,5 +153,10 @@ KERNEL(Composite)(
     // Gamma Correction
     float3 finalColor = LinearToSRGB(toneMapped);
 
+#if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texFinal, float4(finalColor, 1.0f), gid);
+#else
+    float4 finalVal = make_float4(finalColor.x, finalColor.y, finalColor.z, 1.0f);
+    TEX_WRITE_2D(texFinal, finalVal, gid);
+#endif
 }

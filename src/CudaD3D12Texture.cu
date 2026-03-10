@@ -301,6 +301,6 @@ void CudaD3D12Texture::Initialize(ID3D12Device* device, UINT _width, UINT _heigh
     device->GetCopyableFootprints(&desc, 0, 1, 0, &placedFootprint, &numRows, &rowSizeInBytes, &totalBytes);
     m_pitch = placedFootprint.Footprint.RowPitch;
 
-    CUDA_CHECK(cudaDeviceSynchronize());
-    CUDA_CHECK(cudaGetLastError());
+    checkCudaError(cudaDeviceSynchronize(), "cudaDeviceSynchronize");
+    checkCudaError(cudaGetLastError(), "cudaGetLastError");
 }

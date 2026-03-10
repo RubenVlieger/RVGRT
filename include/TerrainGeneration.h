@@ -158,6 +158,7 @@ GPU_FUNC GPU_INLINE float3 grad_from_hash(unsigned int h)
     return g;
 }
 
+#if !defined(PLATFORM_CUDA)
 GPU_FUNC GPU_INLINE half3 grad_from_hash_h(unsigned int h) 
 {
     h &= 15u;
@@ -180,6 +181,7 @@ GPU_FUNC GPU_INLINE half3 grad_from_hash_h(unsigned int h)
 GPU_FUNC GPU_INLINE half dot3_h(half3 g, half x, half y, half z) {
     return g.x * x + g.y * y + g.z * z;
 }
+#endif
 
 
 // GPU_FUNC half simplex3D_h(float px, float py, float pz) 

@@ -5,6 +5,16 @@
 #include <cmath>
 #include <cstring>
 
+// Host-side popcount for 64-bit (works on MSVC)
+static inline uint32_t host_popcount64(uint64_t x) {
+#if defined(_M_X64) || defined(__x86_64__)
+    return __popcnt64(x);
+#else
+    // Fallback for 32-bit
+    return static_cast<uint32_t>(__popcnt(static_cast<uint32_t>(x)) + __popcnt(static_cast<uint32_t>(x >> 32)));
+#endif
+}
+
 // Positive modulo (C++ % can be negative)
 static inline int posmod(int a, int m) { 
   return ((a % m) + m) % m; 
@@ -254,7 +264,7 @@ void CudaMaterialMap::LoadSector(int wx, int wy, int wz, bool isLOD,
     return; // Failed
 
   // Count active bricks
-  uint32_t activeBricks = __builtin_popcountll(brickMask);
+  uint32_t activeBricks = host_popcount64(brickMask);
 
   SectorInfo sInfo;
   sInfo.brickMask = brickMask;
@@ -395,7 +405,7 @@ bool CudaMaterialMap::UpdateStreaming(simd_float3 cameraPos) {
     uint32_t handle = AllocSectorHandle();
     if (handle == 0) continue;
 
-    uint32_t activeBricks = __builtin_popcountll(brickMask);
+    uint32_t activeBricks = host_popcount64(brickMask);
     SectorInfo sInfo;
     sInfo.brickMask = brickMask;
 

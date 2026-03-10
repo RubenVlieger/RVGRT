@@ -3,10 +3,6 @@
 #if defined(PLATFORM_METAL)
 #include <metal_stdlib>
 using namespace metal;
-// Texture type aliases to avoid comma issues in macros
-typedef texture2d<float, access::write> tex2d_f32_w;
-typedef texture2d<float, access::read> tex2d_f32_r;
-typedef texture2d<float, access::sample> tex2d_f32_s;
 #endif
 
 #include "cumath.h"
@@ -35,7 +31,6 @@ inline float3 YCoCgToRGB(float3 ycocg) {
 }
 
 KERNEL(TemporalAccumulation)(
-#if defined(PLATFORM_METAL)
     PARAM_TEXTURE_WRITE(tex2d_f32_w, texAccum, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texRawIndirect, 1),
     PARAM_TEXTURE_READ(tex2d_f32_s, texHistory, 2),
@@ -43,15 +38,6 @@ KERNEL(TemporalAccumulation)(
     PARAM_TEXTURE_READ(tex2d_f32_r, texDepth, 4),
     PARAM_TEXTURE_READ(tex2d_f32_r, texPrevDepth, 5),
     PARAM_TEXTURE_READ(tex2d_f32_r, texDirect, 6),
-#else
-    PARAM_TEXTURE_WRITE(texture2d<float, access::write>, texAccum, 0),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texRawIndirect, 1),
-    PARAM_TEXTURE_READ(texture2d<float, access::sample>, texHistory, 2),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texMotion, 3),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDepth, 4),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texPrevDepth, 5),
-    PARAM_TEXTURE_READ(texture2d<float, access::read>, texDirect, 6),
-#endif
     DECLARE_GID()
 )
 {
@@ -72,12 +58,20 @@ KERNEL(TemporalAccumulation)(
     float3 currentRGB = currentDirect + currentIndirect;
     
     // NaN check
-    if (any(isnan(currentDirect)) || any(isinf(currentDirect))) {
+    if (ANY_ISNAN(currentDirect) || ANY_ISINF(currentDirect)) {
+#if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texAccum, float4(1.0, 0.0, 1.0, 1.0), gid);
+#else
+        TEX_WRITE_2D(texAccum, make_float4(1.0f, 0.0f, 1.0f, 1.0f), gid);
+#endif
         return;
     }
-    if (any(isnan(currentIndirect)) || any(isinf(currentIndirect))) {
+    if (ANY_ISNAN(currentIndirect) || ANY_ISINF(currentIndirect)) {
+#if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texAccum, float4(0.0, 1.0, 1.0, 1.0), gid);
+#else
+        TEX_WRITE_2D(texAccum, make_float4(0.0f, 1.0f, 1.0f, 1.0f), gid);
+#endif
         return;
     }
 
@@ -86,7 +80,7 @@ KERNEL(TemporalAccumulation)(
     float velMag = length(motion);
     float movementFactor = saturate(velMag * 200.0f);
 
-    float2 uv = (float2(gid) + 0.5f) / float2(width, height);
+    float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);
     float2 prevUV = uv - motion;
 
     // Neighborhood statistics
@@ -140,7 +134,7 @@ KERNEL(TemporalAccumulation)(
 #if defined(PLATFORM_METAL)
         uint2 prevCoords = uint2(prevUV.x * width, prevUV.y * height);
 #else
-        int2 prevCoords = make_int2(prevUV.x * width, prevUV.y * height);
+        uint2 prevCoords = make_uint2(prevUV.x * width, prevUV.y * height);
 #endif
         float currentDepth = TEX_READ_2D(texDepth, gid).r;
         float prevDepth = TEX_READ_2D(texPrevDepth, prevCoords).r;

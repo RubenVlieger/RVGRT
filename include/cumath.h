@@ -61,17 +61,24 @@ using mat4 = metal::float4x4;
 
 #define F32(x) float(x)
 
-#elif defined(__CUDA_ARCH__)
+#elif defined(__CUDACC__) || defined(__CUDA_ARCH__)
 /*******************************************************************************
- * CUDA (Device-Side Compilation)
+ * CUDA (Host or Device Compilation)
  *******************************************************************************/
-#include <cuda_fp16.h> // For half precision support
+#include <cuda_fp16.h> // For half precision support - includes half2, half3, half4
 #include <cuda_runtime.h>
 #include <math_constants.h>
 
 #define PLATFORM_CUDA
+
+#if defined(__CUDA_ARCH__)
 #define GPU_FUNC __device__
 #define GPU_INLINE __forceinline__
+#else
+#define GPU_FUNC __host__ __device__
+#define GPU_INLINE inline
+#endif
+
 #define KERNEL_FUNC extern "C" __global__
 #define CONST_MEM __constant__
 #define DEVICE_MEM __device__
@@ -81,8 +88,9 @@ using mat4 = metal::float4x4;
 #define RESTRICT __restrict__
 #define TEXTURE_OBJECT cudaTextureObject_t
 #define ARRAY_OBJECT cudaArray_t
-// CUDA provides vector types like float2, int2, etc. We just need to alias
-// them. We will define our own structs later to ensure API consistency.
+
+// CUDA provides vector types like float2, int2, etc.
+// half2, half3, half4 are already defined in cuda_fp16.h
 using uint = unsigned int;
 using half = __half;
 #define F32(x) float(x)
@@ -97,9 +105,82 @@ using half = __half;
 #define TEX3D_U32_W uint32_t *RESTRICT
 #define TEX3D_U32_RW uint32_t *RESTRICT
 
+// Matrix types for CUDA (not provided by CUDA headers)
+struct mat2 { float2 cols[2]; };
+struct mat3 { float3 cols[3]; };
+struct mat4 { float4 cols[4]; };
+
+// make_float3 from int3 for CUDA
+GPU_FUNC GPU_INLINE float3 make_float3(int3 v) {
+    return make_float3(static_cast<float>(v.x), static_cast<float>(v.y), static_cast<float>(v.z));
+}
+
+// make_float3 from single float for CUDA (scalar expansion)
+GPU_FUNC GPU_INLINE float3 make_float3(float s) {
+    return make_float3(s, s, s);
+}
+
+// float4 operators for CUDA
+GPU_FUNC GPU_INLINE float4 operator+(float4 a, float4 b) {
+    return make_float4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
+}
+
+// float4 scalar multiplication for CUDA
+GPU_FUNC GPU_INLINE float4 operator*(float4 v, float s) {
+    return make_float4(v.x * s, v.y * s, v.z * s, v.w * s);
+}
+GPU_FUNC GPU_INLINE float4 operator*(float s, float4 v) {
+    return v * s;
+}
+
+// Matrix multiplication for CUDA
+GPU_FUNC GPU_INLINE float4 operator*(mat4 m, float4 v) {
+    return m.cols[0] * v.x + m.cols[1] * v.y + m.cols[2] * v.z + m.cols[3] * v.w;
+}
+GPU_FUNC GPU_INLINE mat4 operator*(mat4 a, mat4 b) {
+    mat4 result;
+    result.cols[0] = a * b.cols[0];
+    result.cols[1] = a * b.cols[1];
+    result.cols[2] = a * b.cols[2];
+    result.cols[3] = a * b.cols[3];
+    return result;
+}
+
+// float3 operators for CUDA
+GPU_FUNC GPU_INLINE float3 operator+(float3 a, float3 b) { return make_float3(a.x + b.x, a.y + b.y, a.z + b.z); }
+GPU_FUNC GPU_INLINE float3 operator-(float3 a, float3 b) { return make_float3(a.x - b.x, a.y - b.y, a.z - b.z); }
+GPU_FUNC GPU_INLINE float3 operator*(float3 a, float3 b) { return make_float3(a.x * b.x, a.y * b.y, a.z * b.z); }
+GPU_FUNC GPU_INLINE float3 operator/(float3 a, float3 b) { return make_float3(a.x / b.x, a.y / b.y, a.z / b.z); }
+GPU_FUNC GPU_INLINE float3 operator*(float3 v, float s) { return make_float3(v.x * s, v.y * s, v.z * s); }
+GPU_FUNC GPU_INLINE float3 operator/(float3 v, float s) { return make_float3(v.x / s, v.y / s, v.z / s); }
+GPU_FUNC GPU_INLINE float3 operator*(float s, float3 v) { return v * s; }
+
+// int3 operators for CUDA
+GPU_FUNC GPU_INLINE int3 operator-(int3 a, int3 b) { return make_int3(a.x - b.x, a.y - b.y, a.z - b.z); }
+
+// uint3 bitwise operators for CUDA
+GPU_FUNC GPU_INLINE uint3 operator>>(uint3 v, int shift) { return make_uint3(v.x >> shift, v.y >> shift, v.z >> shift); }
+GPU_FUNC GPU_INLINE uint3 operator&(uint3 a, uint3 b) { return make_uint3(a.x & b.x, a.y & b.y, a.z & b.z); }
+GPU_FUNC GPU_INLINE uint3 operator&(uint3 v, unsigned int mask) { return make_uint3(v.x & mask, v.y & mask, v.z & mask); }
+
+// fmin/fmax for float3 in CUDA
+GPU_FUNC GPU_INLINE float3 fmin_float3(float3 a, float3 b) {
+    return make_float3(fminf(a.x, b.x), fminf(a.y, b.y), fminf(a.z, b.z));
+}
+GPU_FUNC GPU_INLINE float3 fmax_float3(float3 a, float3 b) {
+    return make_float3(fmaxf(a.x, b.x), fmaxf(a.y, b.y), fmaxf(a.z, b.z));
+}
+
+// mat4 * float3 for CUDA
+GPU_FUNC GPU_INLINE float3 mat4_mul_float3(mat4 m, float3 v, bool translation) {
+    float4 v4 = make_float4(v.x, v.y, v.z, translation ? 1.0f : 0.0f);
+    float4 result = m * v4;
+    return make_float3(result.x, result.y, result.z);
+}
+
 #else
 /*******************************************************************************
- * C++ (CPU-Side Compilation, potentially with CUDA host code)
+ * C++ (CPU-Side Compilation)
  *******************************************************************************/
 #include <algorithm> // for std::min/max
 #include <cmath>
@@ -107,16 +188,8 @@ using half = __half;
 
 #define PLATFORM_CPU
 
-#if defined(__CUDACC__) // Compiling a .cu file with NVCC for host code
-#define GPU_FUNC __host__ __device__
-#define HOST_FUNC __host__
-#include <cuda_fp16.h> // Allow host code in .cu files to see `half`
-using half = __half;
-#else // Compiling with a standard C++ compiler (Clang, GCC, MSVC)
 #define GPU_FUNC
 #define HOST_FUNC
-
-#endif
 
 #define GPU_INLINE inline
 #define KERNEL_FUNC /* Not Applicable */
@@ -210,7 +283,7 @@ public:
 //    MSL platform uses its native types which are aliased above.
 //-------------------------------------------------------------------------------------------------
 
-#ifndef PLATFORM_METAL // Metal uses its own types, these are for CPU/CUDA
+#if !defined(PLATFORM_METAL) && !defined(PLATFORM_CUDA) // Metal uses its own types, CPU uses custom types
 
 // Forward declarations
 struct int2;
@@ -359,7 +432,7 @@ GPU_FUNC GPU_INLINE half3 make_half3(half x, half y, half z) {
 GPU_FUNC GPU_INLINE float3 make_float3(int3 v) { return float3(v); }
 GPU_FUNC GPU_INLINE float3 make_float3(half3 v) { return float3(v); }
 
-#else
+#elif !defined(PLATFORM_CUDA)
 
 // floatN constructors
 GPU_FUNC GPU_INLINE float2 make_float2(float s) {
@@ -504,7 +577,8 @@ inline uint2 operator&(uint2 a, uint2 b) {
   return make_uint2(a.x & b.x, a.y & b.y);
 }
 
-// --- Matrix multiplication ---
+// --- Matrix multiplication (CPU only, CUDA has its own version) ---
+#if defined(PLATFORM_CPU)
 inline float4 operator*(mat4 m, float4 v) {
   return m.cols[0] * v.x + m.cols[1] * v.y + m.cols[2] * v.z + m.cols[3] * v.w;
 }
@@ -516,6 +590,7 @@ inline mat4 operator*(mat4 a, mat4 b) {
   result.cols[3] = a * b.cols[3];
   return result;
 }
+#endif
 
 #endif
 
@@ -549,9 +624,6 @@ GPU_FUNC GPU_INLINE float lerp(float a, float b, float t) {
 GPU_FUNC GPU_INLINE float3 lerp(float3 a, float3 b, float t) {
   return a + (b - a) * t;
 }
-GPU_FUNC GPU_INLINE half3 lerp(half3 a, half3 b, half t) {
-  return a + (b - a) * t;
-}
 
 GPU_FUNC GPU_INLINE float3 floor3(float3 v) {
   return make_float3(floor(v.x), floor(v.y), floor(v.z));
@@ -561,7 +633,7 @@ GPU_FUNC GPU_INLINE float3 abs3(float3 v) {
   return make_float3(abs(v.x), abs(v.y), abs(v.z));
 }
 
-#if defined(PLATFORM_CPU)
+#if defined(PLATFORM_CPU) || defined(PLATFORM_CUDA)
 #define GPU_FUNC_INLINE inline
 
 GPU_FUNC_INLINE float dot(float2 a, float2 b) { return a.x * b.x + a.y * b.y; }
@@ -612,9 +684,13 @@ GPU_FUNC GPU_INLINE void atomicAdd(device atomic_uint *val, uint delta) {
   atomic_fetch_add_explicit(val, delta, memory_order_relaxed);
 }
 #elif defined(PLATFORM_CUDA)
-GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {
+// CUDA has built-in atomicAdd - don't redefine it
+// Only define wrapper for device code
+#if defined(__CUDA_ARCH__)
+GPU_FUNC GPU_INLINE void localAtomicAdd(unsigned int *address, unsigned int val) {
   atomicAdd(address, val);
 }
+#endif
 #else
 // No-op or simulated for CPU for interface compatibility
 GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {

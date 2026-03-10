@@ -42,6 +42,40 @@
 // Note: For CUDA, we rely on the CUDA compiler defining __CUDA_ARCH__
 // and the CMake preprocessing step setting PLATFORM_CUDA
 
+// CUDA-specific texture type aliases (defined at all times for CUDA compilation)
+#if defined(PLATFORM_CUDA)
+    // CUDA uses cudaSurfaceObject_t for writable surfaces
+    typedef cudaSurfaceObject_t tex2d_f32_w;
+    typedef cudaTextureObject_t tex2d_f32_r;
+    typedef cudaTextureObject_t tex2d_f32_s;
+    typedef cudaTextureObject_t tex2d_f16_r;
+    typedef cudaSurfaceObject_t tex2d_f16_w;
+    typedef cudaTextureObject_t tex2d_f16_s;
+    typedef cudaTextureObject_t tex3d_u32;
+    typedef cudaTextureObject_t tex2d_arr_f32_s;
+    
+    // Additional type aliases for CUDA compatibility
+    typedef unsigned long long ulong;
+    typedef unsigned char uchar;
+    
+    // Conversion functions to make CUDA behave like Metal for vector constructors
+    __device__ __forceinline__ float2 to_float2(int2 v) { return make_float2(v.x, v.y); }
+    __device__ __forceinline__ float2 to_float2(uint2 v) { return make_float2(v.x, v.y); }
+    __device__ __forceinline__ float2 to_float2(float2 v) { return v; }
+    __device__ __forceinline__ float3 to_float3(int3 v) { return make_float3(v.x, v.y, v.z); }
+    __device__ __forceinline__ float3 to_float3(uint3 v) { return make_float3(v.x, v.y, v.z); }
+    __device__ __forceinline__ float3 to_float3(float3 v) { return v; }
+    __device__ __forceinline__ float4 to_float4(float4 v) { return v; }
+    __device__ __forceinline__ int2 to_int2(uint2 v) { return make_int2(v.x, v.y); }
+    __device__ __forceinline__ int2 to_int2(int2 v) { return v; }
+    __device__ __forceinline__ int3 to_int3(uint3 v) { return make_int3(v.x, v.y, v.z); }
+    __device__ __forceinline__ int3 to_int3(int3 v) { return v; }
+    __device__ __forceinline__ uint2 to_uint2(int2 v) { return make_uint2(v.x, v.y); }
+    __device__ __forceinline__ uint2 to_uint2(uint2 v) { return v; }
+    __device__ __forceinline__ uint3 to_uint3(int3 v) { return make_uint3(v.x, v.y, v.z); }
+    __device__ __forceinline__ uint3 to_uint3(uint3 v) { return v; }
+#endif
+
 // ============================================================================
 // KERNEL DECLARATION
 // ============================================================================
@@ -64,7 +98,7 @@
 #elif defined(PLATFORM_CUDA)
     #define PARAM_TEXTURE_READ(type, name, slot) type name
     #define PARAM_TEXTURE_WRITE(type, name, slot) cudaSurfaceObject_t name
-    #define PARAM_BUFFER(type, name, slot) type name
+    #define PARAM_BUFFER(type, name, slot) type* name
     #define PARAM_CONSTANT(type, name, slot) type name
 #endif
 
@@ -177,8 +211,35 @@
     // CUDA uses __half
     #define half __half
     #define half2 __half2
-    #define half3 make_half3
-    #define half4 make_half4
+    #include <cuda_fp16.h>
+#endif
+
+// ============================================================================
+// VECTOR CONVERSION MACROS
+// ============================================================================
+
+#if defined(PLATFORM_METAL)
+    #define AS_FLOAT2(v) float2(v)
+    #define AS_FLOAT3(v) float3(v)
+    #define AS_INT2(v) int2(v)
+    #define AS_UINT2(v) uint2(v)
+    #define HALF3(x,y,z) half3(x,y,z)
+    #define HALF3_FROM_FLOAT3(v) half3(v)
+    #define HALF_LITERAL(v) (v##h)
+    #define SELECT(t, f, cond) select(t, f, cond)
+    #define ANY_ISNAN(v) any(isnan(v))
+    #define ANY_ISINF(v) any(isinf(v))
+#elif defined(PLATFORM_CUDA)
+    #define AS_FLOAT2(v) make_float2((v).x, (v).y)
+    #define AS_FLOAT3(v) make_float3((v).x, (v).y, (v).z)
+    #define AS_INT2(v) make_int2((v).x, (v).y)
+    #define AS_UINT2(v) make_uint2((v).x, (v).y)
+    #define HALF3(x,y,z) make_half3(x, y, z)
+    #define HALF3_FROM_FLOAT3(v) make_half3((v).x, (v).y, (v).z)
+    #define HALF_LITERAL(v) (__float2half(v))
+    #define SELECT(t, f, cond) ((cond) ? (t) : (f))
+    #define ANY_ISNAN(v) (isnan((v).x) || isnan((v).y) || isnan((v).z))
+    #define ANY_ISINF(v) (isinf((v).x) || isinf((v).y) || isinf((v).z))
 #endif
 
 // ============================================================================
@@ -350,12 +411,16 @@
     #define FLOAT4(x, y, z, w) float4(x, y, z, w)
     #define INT2(x, y) int2(x, y)
     #define INT3(x, y, z) int3(x, y, z)
+    #define UINT2(x, y) uint2(x, y)
+    #define UINT3(x, y, z) uint3(x, y, z)
 #elif defined(PLATFORM_CUDA)
     #define FLOAT2(x, y) make_float2(x, y)
     #define FLOAT3(x, y, z) make_float3(x, y, z)
     #define FLOAT4(x, y, z, w) make_float4(x, y, z, w)
     #define INT2(x, y) make_int2(x, y)
     #define INT3(x, y, z) make_int3(x, y, z)
+    #define UINT2(x, y) make_uint2(x, y)
+    #define UINT3(x, y, z) make_uint3(x, y, z)
 #endif
 
 // ============================================================================
