@@ -88,8 +88,9 @@ using mat4 = metal::float4x4;
 #define GPU_INLINE __forceinline__
 #define KERNEL_FUNC extern "C" __global__
 #define CONST_MEM __constant__
-#define DEVICE_MEM __device__
-#define THREAD_MEM __shared__
+#define DEVICE_MEM
+#define THREAD_MEM
+#define THREADGROUP_MEM __shared__
 #define HOST_FUNC __host__
 
 #define RESTRICT __restrict__
@@ -101,9 +102,9 @@ using uint = unsigned int;
 using half = __half;
 #define F32(x) float(x)
 
-#define DEVICE_PTR(type) type
-#define CONSTANT_PTR(type) const type
-#define THREAD_PTR(type) __shared__ type
+#define DEVICE_PTR(type) type *
+#define CONSTANT_PTR(type) const type *
+#define THREAD_PTR(type) type *
 
 #define TEX3D_U8_R const unsigned char *RESTRICT
 #define TEX3D_U8_W unsigned char *RESTRICT
@@ -122,9 +123,11 @@ using half = __half;
 #define PLATFORM_CPU
 
 #if defined(__CUDACC__) // Compiling a .cu file with NVCC for host code
+#define PLATFORM_CUDA
 #define GPU_FUNC __host__ __device__
 #define HOST_FUNC __host__
 #include <cuda_fp16.h> // Allow host code in .cu files to see `half`
+#include <math_constants.h> // For CUDART_PI_F
 using half = __half;
 #else // Compiling with a standard C++ compiler (Clang, GCC, MSVC)
 #define GPU_FUNC
@@ -138,9 +141,10 @@ using half = __half;
 #define DEVICE_MEM  /* Not Applicable */
 #define THREAD_MEM  /* Not Applicable */
 
-#define DEVICE_PTR(type) type
-#define CONSTANT_PTR(type) const type
-#define THREAD_PTR(type) type
+#define DEVICE_PTR(type) type *
+#define CONSTANT_PTR(type) const type *
+#define THREAD_PTR(type) type *
+#define THREADGROUP_PTR(type) type *
 
 #define RESTRICT
 #define TEXTURE_OBJECT void *
@@ -226,7 +230,8 @@ public:
 
 #ifndef PLATFORM_METAL // Metal uses its own types, these are for CPU/CUDA
 
-// Forward declarations
+// 1. Forward Declarations
+#ifndef __CUDACC__
 struct int2;
 struct int3;
 struct int4;
@@ -237,12 +242,15 @@ struct float2;
 struct float3;
 struct float4;
 struct half2;
+#endif
 struct half3;
 struct half4;
 struct mat2;
 struct mat3;
 struct mat4;
 
+// 2. Struct Definitions
+#if !defined(__CUDACC__) && !defined(_WIN32)
 // --- floatN ---
 struct alignas(8) float2 {
   float x, y;
@@ -276,10 +284,13 @@ struct alignas(16) uint4 {
   uint x, y, z, w;
 };
 
-// --- halfN ---
+// --- half2 (CUDA provides this in cuda_fp16.h) ---
 struct alignas(4) half2 {
   half x, y;
 };
+#endif
+
+// --- half3, half4 (Not provided by CUDA) ---
 struct alignas(8) half3 {
   half x, y, z;
 };
@@ -298,6 +309,20 @@ struct alignas(16) mat4 {
   float4 cols[4];
 };
 
+#if defined(__CUDACC__) || defined(_WIN32)
+GPU_FUNC GPU_INLINE half3 make_half3(float s) {
+  half3 v = {__float2half(s), __float2half(s), __float2half(s)};
+  return v;
+}
+GPU_FUNC GPU_INLINE half3 make_half3(float x, float y, float z) {
+  half3 v = {__float2half(x), __float2half(y), __float2half(z)};
+  return v;
+}
+GPU_FUNC GPU_INLINE half3 make_half3(float3 v) {
+  half3 r = {__float2half(v.x), __float2half(v.y), __float2half(v.z)};
+  return r;
+}
+#else
 GPU_FUNC GPU_INLINE half3 make_half3(float s) {
   half3 v = {half(s), half(s), half(s)};
   return v;
@@ -306,11 +331,11 @@ GPU_FUNC GPU_INLINE half3 make_half3(float x, float y, float z) {
   half3 v = {half(x), half(y), half(z)};
   return v;
 }
-// Helper to convert float3 -> half3
 GPU_FUNC GPU_INLINE half3 make_half3(float3 v) {
   half3 r = {half(v.x), half(v.y), half(v.z)};
   return r;
 }
+#endif
 
 // 2. Arithmetic Operators for half3
 // Note: We convert to float for the math, then cast back to half
@@ -375,6 +400,7 @@ GPU_FUNC GPU_INLINE float3 make_float3(half3 v) { return float3(v); }
 
 #else
 
+#if !defined(__CUDACC__) && !defined(_WIN32)
 // floatN constructors
 GPU_FUNC GPU_INLINE float2 make_float2(float s) {
   float2 v = {s, s};
@@ -428,8 +454,17 @@ GPU_FUNC GPU_INLINE uint2 make_uint2(uint x, uint y) {
   uint2 v = {x, y};
   return v;
 }
+#endif
 
-// halfN constructors
+// halfN constructors — use __half explicitly to avoid ambiguous conversion
+#if defined(__CUDACC__) || defined(_WIN32)
+GPU_FUNC GPU_INLINE half2 make_half2(float s) {
+  return make_half2(__float2half(s), __float2half(s));
+}
+GPU_FUNC GPU_INLINE half2 make_half2(float x, float y) {
+  return make_half2(__float2half(x), __float2half(y));
+}
+#else
 GPU_FUNC GPU_INLINE half2 make_half2(float s) {
   half2 v = {half(s), half(s)};
   return v;
@@ -438,6 +473,7 @@ GPU_FUNC GPU_INLINE half2 make_half2(float x, float y) {
   half2 v = {half(x), half(y)};
   return v;
 }
+#endif
 
 // Type casting constructors
 GPU_FUNC GPU_INLINE float3 make_float3(int3 v) {
@@ -448,81 +484,108 @@ GPU_FUNC GPU_INLINE float3 make_float3(int3 v) {
 // 5. OPERATOR OVERLOADING
 //-------------------------------------------------------------------------------------------------
 
-#if defined(PLATFORM_CPU)
+#ifndef PLATFORM_METAL
 
 // --- float2 ---
-inline float2 operator+(float2 a, float2 b) {
+GPU_FUNC GPU_INLINE float2 operator+(float2 a, float2 b) {
   return make_float2(a.x + b.x, a.y + b.y);
 }
-inline float2 operator-(float2 a, float2 b) {
+GPU_FUNC GPU_INLINE float2 operator-(float2 a, float2 b) {
   return make_float2(a.x - b.x, a.y - b.y);
 }
-inline float2 operator*(float2 a, float2 b) {
+GPU_FUNC GPU_INLINE float2 operator-(float2 a, float b) {
+  return make_float2(a.x - b, a.y - b);
+}
+GPU_FUNC GPU_INLINE float2 operator*(float2 a, float2 b) {
   return make_float2(a.x * b.x, a.y * b.y);
 }
-inline float2 operator/(float2 a, float2 b) {
+GPU_FUNC GPU_INLINE float2 operator/(float2 a, float2 b) {
   return make_float2(a.x / b.x, a.y / b.y);
 }
-inline float2 operator*(float2 v, float s) {
+GPU_FUNC GPU_INLINE float2 operator*(float2 v, float s) {
   return make_float2(v.x * s, v.y * s);
 }
-inline float2 operator/(float2 v, float s) {
+GPU_FUNC GPU_INLINE float2 operator*(float s, float2 v) {
+  return make_float2(v.x * s, v.y * s);
+}
+GPU_FUNC GPU_INLINE float2 operator/(float2 v, float s) {
   return make_float2(v.x / s, v.y / s);
 }
 
 // --- float3 ---
-inline float3 operator+(float3 a, float3 b) {
+GPU_FUNC GPU_INLINE float3 operator+(float3 a, float3 b) {
   return make_float3(a.x + b.x, a.y + b.y, a.z + b.z);
 }
-inline float3 operator-(float3 a, float3 b) {
+GPU_FUNC GPU_INLINE float3 operator-(float3 a, float3 b) {
   return make_float3(a.x - b.x, a.y - b.y, a.z - b.z);
 }
-inline float3 operator*(float3 a, float3 b) {
+GPU_FUNC GPU_INLINE float3 operator-(float3 a, float b) {
+  return make_float3(a.x - b, a.y - b, a.z - b);
+}
+GPU_FUNC GPU_INLINE float3 operator*(float3 a, float3 b) {
   return make_float3(a.x * b.x, a.y * b.y, a.z * b.z);
 }
-inline float3 operator/(float3 a, float3 b) {
+GPU_FUNC GPU_INLINE float3 operator/(float3 a, float3 b) {
   return make_float3(a.x / b.x, a.y / b.y, a.z / b.z);
 }
-inline float3 operator*(float3 v, float s) {
+GPU_FUNC GPU_INLINE float3 operator*(float3 v, float s) {
   return make_float3(v.x * s, v.y * s, v.z * s);
 }
-inline float3 operator/(float3 v, float s) {
+GPU_FUNC GPU_INLINE float3 operator*(float s, float3 v) {
+  return make_float3(v.x * s, v.y * s, v.z * s);
+}
+GPU_FUNC GPU_INLINE float3 operator/(float3 v, float s) {
   return make_float3(v.x / s, v.y / s, v.z / s);
 }
 
 // --- float4 ---
-inline float4 operator+(float4 a, float4 b) {
+GPU_FUNC GPU_INLINE float4 operator+(float4 a, float4 b) {
   return make_float4(a.x + b.x, a.y + b.y, a.z + b.z, a.w + b.w);
 }
-inline float4 operator-(float4 a, float4 b) {
+GPU_FUNC GPU_INLINE float4 operator-(float4 a, float4 b) {
   return make_float4(a.x - b.x, a.y - b.y, a.z - b.z, a.w - b.w);
 }
-inline float4 operator*(float4 a, float4 b) {
+GPU_FUNC GPU_INLINE float4 operator-(float4 a, float b) {
+  return make_float4(a.x - b, a.y - b, a.z - b, a.w - b);
+}
+GPU_FUNC GPU_INLINE float4 operator*(float4 a, float4 b) {
   return make_float4(a.x * b.x, a.y * b.y, a.z * b.z, a.w * b.w);
 }
-inline float4 operator/(float4 a, float4 b) {
+GPU_FUNC GPU_INLINE float4 operator/(float4 a, float4 b) {
   return make_float4(a.x / b.x, a.y / b.y, a.z / b.z, a.w / b.w);
 }
-inline float4 operator*(float4 v, float s) {
+GPU_FUNC GPU_INLINE float4 operator*(float4 v, float s) {
   return make_float4(v.x * s, v.y * s, v.z * s, v.w * s);
 }
-inline float4 operator/(float4 v, float s) {
+GPU_FUNC GPU_INLINE float4 operator*(float s, float4 v) {
+  return make_float4(v.x * s, v.y * s, v.z * s, v.w * s);
+}
+GPU_FUNC GPU_INLINE float4 operator/(float4 v, float s) {
   return make_float4(v.x / s, v.y / s, v.z / s, v.w / s);
 }
 
 // --- Integer-only operators ---
-inline int2 operator%(int2 a, int2 b) {
+GPU_FUNC GPU_INLINE int2 operator%(int2 a, int2 b) {
   return make_int2(a.x % b.x, a.y % b.y);
 }
-inline uint2 operator&(uint2 a, uint2 b) {
+GPU_FUNC GPU_INLINE uint2 operator&(uint2 a, uint2 b) {
   return make_uint2(a.x & b.x, a.y & b.y);
+}
+GPU_FUNC GPU_INLINE uint3 operator^(uint3 a, uint3 b) {
+  return make_uint3(a.x ^ b.x, a.y ^ b.y, a.z ^ b.z);
+}
+GPU_FUNC GPU_INLINE uint3 operator>>(uint3 v, unsigned int s) {
+  return make_uint3(v.x >> s, v.y >> s, v.z >> s);
+}
+GPU_FUNC GPU_INLINE uint3 operator*(uint3 v, unsigned int s) {
+  return make_uint3(v.x * s, v.y * s, v.z * s);
 }
 
 // --- Matrix multiplication ---
-inline float4 operator*(mat4 m, float4 v) {
+GPU_FUNC GPU_INLINE float4 operator*(mat4 m, float4 v) {
   return m.cols[0] * v.x + m.cols[1] * v.y + m.cols[2] * v.z + m.cols[3] * v.w;
 }
-inline mat4 operator*(mat4 a, mat4 b) {
+GPU_FUNC GPU_INLINE mat4 operator*(mat4 a, mat4 b) {
   mat4 result;
   result.cols[0] = a * b.cols[0];
   result.cols[1] = a * b.cols[1];
@@ -571,23 +634,33 @@ GPU_FUNC GPU_INLINE float3 floor3(float3 v) {
   return make_float3(floor(v.x), floor(v.y), floor(v.z));
 }
 
-GPU_FUNC GPU_INLINE float3 abs3(float3 v) {
+GPU_FUNC GPU_INLINE float3 abs(float3 v) {
   return make_float3(abs(v.x), abs(v.y), abs(v.z));
 }
+GPU_FUNC GPU_INLINE half3 abs(half3 v) {
+  return make_half3(abs(v.x), abs(v.y), abs(v.z));
+}
+#if defined(PLATFORM_CUDA)
+GPU_FUNC GPU_INLINE half abs(half v) {
+  return __habs(v);
+}
+#endif
+GPU_FUNC GPU_INLINE float3 floor(float3 v) {
+  return make_float3(floor(v.x), floor(v.y), floor(v.z));
+}
 
-#if defined(PLATFORM_CPU)
-#define GPU_FUNC_INLINE inline
+#ifndef PLATFORM_METAL
 
-GPU_FUNC_INLINE float dot(float2 a, float2 b) { return a.x * b.x + a.y * b.y; }
-GPU_FUNC_INLINE float dot(float3 a, float3 b) {
+GPU_FUNC GPU_INLINE float dot(float2 a, float2 b) { return a.x * b.x + a.y * b.y; }
+GPU_FUNC GPU_INLINE float dot(float3 a, float3 b) {
   return a.x * b.x + a.y * b.y + a.z * b.z;
 }
-GPU_FUNC_INLINE float length(float3 v) { return sqrt(dot(v, v)); }
-GPU_FUNC_INLINE float3 normalize(float3 v) {
+GPU_FUNC GPU_INLINE float length(float3 v) { return sqrt(dot(v, v)); }
+GPU_FUNC GPU_INLINE float3 normalize(float3 v) {
   float l = length(v);
   return (l > 0.0f) ? v / l : v;
 }
-GPU_FUNC_INLINE int2 clamp(int2 v, int minVal, int maxVal) {
+GPU_FUNC GPU_INLINE int2 clamp(int2 v, int minVal, int maxVal) {
 
   return make_int2(fmin(fmax(v.x, minVal), maxVal),
                    fmin(fmax(v.y, minVal), maxVal));
@@ -597,7 +670,7 @@ GPU_FUNC GPU_INLINE float3 cross(float3 a, float3 b) {
                      a.x * b.y - a.y * b.x);
 }
 
-GPU_FUNC GPU_FUNC_INLINE float3 clamp(const float3 v, float minVal,
+GPU_FUNC GPU_INLINE float3 clamp(const float3 v, float minVal,
                                       float maxVal) {
   float3 tv =
       make_float3(v.x < minVal ? minVal : v.x, v.y < minVal ? minVal : v.y,
@@ -607,10 +680,32 @@ GPU_FUNC GPU_FUNC_INLINE float3 clamp(const float3 v, float minVal,
                      tv.y > maxVal ? maxVal : tv.y,
                      tv.z > maxVal ? maxVal : tv.z);
 }
-GPU_FUNC GPU_FUNC_INLINE float clamp(const float v, float minVal,
+GPU_FUNC GPU_INLINE float clamp(const float v, float minVal,
                                      float maxVal) {
   float tv = v < minVal ? minVal : v;
-  return v > maxVal ? maxVal : v;
+  return tv > maxVal ? maxVal : tv;
+}
+GPU_FUNC GPU_INLINE float3 fmax(float3 a, float3 b) {
+  return make_float3(fmax(a.x, b.x), fmax(a.y, b.y), fmax(a.z, b.z));
+}
+GPU_FUNC GPU_INLINE float3 fmin(float3 a, float3 b) {
+  return make_float3(fmin(a.x, b.x), fmin(a.y, b.y), fmin(a.z, b.z));
+}
+GPU_FUNC GPU_INLINE float smoothstep(float edge0, float edge1, float x) {
+    float t = clamp((x - edge0) / (edge1 - edge0), 0.0f, 1.0f);
+    return t * t * (3.0f - 2.0f * t);
+}
+GPU_FUNC GPU_INLINE float lerp(float a, float b, float t) {
+    return a + t * (b - a);
+}
+GPU_FUNC GPU_INLINE float2 lerp(float2 a, float2 b, float t) {
+    return a + t * (b - a);
+}
+GPU_FUNC GPU_INLINE float3 lerp(float3 a, float3 b, float t) {
+    return a + t * (b - a);
+}
+GPU_FUNC GPU_INLINE float4 lerp(float4 a, float4 b, float t) {
+    return a + t * (b - a);
 }
 
 #endif
@@ -625,10 +720,8 @@ GPU_FUNC GPU_INLINE void atomicAdd(threadgroup atomic_uint *val, uint delta) {
 GPU_FUNC GPU_INLINE void atomicAdd(device atomic_uint *val, uint delta) {
   atomic_fetch_add_explicit(val, delta, memory_order_relaxed);
 }
-#elif defined(PLATFORM_CUDA)
-GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {
-  atomicAdd(address, val);
-}
+#elif defined(PLATFORM_CUDA) || defined(__CUDACC__)
+// atomicAdd is already provided by CUDA natively
 #else
 // No-op or simulated for CPU for interface compatibility
 GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {

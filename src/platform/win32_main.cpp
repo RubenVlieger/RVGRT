@@ -5,7 +5,7 @@
 #include <windows.h>
 
 #include "State.hpp"
-#include "StateRender.cuh" // For the render loop
+#include "renderer/CudaRender.cuh"
 #include "platform/NetworkClient.hpp"
 #include "platform/WindowsPlatform.hpp"
 #include "renderer/D3D12Device.hpp"
@@ -84,10 +84,7 @@ void renderLoop() {
   // The command list must be open to record commands for tagging.
   d3d12Device->BeginFrame(); // This will reset the allocator and command list
   ID3D12GraphicsCommandList *cmdList = d3d12Device->GetCommandList();
-
-  // Tag resources for Streamline... (Your existing slSetTag logic goes here)
-
-  d3d12Device->EndFrame(); // Execute the tagging commands
+  d3d12Device->EndFrame();
 
   while (running) {
     State::state.graphicsDevice->BeginFrame();
@@ -107,39 +104,49 @@ void renderLoop() {
       }
     }
 
-    State::state.render->GIdata.UpdateGIData(State::state.render->cArray,
-                                             State::state.render->csdf,
-                                             State::state.render->texturepack);
-
     if (State::state.renderer) {
       State::state.renderer->Draw(State::state.character, frameCount);
     }
 
-    // ... Your full slSetConstants and slEvaluateFeature logic ...
-    // ... then copy to the back buffer ...
-
     ID3D12Resource *backBuffer = d3d12Device->GetCurrentBackBuffer();
-    ID3D12Resource *outputTexture =
-        State::state.render->upscaledColorBuffer.GetD3D12Resource();
+    ID3D12Resource *outputTexture = nullptr;
+    if (State::state.renderer && State::state.renderer->GetOutputTexture()) {
+        outputTexture = (ID3D12Resource*)State::state.renderer->GetOutputTexture();
+    }
 
-    D3D12_RESOURCE_BARRIER copyBarriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            outputTexture, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            D3D12_RESOURCE_STATE_COPY_SOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
-                                             D3D12_RESOURCE_STATE_PRESENT,
-                                             D3D12_RESOURCE_STATE_COPY_DEST)};
-    cmdList->ResourceBarrier(_countof(copyBarriers), copyBarriers);
-    cmdList->CopyResource(backBuffer, outputTexture);
+    if (outputTexture) {
+      // Create explicit D3D12 barriers without d3dx12.h
+      D3D12_RESOURCE_BARRIER copyBarriers[2] = {};
+      copyBarriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+      copyBarriers[0].Transition.pResource = outputTexture;
+      copyBarriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+      copyBarriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_UNORDERED_ACCESS;
+      copyBarriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_SOURCE;
 
-    D3D12_RESOURCE_BARRIER finalBarriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(outputTexture,
-                                             D3D12_RESOURCE_STATE_COPY_SOURCE,
-                                             D3D12_RESOURCE_STATE_COMMON),
-        CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
-                                             D3D12_RESOURCE_STATE_COPY_DEST,
-                                             D3D12_RESOURCE_STATE_PRESENT)};
-    cmdList->ResourceBarrier(_countof(finalBarriers), finalBarriers);
+      copyBarriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+      copyBarriers[1].Transition.pResource = backBuffer;
+      copyBarriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+      copyBarriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_PRESENT;
+      copyBarriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_COPY_DEST;
+
+      cmdList->ResourceBarrier(2, copyBarriers);
+      cmdList->CopyResource(backBuffer, outputTexture);
+
+      D3D12_RESOURCE_BARRIER finalBarriers[2] = {};
+      finalBarriers[0].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+      finalBarriers[0].Transition.pResource = outputTexture;
+      finalBarriers[0].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+      finalBarriers[0].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_SOURCE;
+      finalBarriers[0].Transition.StateAfter = D3D12_RESOURCE_STATE_COMMON;
+
+      finalBarriers[1].Type = D3D12_RESOURCE_BARRIER_TYPE_TRANSITION;
+      finalBarriers[1].Transition.pResource = backBuffer;
+      finalBarriers[1].Transition.Subresource = D3D12_RESOURCE_BARRIER_ALL_SUBRESOURCES;
+      finalBarriers[1].Transition.StateBefore = D3D12_RESOURCE_STATE_COPY_DEST;
+      finalBarriers[1].Transition.StateAfter = D3D12_RESOURCE_STATE_PRESENT;
+
+      cmdList->ResourceBarrier(2, finalBarriers);
+    }
 
     State::state.graphicsDevice->EndFrame();
 

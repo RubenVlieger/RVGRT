@@ -1,11 +1,5 @@
 #pragma once
 
-#ifdef __OBJC__
-#import <Metal/Metal.h>
-#else
-typedef void *id;
-#endif
-
 #include "renderer/ShaderTypes.h"
 #include <cstdint>
 #include <vector>
@@ -19,6 +13,9 @@ typedef void *id;
  *
  * Allocation and deallocation are CPU-side (free-stack).
  * The GPU buffers are pre-allocated at max capacity.
+ *
+ * Platform-specific implementations live in BrickPool.mm (Metal)
+ * and CudaBrickPool.cu (CUDA).
  */
 class BrickPool {
 public:
@@ -33,19 +30,21 @@ public:
   void Free(uint32_t base, uint32_t count);
 
   /// Get the occupancy buffer (capacity * 8 * sizeof(uint64_t))
-  id GetOccupancyBuffer();
+  /// On Metal: returns id<MTLBuffer>, on CUDA: returns uint64_t* (device ptr)
+  void* GetOccupancyBuffer();
 
   /// Get the data buffer (capacity * 512 * sizeof(uint8_t))
-  id GetDataBuffer();
+  /// On Metal: returns id<MTLBuffer>, on CUDA: returns uint8_t* (device ptr)
+  void* GetDataBuffer();
 
   uint32_t GetCapacity() const { return _capacity; }
   uint32_t GetUsedCount() const { return _usedCount; }
   uint32_t GetFreeCount() const { return _capacity - _usedCount; }
 
 private:
-  id _device;
-  id _occupancyBuffer;
-  id _dataBuffer;
+  void* _deviceHandle; // Platform-specific device (id<MTLDevice> or opaque)
+  void* _occupancyBuffer;
+  void* _dataBuffer;
 
   uint32_t _capacity;
   uint32_t _usedCount;

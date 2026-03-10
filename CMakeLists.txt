@@ -62,17 +62,23 @@ if(WIN32)
     add_compile_definitions(D3D12)
     
     set(STREAMLINE_SDK_PATH "${CMAKE_SOURCE_DIR}/vendor/streamline-sdk-v2.9.0")
-    target_include_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/include")
-    target_link_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/lib/x64")
-    target_link_libraries(${APP_NAME} PRIVATE sl.interposer)
-    
-    add_custom_command(
-        TARGET ${APP_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/sl.interposer.dll" $<TARGET_FILE_DIR:${APP_NAME}>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/sl.dlss.dll" $<TARGET_FILE_DIR:${APP_NAME}>
-        COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/nvngx_dlss.dll" $<TARGET_FILE_DIR:${APP_NAME}>
-        COMMENT "Copying Streamline DLLs to output directory..."
-    )
+    if (EXISTS "${STREAMLINE_SDK_PATH}")
+        message(STATUS "Found Streamline SDK, enabling DLSS support.")
+        target_compile_definitions(${APP_NAME} PRIVATE HAS_STREAMLINE)
+        target_include_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/include")
+        target_link_directories(${APP_NAME} PRIVATE "${STREAMLINE_SDK_PATH}/lib/x64")
+        target_link_libraries(${APP_NAME} PRIVATE sl.interposer)
+        
+        add_custom_command(
+            TARGET ${APP_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/sl.interposer.dll" $<TARGET_FILE_DIR:${APP_NAME}>
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/sl.dlss.dll" $<TARGET_FILE_DIR:${APP_NAME}>
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different "${STREAMLINE_SDK_PATH}/bin/x64/nvngx_dlss.dll" $<TARGET_FILE_DIR:${APP_NAME}>
+            COMMENT "Copying Streamline DLLs to output directory..."
+        )
+    else()
+        message(WARNING "Streamline SDK not found. Building without DLSS.")
+    endif()
 
 elseif(APPLE)
     #======================================#

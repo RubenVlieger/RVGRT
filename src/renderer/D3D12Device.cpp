@@ -3,17 +3,21 @@
 #include "State.hpp"
 #include <stdexcept>
 #include <iostream>
+
+#ifdef HAS_STREAMLINE
 #include <sl.h>
 #include <sl_dlss.h>
-#include <d3d12/d3dx12.h>
+#pragma comment(lib, "sl.interposer.lib")
+#endif
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "dxgi.lib")
-#pragma comment(lib, "sl.interposer.lib")
 
+#ifdef HAS_STREAMLINE
 extern "C" {
     __declspec(dllexport) unsigned long NvOptimusEnablement = 0x00000001;
 }
+#endif
 
 // Helper for checking HRESULTs
 static void checkHresult(HRESULT hr, const char* msg) {
@@ -23,6 +27,7 @@ static void checkHresult(HRESULT hr, const char* msg) {
     }
 }
 
+#ifdef HAS_STREAMLINE
 // Helper for Streamline results
 static inline void successCheck(sl::Result result, const char* msg) {
     if(result != sl::Result::eOk) {
@@ -30,6 +35,7 @@ static inline void successCheck(sl::Result result, const char* msg) {
         throw std::runtime_error(msg);
     }
 }
+#endif
 
 
 D3D12Device::D3D12Device()
@@ -46,7 +52,9 @@ D3D12Device::~D3D12Device() {
         cudaDestroyExternalSemaphore(cudaSyncSemaphore);
     }
     CloseHandle(fenceEvent);
+#ifdef HAS_STREAMLINE
     slShutdown();
+#endif
 }
 
 void D3D12Device::Initialize(void* windowHandle) {
@@ -107,6 +115,7 @@ void D3D12Device::Initialize(void* windowHandle) {
     cudaSetDevice(cudaDevice);
 
     // --- Streamline ---
+#ifdef HAS_STREAMLINE
     sl::Preferences prefs = {};
     prefs.renderAPI = sl::RenderAPI::eD3D12;
     // Fill in other prefs...
@@ -115,6 +124,7 @@ void D3D12Device::Initialize(void* windowHandle) {
     prefs.numFeaturesToLoad = _countof(features);
     successCheck(slInit(prefs, sl::kSDKVersion), "slInit");
     successCheck(slSetD3DDevice(d3dDevice.Get()), "slSetD3DDevice");
+#endif
 
     // --- Command Queue & Swap Chain ---
     D3D12_COMMAND_QUEUE_DESC queueDesc = { D3D12_COMMAND_LIST_TYPE_DIRECT };

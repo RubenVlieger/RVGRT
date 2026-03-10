@@ -789,8 +789,8 @@ void MaterialMap::GenerateLODBatch(const std::vector<SectorWorkItem> &sectors) {
 // Getters
 // ============================================================================
 
-id MaterialMap::GetIndirectionTexture() { return _indirectionTexture; }
-id MaterialMap::GetSectorBuffer() { return _sectorBuffer; }
-id MaterialMap::GetOccupancyBuffer() { return _brickPool.GetOccupancyBuffer(); }
-id MaterialMap::GetDataBuffer() { return _brickPool.GetDataBuffer(); }
-id MaterialMap::GetSectorMaskBuffer() { return _sectorMaskBuffer; }
+void* MaterialMap::GetIndirectionTexture() { return _indirectionTexture; }
+void* MaterialMap::GetSectorBuffer() { return _sectorBuffer; }
+void* MaterialMap::GetOccupancyBuffer() { return _brickPool.GetOccupancyBuffer(); }
+void* MaterialMap::GetDataBuffer() { return _brickPool.GetDataBuffer(); }
+void* MaterialMap::GetSectorMaskBuffer() { return _sectorMaskBuffer; }
