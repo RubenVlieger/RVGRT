@@ -11,6 +11,9 @@
 /RVGRT.gputrace
 /voxelRT-relevant-files
 /build-ninja-reldeb
+/.cache
+/.agents
+
 # all CUDA and Windows files!
 /*.cu
 /src/*.cu
