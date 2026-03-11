@@ -100,20 +100,43 @@ GPU_FUNC half3 sampleTextureMetal(
 #endif
 
 #if defined(PLATFORM_CUDA)
-CONST_MEM float3 TINT_GRASS_CUDA = make_float3(0.48f, 0.65f, 0.36f);
-CONST_MEM float3 TINT_FOLIAGE_CUDA = make_float3(0.28f, 0.70f, 0.17f);
-CONST_MEM float3 TINT_NONE_CUDA = make_float3(1.0f, 1.0f, 1.0f);
+static CONST_MEM float3 TINT_GRASS_CUDA = {0.48f, 0.65f, 0.36f};
+static CONST_MEM float3 TINT_FOLIAGE_CUDA = {0.28f, 0.70f, 0.17f};
+static CONST_MEM float3 TINT_NONE_CUDA = {1.0f, 1.0f, 1.0f};
 
-GPU_FUNC float3 sampleTextureCuda(
+GPU_FUNC GPU_INLINE float3 sampleTextureCuda(
     float2 uv, 
     uint8_t matID,
     float3 normal, 
     TEXTURE_OBJECT texObj, 
     float distSq);
+
+// Fallback sampleTexture for CUDA (simplified)
+GPU_FUNC GPU_INLINE half3 sampleTexture(
+    float2 uv, 
+    uint8_t matID,
+    float3 normal, 
+    TEXTURE_OBJECT texObj, 
+    float distSq) 
+{
+    return make_half3(0.8f, 0.8f, 0.8f); // Return gray as fallback
+}
+
+GPU_FUNC GPU_INLINE half3 sampleSky(float3 dir, float3 sunDir) {
+    float sunDot = fmaxf(dir.x * sunDir.x + dir.y * sunDir.y + dir.z * sunDir.z, 0.0f);
+    float3 skyColor = make_float3(0.3f, 0.5f, 0.8f);
+    float3 sunColor = make_float3(1.0f, 0.9f, 0.7f);
+    float blend = powf(sunDot, 8.0f);
+    return make_half3(
+        skyColor.x + (sunColor.x - skyColor.x) * blend,
+        skyColor.y + (sunColor.y - skyColor.y) * blend,
+        skyColor.z + (sunColor.z - skyColor.z) * blend
+    );
+}
 #endif
 
 #if defined(PLATFORM_METAL)
-GPU_FUNC half3 sampleTexture(
+GPU_FUNC GPU_INLINE half3 sampleTexture(
     half2 uv, 
     uint8_t matID,
     half3 normal, 
@@ -126,29 +149,29 @@ GPU_FUNC half3 sampleTexture(
 
 // CUDA-specific helpers
 #if defined(PLATFORM_CUDA)
-GPU_FUNC uint3 uint3_yzx(uint3 v) {
+GPU_FUNC GPU_INLINE uint3 uint3_yzx(uint3 v) {
     return make_uint3(v.y, v.z, v.x);
 }
-GPU_FUNC uint3 uint3_xor(uint3 a, uint3 b) {
+GPU_FUNC GPU_INLINE uint3 uint3_xor(uint3 a, uint3 b) {
     return make_uint3(a.x ^ b.x, a.y ^ b.y, a.z ^ b.z);
 }
-GPU_FUNC uint3 operator*(uint3 v, unsigned int s) {
+GPU_FUNC GPU_INLINE uint3 operator*(uint3 v, unsigned int s) {
     return make_uint3(v.x * s, v.y * s, v.z * s);
 }
-GPU_FUNC uint3 operator*(unsigned int s, uint3 v) {
+GPU_FUNC GPU_INLINE uint3 operator*(unsigned int s, uint3 v) {
     return v * s;
 }
-GPU_FUNC float3 float3_floor(float3 v) {
+GPU_FUNC GPU_INLINE float3 float3_floor(float3 v) {
     return make_float3(floorf(v.x), floorf(v.y), floorf(v.z));
 }
-GPU_FUNC float3 float3_abs(float3 v) {
+GPU_FUNC GPU_INLINE float3 float3_abs(float3 v) {
     return make_float3(fabsf(v.x), fabsf(v.y), fabsf(v.z));
 }
 #endif
 
 
 
-GPU_FUNC uint hash3_to_1(int3 p) {
+GPU_FUNC GPU_INLINE uint hash3_to_1(int3 p) {
 #if defined(PLATFORM_CUDA)
     uint3 u = make_uint3(p.x, p.y, p.z);
     u = uint3_xor((u >> 8U), uint3_yzx(u)) * 0x45D9F3BU;
@@ -163,7 +186,7 @@ GPU_FUNC uint hash3_to_1(int3 p) {
     return u.x ^ u.y ^ u.z;
 }
 
-GPU_FUNC uint pcg_hash(uint seed)
+GPU_FUNC GPU_INLINE uint pcg_hash(uint seed)
 {
     uint state = seed * 747796405u + 2891336453u;
     uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
@@ -171,31 +194,37 @@ GPU_FUNC uint pcg_hash(uint seed)
 }
 
 #if defined(PLATFORM_METAL)
-GPU_FUNC float rand_float(thread uint& seed) {
+GPU_FUNC GPU_INLINE float rand_float(thread uint& seed) {
     seed = pcg_hash(seed);
     return (float)seed / (float)UINT_MAX;
 }
 #elif defined(PLATFORM_CUDA)
-GPU_FUNC float rand_float(uint& seed) {
+GPU_FUNC GPU_INLINE float rand_float(uint& seed) {
     seed = pcg_hash(seed);
     return (float)seed / (float)UINT_MAX;
 }
 #else
-GPU_FUNC float rand_float(uint& seed) {
+GPU_FUNC GPU_INLINE float rand_float(uint& seed) {
     seed = pcg_hash(seed);
     return (float)seed / (float)UINT_MAX;
 }
 #endif
 
 #if defined(PLATFORM_METAL)
-GPU_FUNC float3 reconstructPos(float depth, float2 uv, constant const CameraData& cam) {
+GPU_FUNC GPU_INLINE float3 reconstructPos(float depth, float2 uv, constant const CameraData& cam) {
     float2 ndc = uv * 2.0f - 1.0f;
+    float3 viewDir = normalize(cam.forward + ndc.x * cam.right + ndc.y * cam.up);
+    return cam.position + viewDir * depth;
+}
+#elif defined(PLATFORM_CUDA)
+GPU_FUNC GPU_INLINE float3 reconstructPos(float depth, float2 uv, const CameraData& cam) {
+    float2 ndc = make_float2(uv.x * 2.0f - 1.0f, uv.y * 2.0f - 1.0f);
     float3 viewDir = normalize(cam.forward + ndc.x * cam.right + ndc.y * cam.up);
     return cam.position + viewDir * depth;
 }
 #endif
 
-GPU_FUNC float2 reconstructUVFloat(float3 pos, float3 normal) {
+GPU_FUNC GPU_INLINE float2 reconstructUVFloat(float3 pos, float3 normal) {
 #if defined(PLATFORM_CUDA)
     float3 fpos = float3_floor(pos);
 #else
@@ -209,7 +238,7 @@ GPU_FUNC float2 reconstructUVFloat(float3 pos, float3 normal) {
 }
 
 #if defined(PLATFORM_METAL)
-GPU_FUNC half2 reconstructUV(float3 pos, half3 normal) {
+GPU_FUNC GPU_INLINE half2 reconstructUV(float3 pos, half3 normal) {
     float3 fpos = float3_floor(pos);
     half2 uv;
     if (abs(normal.x) > 0.5h)      uv = half2(pos.y - fpos.y, pos.z - fpos.z);
@@ -244,7 +273,7 @@ GPU_FUNC GPU_INLINE half3 clamp3h(const half3 a, const half3 b, const half3 c)
 #endif
 
 #if defined(PLATFORM_METAL)
-GPU_FUNC bool checkBitLocal_Optimized(
+GPU_FUNC GPU_INLINE bool checkBitLocal_Optimized(
     uint packed,
     float3 localEntry,
     float3 rayDir,
@@ -254,7 +283,7 @@ GPU_FUNC bool checkBitLocal_Optimized(
     float3 camPos,
     thread hitInfo& HI)
 #elif defined(PLATFORM_CUDA)
-GPU_FUNC bool checkBitLocal_Optimized(
+GPU_FUNC GPU_INLINE bool checkBitLocal_Optimized(
     uint packed,
     float3 localEntry,
     float3 rayDir,
@@ -264,7 +293,7 @@ GPU_FUNC bool checkBitLocal_Optimized(
     float3 camPos,
     hitInfo& HI)
 #else
-GPU_FUNC bool checkBitLocal_Optimized(
+GPU_FUNC GPU_INLINE bool checkBitLocal_Optimized(
     uint packed,
     float3 localEntry,
     float3 rayDir,

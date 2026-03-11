@@ -61,6 +61,13 @@ private:
   // Super-sector masks: one uint64_t per 4x4x4 group of sectors
   uint64_t* d_sectorMasks;
 
+  // Work buffers for GPU compute kernels
+  SectorWorkItem* d_workItems;
+  uint64_t* d_analysisResults;
+  size_t _workItemCapacity;
+  BrickWorkItem* d_brickWorkList;
+  size_t _brickWorkCapacity;
+
   // --- Async Compute Results ---
   struct AsyncResult {
     SectorWorkItem item;

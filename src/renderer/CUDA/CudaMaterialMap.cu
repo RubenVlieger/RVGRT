@@ -5,6 +5,23 @@
 #include <cmath>
 #include <cstring>
 
+// Forward declarations for kernels from material_gen.shader
+extern __global__ void XMap_AnalyzeStreaming(
+    SectorWorkItem* workItems,
+    uint64_t* resultBuffer,
+    uint32_t totalItems,
+    int _width, int _height
+);
+
+extern __global__ void XMap_FillBricks(
+    BrickWorkItem* workList,
+    SectorInfo* sectorBuffer,
+    uint64_t* occupancyBuffer,
+    uint8_t* dataBuffer,
+    int3 worldOrigin,
+    int _width, int _height
+);
+
 // Host-side popcount for 64-bit (works on MSVC)
 static inline uint32_t host_popcount64(uint64_t x) {
 #if defined(_M_X64) || defined(__x86_64__)
@@ -22,6 +39,8 @@ static inline int posmod(int a, int m) {
 
 CudaMaterialMap::CudaMaterialMap()
     : d_indirection(nullptr), d_sectors(nullptr), d_sectorMasks(nullptr),
+      d_workItems(nullptr), d_analysisResults(nullptr), _workItemCapacity(16384),
+      d_brickWorkList(nullptr), _brickWorkCapacity(65536),
       _brickPool(), _firstUpdate(true), _nextSectorHandle(1), _cudaStream(nullptr) {
   
   // Create CUDA stream for async operations
@@ -97,6 +116,14 @@ CudaMaterialMap::CudaMaterialMap()
   }
   cudaMemset(d_sectorMasks, 0, totalSuper * sizeof(uint64_t));
 
+  // Async streaming buffers
+  err = cudaMalloc(&d_workItems, _workItemCapacity * sizeof(SectorWorkItem));
+  err = cudaMalloc(&d_analysisResults, _workItemCapacity * sizeof(uint64_t));
+  err = cudaMalloc(&d_brickWorkList, _brickWorkCapacity * sizeof(BrickWorkItem));
+  if (err != cudaSuccess) {
+        fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to allocate streaming work buffers.\n");
+  }
+
   printf("[CudaMaterialMap] Initialized: %dx%dx%d indirection (%d sectors), %d super-sectors\n",
          _indW, _indH, _indD, totalCells, totalSuper);
 }
@@ -117,6 +144,18 @@ CudaMaterialMap::~CudaMaterialMap() {
   if (d_sectorMasks) {
     cudaFree(d_sectorMasks);
     d_sectorMasks = nullptr;
+  }
+  if (d_workItems) {
+      cudaFree(d_workItems);
+      d_workItems = nullptr;
+  }
+  if (d_analysisResults) {
+      cudaFree(d_analysisResults);
+      d_analysisResults = nullptr;
+  }
+  if (d_brickWorkList) {
+      cudaFree(d_brickWorkList);
+      d_brickWorkList = nullptr;
   }
 }
 
@@ -525,14 +564,43 @@ bool CudaMaterialMap::UpdateStreaming(simd_float3 cameraPos) {
     }
   }
 
-  // 3. Process pending requests synchronously (CPU analysis for now)
-  // TODO: Implement GPU async analysis similar to Metal
-  for (const auto& item : pendingRequests) {
-    std::vector<BrickWorkItem> tempWorkList;
-    LoadSector(item.worldX, item.worldY, item.worldZ, 
-               _sectorStates[item.wrappedIdx].isLOD, tempWorkList);
-    workList.insert(workList.end(), tempWorkList.begin(), tempWorkList.end());
-    anyChanged = true;
+  // 3. Dispatch Async Analysis to GPU
+  if (!pendingRequests.empty()) {
+      // Sort pendingRequests by 3D distance to camera so closer chunks load first
+      std::sort(pendingRequests.begin(), pendingRequests.end(),
+        [camSX, camSY, camSZ](const SectorWorkItem& a, const SectorWorkItem& b) {
+          int dxA = a.worldX - camSX;
+          int dyA = a.worldY - camSY;
+          int dzA = a.worldZ - camSZ;
+          int distSqA = dxA*dxA + dyA*dyA + dzA*dzA;
+
+          int dxB = b.worldX - camSX;
+          int dyB = b.worldY - camSY;
+          int dzB = b.worldZ - camSZ;
+          int distSqB = dxB*dxB + dyB*dyB + dzB*dzB;
+
+          return distSqA < distSqB;
+        });
+
+      size_t numReq = std::min(pendingRequests.size(), _workItemCapacity);
+      
+      for (size_t i = 0; i < numReq; ++i) {
+          const auto& item = pendingRequests[i];
+          SectorState& state = _sectorStates[item.wrappedIdx];
+          
+          state.worldX = item.worldX;
+          state.worldY = item.worldY;
+          state.worldZ = item.worldZ;
+          
+          int distX = std::abs(item.worldX - camSX);
+          int distZ = std::abs(item.worldZ - camSZ);
+          int maxDist = std::max(distX, distZ);
+          state.isLOD = (maxDist > DETAIL_RADIUS_SECTORS);
+          state.isAnalyzing = true;
+      }
+      
+      std::vector<SectorWorkItem> dispatchedItems(pendingRequests.begin(), pendingRequests.begin() + numReq);
+      DispatchAsyncAnalysis(dispatchedItems);
   }
 
   // 4. Update Render State
@@ -577,16 +645,76 @@ void CudaMaterialMap::GenerateDynamic() {
 void CudaMaterialMap::GenerateBrickData(const std::vector<BrickWorkItem> &workList) {
   if (workList.empty()) return;
   
-  // TODO: Implement GPU brick generation kernel
-  // For now, this is a placeholder that would launch a CUDA kernel
-  // similar to the Metal XMap_FillBricks kernel
+  if (workList.size() > _brickWorkCapacity) {
+      // Reallocate if needed
+      if (d_brickWorkList) cudaFree(d_brickWorkList);
+      _brickWorkCapacity = workList.size() + 1024;
+      cudaMalloc(&d_brickWorkList, _brickWorkCapacity * sizeof(BrickWorkItem));
+  }
   
-  printf("[CudaMaterialMap] Queued %zu bricks for generation\n", workList.size());
+  cudaError_t err = cudaMemcpyAsync(d_brickWorkList, workList.data(), 
+                                    workList.size() * sizeof(BrickWorkItem), 
+                                    cudaMemcpyHostToDevice, (cudaStream_t)_cudaStream);
+  if (err != cudaSuccess) {
+      fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to upload worklist: %s\n", cudaGetErrorString(err));
+      return;
+  }
+  
+  uint32_t totalSubBricks = workList.size() * 8;
+  dim3 gridSize(totalSubBricks, 1, 1);
+  dim3 blockSize(64, 1, 1);
+  
+  XMap_FillBricks<<<gridSize, blockSize, 0, (cudaStream_t)_cudaStream>>>(
+      d_brickWorkList,
+      d_sectors,
+      _brickPool.GetOccupancyPtr(),
+      _brickPool.GetDataPtr(),
+      _worldOrigin,
+      0, 0
+  );
+  
+  cudaStreamSynchronize((cudaStream_t)_cudaStream);
 }
 
 void CudaMaterialMap::DispatchAsyncAnalysis(const std::vector<SectorWorkItem> &items) {
-  // TODO: Implement GPU async analysis
-  (void)items;
+  if (items.empty()) return;
+  
+  size_t numReq = items.size();
+  
+  cudaError_t err = cudaMemcpyAsync(d_workItems, items.data(), numReq * sizeof(SectorWorkItem), cudaMemcpyHostToDevice, (cudaStream_t)_cudaStream);
+  if (err != cudaSuccess) {
+      fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to upload items: %s\n", cudaGetErrorString(err));
+      return;
+  }
+  
+  uint32_t totalItems = (uint32_t)numReq;
+  dim3 gridSize(numReq, 1, 1);
+  dim3 blockSize(std::min((uint32_t)64, totalItems), 1, 1);
+  
+  XMap_AnalyzeStreaming<<<gridSize, blockSize, 0, (cudaStream_t)_cudaStream>>>(
+      d_workItems,
+      d_analysisResults,
+      totalItems,
+      0, 0
+  );
+  
+  std::vector<uint64_t> resultsMasks(numReq);
+  cudaMemcpyAsync(resultsMasks.data(), d_analysisResults, numReq * sizeof(uint64_t), cudaMemcpyDeviceToHost, (cudaStream_t)_cudaStream);
+  
+  // Wait for results
+  cudaStreamSynchronize((cudaStream_t)_cudaStream);
+  
+  std::vector<AsyncResult> results;
+  results.reserve(numReq);
+  for (size_t i = 0; i < numReq; ++i) {
+      AsyncResult res;
+      res.item = items[i];
+      res.brickMask = resultsMasks[i];
+      results.push_back(res);
+  }
+  
+  std::lock_guard<std::mutex> lock(_asyncResultsMutex);
+  _asyncResults.insert(_asyncResults.end(), results.begin(), results.end());
 }
 
 void CudaMaterialMap::ProcessAsyncResults(std::vector<BrickWorkItem> &workList) {

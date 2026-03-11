@@ -1,0 +1,439 @@
+MSBuild version 17.8.5+b5265ef37 for .NET Framework
+
+  Compiling CUDA source file ..\src\renderer\TexturePack_impl.cu...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\TexturePack_impl.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\TexturePack_impl.cu" 
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\stb_image.h(4276): warning #550-D: variable "old_limit" was set but never used [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+       unsigned int cur, limit, old_limit;
+                                ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\stb_image.h(5185): warning #550-D: variable "idata_limit_old" was set but never used [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+                   stbi__uint32 idata_limit_old = idata_limit;
+                                ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\stb_image.h(6972): warning #550-D: variable "out_size" was set but never used [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+          int out_size = 0;
+              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\stb_image.h(6973): warning #550-D: variable "delays_size" was set but never used [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+          int delays_size = 0;
+              ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\TexturePack_impl.cu(16): warning #177-D: function "float_to_half" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    static inline __half float_to_half(float f) { return __float2half_rn(f); }
+                         ^
+  
+  TexturePack_impl.cu
+  tmpxft_0001c398_00000000-8_TexturePack_impl.cudafe1.cpp
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\CUDA\CudaRenderer.cu...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\CudaRenderer.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\CUDA\CudaRenderer.cu" 
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\CUDA\CudaRenderer.cu(28): warning C4005: 'CUDA_CHECK': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\CUDA\CudaRenderer.cu(28): warning C4005: 'CUDA_CHECK': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  CudaRenderer.cu
+  tmpxft_0000f258_00000000-8_CudaRenderer.cudafe1.cpp
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\CUDA\CudaMaterialMap.cu...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\CudaMaterialMap.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\CUDA\CudaMaterialMap.cu" 
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  CudaMaterialMap.cu
+  tmpxft_0000bfdc_00000000-8_CudaMaterialMap.cudafe1.cpp
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer\../cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(84): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(85): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\CUDA\CudaMaterialMap.cu(11): warning C4244: 'return': conversion from 'unsigned __int64' to 'uint32_t', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\CudaD3D12Texture.cu...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\CudaD3D12Texture.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\CudaD3D12Texture.cu" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  CudaD3D12Texture.cu
+  tmpxft_00003f8c_00000000-8_CudaD3D12Texture.cudafe1.cpp
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\tables.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\tables.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\tables.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  tables.shader
+  tmpxft_00024a40_00000000-8_tables.cudafe1.cpp
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\dist_approx.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\dist_approx.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\dist_approx.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(103): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_GRASS_CUDA = make_float3(0.48f, 0.65f, 0.36f);
+                                    ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(104): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_FOLIAGE_CUDA = make_float3(0.28f, 0.70f, 0.17f);
+                                    ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(105): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_NONE_CUDA = make_float3(1.0f, 1.0f, 1.0f);
+                                    ^
+  
+  3 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/dist_approx.shader".
+  dist_approx.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\dist_approx.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\dist_approx.shader"" exited with code 1. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\direct_light.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\direct_light.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(103): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_GRASS_CUDA = make_float3(0.48f, 0.65f, 0.36f);
+                                    ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(104): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_FOLIAGE_CUDA = make_float3(0.28f, 0.70f, 0.17f);
+                                    ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(105): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_NONE_CUDA = make_float3(1.0f, 1.0f, 1.0f);
+                                    ^
+  
+  3 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/direct_light.shader".
+  direct_light.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\direct_light.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader"" exited with code 1. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\indirect_bounce.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\indirect_bounce.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(56): error : class "float4" has no member "r" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float depth = surf2Dread<float4>(texDepth, (gid).x * sizeof(float4), (gid).y).r;
+                                                                                      ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(66): error : class "float4" has no member "rgb" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        half3 normal = make_float3((surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).x, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).y, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).z);
+                                                                                                     ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(66): error : class "float4" has no member "rgb" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        half3 normal = make_float3((surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).x, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).y, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).z);
+                                                                                                                                                                               ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(66): error : class "float4" has no member "rgb" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        half3 normal = make_float3((surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).x, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).y, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).z);
+                                                                                                                                                                                                                                                         ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(70): error : no suitable user-defined conversion from "float3" to "int3" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        uint voxelHash = hash3_to_1(int3(pos * 1024.f));
+                                         ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : no suitable constructor exists to convert from "int" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                  ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                   ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : no suitable constructor exists to convert from "int" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                                  ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                                   ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(94): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 localDir = float3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
+                                 ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(94): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 localDir = float3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
+                                                    ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(127): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+            float luma = (float3)skyLight.x * 0.3f + (float3)skyLight.y * 0.59f + (float3)skyLight.z * 0.11f;
+                                 ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(127): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+            float luma = (float3)skyLight.x * 0.3f + (float3)skyLight.y * 0.59f + (float3)skyLight.z * 0.11f;
+                                                             ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(127): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+            float luma = (float3)skyLight.x * 0.3f + (float3)skyLight.y * 0.59f + (float3)skyLight.z * 0.11f;
+                                                                                          ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(132): error : no suitable user-defined conversion from "half3" to "float4" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        surf2Dwrite(float4((float3)incomingLight, 1.0f), texRawIndirect, (gid).x * sizeof(float4), (gid).y);
+                           ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(132): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        surf2Dwrite(float4((float3)incomingLight, 1.0f), texRawIndirect, (gid).x * sizeof(float4), (gid).y);
+                                                ^
+  
+  16 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/indirect_bounce.shader".
+  indirect_bounce.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\indirect_bounce.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\temporal_acc.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\temporal_acc.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\temporal_acc.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  temporal_acc.shader
+  tmpxft_0000ef40_00000000-8_temporal_acc.cudafe1.cpp
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(84): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(85): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\denoise.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\denoise.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\denoise.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  denoise.shader
+  tmpxft_00016f48_00000000-8_denoise.cudafe1.cpp
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\volumetric.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\volumetric.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\volumetric.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(103): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_GRASS_CUDA = make_float3(0.48f, 0.65f, 0.36f);
+                                    ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(104): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_FOLIAGE_CUDA = make_float3(0.28f, 0.70f, 0.17f);
+                                    ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\raytracing_functions.h(105): error : dynamic initialization is not supported for a __constant__ variable [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__constant__) float3 TINT_NONE_CUDA = make_float3(1.0f, 1.0f, 1.0f);
+                                    ^
+  
+  3 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/volumetric.shader".
+  volumetric.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\volumetric.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\volumetric.shader"" exited with code 1. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\exposure.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\exposure.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\exposure.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  exposure.shader
+  tmpxft_00017984_00000000-8_exposure.cudafe1.cpp
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\composite.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\composite.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\composite.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  composite.shader
+  tmpxft_0000ccd8_00000000-8_composite.cudafe1.cpp
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(84): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(85): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\material_gen.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\material_gen.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\material_gen.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(771): warning #177-D: variable "tv" was declared but never referenced [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+      float tv = v < minVal ? minVal : v;
+            ^
+  
+  Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+  
+  material_gen.shader
+  tmpxft_00018c2c_00000000-8_material_gen.cudafe1.cpp
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'int' to 'float', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(746): warning C4244: 'argument': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(84): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\TerrainGeneration.h(85): warning C4244: 'initializing': conversion from 'float' to 'int', possible loss of data [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\material_gen.shader(349): warning C4334: '<<': result of 32-bit shift implicitly converted to 64 bits (was 64-bit shift intended?) [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]

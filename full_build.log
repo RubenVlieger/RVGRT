@@ -1,0 +1,441 @@
+MSBuild version 17.8.5+b5265ef37 for .NET Framework
+
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\tables.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\tables.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\tables.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/tables.shader".
+  tables.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\tables.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\tables.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\dist_approx.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\dist_approx.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\dist_approx.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/dist_approx.shader".
+  dist_approx.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\dist_approx.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\dist_approx.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\direct_light.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\direct_light.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader(111): error : more than one operator ">" matches these operands: [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+              built-in operator "arithmetic > arithmetic"
+              function "operator>(const __half &, const __half &)" (declared at line 303 of C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_fp16.hpp)
+              operand types are: float > __half
+            bool isWater = (hit.pos.y <= 3.001f && normal.y > (__float2half(0.8f)));
+                                                            ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader(113): error : no suitable user-defined conversion from "float2" to "__half2" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+                albedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, depth * depth);
+                                       ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader(133): error : no suitable user-defined conversion from "float2" to "__half2" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+                    half3 rAlbedo = sampleTexture(reflHit.uv, reflHit.matID, reflHit.normal, textureAtlas, distSq);
+                                                  ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader(156): error : more than one operator "*" matches these operands: [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+              built-in operator "arithmetic * arithmetic"
+              function "operator*(const __half &, const __half &)" (declared at line 269 of C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include\cuda_fp16.hpp)
+              operand types are: __half * float
+                __half fresnel = (__float2half(0.02f)) + (__float2half(0.98f)) * pow((__float2half(1.0f)) - NdotV, (__float2half(5.0f)));
+                                                                               ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader(167): error : no operator "/=" matches these operands [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+              operand types are: half3 /= float3
+                irradiance /= (albedo + (__float2half(0.001f)));
+                           ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader(170): error : no suitable user-defined conversion from "float2" to "__half2" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+                albedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, depth * depth);
+                                       ^
+  
+  12 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/direct_light.shader".
+  direct_light.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\direct_light.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\direct_light.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\indirect_bounce.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\indirect_bounce.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(56): error : class "float4" has no member "r" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float depth = surf2Dread<float4>(texDepth, (gid).x * sizeof(float4), (gid).y).r;
+                                                                                      ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(66): error : class "float4" has no member "rgb" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        half3 normal = make_float3((surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).x, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).y, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).z);
+                                                                                                     ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(66): error : class "float4" has no member "rgb" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        half3 normal = make_float3((surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).x, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).y, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).z);
+                                                                                                                                                                               ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(66): error : class "float4" has no member "rgb" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        half3 normal = make_float3((surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).x, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).y, (surf2Dread<float4>(texNormal, (gid).x * sizeof(float4), (gid).y).rgb).z);
+                                                                                                                                                                                                                                                         ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(70): error : no suitable user-defined conversion from "float3" to "int3" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        uint voxelHash = hash3_to_1(int3(pos * 1024.f));
+                                         ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : no suitable constructor exists to convert from "int" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                  ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                   ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : no suitable constructor exists to convert from "int" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                                  ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(84): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+                                                                   ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(94): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 localDir = float3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
+                                 ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(94): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        float3 localDir = float3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
+                                                    ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(116): error : no suitable user-defined conversion from "float2" to "__half2" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+            half3 bouncedAlbedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, distSq);
+                                                ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(127): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+            float luma = (float3)skyLight.x * 0.3f + (float3)skyLight.y * 0.59f + (float3)skyLight.z * 0.11f;
+                                 ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(127): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+            float luma = (float3)skyLight.x * 0.3f + (float3)skyLight.y * 0.59f + (float3)skyLight.z * 0.11f;
+                                                             ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(127): error : no suitable constructor exists to convert from "float" to "float3" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+            float luma = (float3)skyLight.x * 0.3f + (float3)skyLight.y * 0.59f + (float3)skyLight.z * 0.11f;
+                                                                                          ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(132): error : no suitable user-defined conversion from "half3" to "float4" exists [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        surf2Dwrite(float4((float3)incomingLight, 1.0f), texRawIndirect, (gid).x * sizeof(float4), (gid).y);
+                           ^
+  
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader(132): error : expected a ")" [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+        surf2Dwrite(float4((float3)incomingLight, 1.0f), texRawIndirect, (gid).x * sizeof(float4), (gid).y);
+                                                ^
+  
+  23 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/indirect_bounce.shader".
+  indirect_bounce.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\indirect_bounce.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\indirect_bounce.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\temporal_acc.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\temporal_acc.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\temporal_acc.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/temporal_acc.shader".
+  temporal_acc.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\temporal_acc.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\temporal_acc.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\denoise.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\denoise.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\denoise.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/denoise.shader".
+  denoise.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\denoise.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\denoise.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\volumetric.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\volumetric.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\volumetric.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:\Users\RC1ki\Documents\rvgrt\RVGRT\include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/volumetric.shader".
+  volumetric.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\volumetric.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\volumetric.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\exposure.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\exposure.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\exposure.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/exposure.shader".
+  exposure.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\exposure.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\exposure.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\composite.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\composite.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\composite.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(22): warning C4005: 'SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(23): warning C4005: 'SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(26): warning C4005: 'WATER_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(27): warning C4005: 'WATER_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(30): warning C4005: 'REFLECTION_SHADOW_MAXDIST': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\renderer/shader_settings.h(31): warning C4005: 'REFLECTION_SHADOW_STEPS': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/composite.shader".
+  composite.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\composite.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\composite.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+  Compiling CUDA source file ..\src\renderer\kernels\shaders\material_gen.shader...
+  
+  C:\Users\RC1ki\Documents\rvgrt\RVGRT\build>"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\material_gen.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\material_gen.shader" 
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(72): warning C4005: 'PLATFORM_CUDA': macro redefinition [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(202): error : function "operator*(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 v, float s) { return make_float2(v.x * s, v.y * s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(203): error : function "operator*(float, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float s, float2 v) { return v * s; }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(204): error : function "operator/(float2, float)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator/(float2 v, float s) { return make_float2(v.x / s, v.y / s); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(205): error : function "operator+(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator+(float2 a, float2 b) { return make_float2(a.x + b.x, a.y + b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(206): error : function "operator-(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator-(float2 a, float2 b) { return make_float2(a.x - b.x, a.y - b.y); }
+                                                              ^
+  
+C:/Users/RC1ki/Documents/rvgrt/RVGRT/include\cumath.h(207): error : function "operator*(float2, float2)" has already been defined [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]
+    __declspec(__host__) __declspec(__device__) inline float2 operator*(float2 a, float2 b) { return make_float2(a.x * b.x, a.y * b.y); }
+                                                              ^
+  
+  6 errors detected in the compilation of "C:/Users/RC1ki/Documents/rvgrt/RVGRT/src/renderer/kernels/shaders/material_gen.shader".
+  material_gen.shader
+C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Microsoft\VC\v170\BuildCustomizations\CUDA 12.3.targets(799,9): error MSB3721: The command ""C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\bin\nvcc.exe"  --use-local-env -ccbin "C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Tools\MSVC\14.38.33130\bin\HostX64\x64" -x cu -rdc=true  -IC:\Users\RC1ki\Documents\rvgrt\RVGRT\include -I"C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.3\include"     --keep-dir x64\Release  -maxrregcount=0   --machine 64 --compile -cudart static -Xcudafe --diag_suppress=esa_on_defaulted_function_ignored --expt-relaxed-constexpr -std=c++17 -Xcompiler="/EHsc -Ob2" -arch=native   -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -DPLATFORM_CUDA=1 -D_MBCS -DWIN32 -D_WINDOWS -DNDEBUG -DD3D12 -D"CMAKE_INTDIR=\"Release\"" -Xcompiler "/EHsc /W3 /nologo /O2 /FS   /MD /GR" -Xcompiler "/FdRVGRT.dir\Release\vc143.pdb" -o RVGRT.dir\Release\material_gen.obj "C:\Users\RC1ki\Documents\rvgrt\RVGRT\src\renderer\kernels\shaders\material_gen.shader"" exited with code 2. [C:\Users\RC1ki\Documents\rvgrt\RVGRT\build\RVGRT.vcxproj]

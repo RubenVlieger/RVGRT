@@ -20,6 +20,10 @@ inline uint GetLinearIndex(uint3 pos, uint sizeX, uint sizeY) {
     return pos.x + (pos.y * sizeX) + (pos.z * sizeX * sizeY);
 }
 
+GPU_FUNC inline uint GetSectorIndex(uint3 pos, uint sx, uint sy) {
+    return pos.x + (pos.y * sx) + (pos.z * sx * sy);
+}
+
 #if defined(PLATFORM_METAL)
 inline int countbits_64(ulong v) {
     return popcount(v);
@@ -31,7 +35,7 @@ __device__ inline int countbits_64(ulong v) {
 #endif
 
 // Procedural material ID based on position
-uint8_t get_procedural_material_id(float3 pos) {
+GPU_FUNC uint8_t get_procedural_material_id(float3 pos) {
     int y = (int)pos.y;
     
     // Bedrock at bottom
@@ -79,10 +83,6 @@ uint8_t get_procedural_material_id(float3 pos) {
     return MAT_STONE;
 }
 
-inline uint GetSectorIndex(uint3 pos, uint sx, uint sy) {
-    return pos.x + (pos.y * sx) + (pos.z * sx * sy);
-}
-
 // Kernel: Analyze sectors for initial generation
 KERNEL(XMap_AnalyzeSectors)(
     PARAM_BUFFER(uint64_t, resultBuffer, 0),
@@ -102,11 +102,11 @@ KERNEL(XMap_AnalyzeSectors)(
     if (gid.x >= sx || gid.y >= sy || gid.z >= sz) return;
 #endif
 
-    uint sectorIndex = GetSectorIndex(uint3(gid.x, gid.y, gid.z), sx, sy);
+    uint sectorIndex = GetSectorIndex(make_uint3(gid.x, gid.y, gid.z), sx, sy);
 #if defined(PLATFORM_METAL)
     float3 sectorWorldPos = float3(gid) * 32.0f;
 #else
-    float3 sectorWorldPos = make_float3(gid.x, gid.y, gid.z) * 32.0f;
+    float3 sectorWorldPos = make_float3((float)gid.x, (float)gid.y, (float)gid.z) * 32.0f;
 #endif
     uint64_t activeBricksMask = 0;
 
@@ -124,7 +124,11 @@ KERNEL(XMap_AnalyzeSectors)(
         for(int dz = 0; dz < 8; dz += 3) {
             for(int dy = 0; dy < 8; dy += 3) {
                 for(int dx = 0; dx < 8; dx += 3) {
+#if defined(PLATFORM_METAL)
                     if (Evaluate(brickPos.x + dx, brickPos.y + dy, brickPos.z + dz) > 0.0f) {
+#else
+                    if (Evaluate(brickPos.x + (float)dx, brickPos.y + (float)dy, brickPos.z + (float)dz) > 0.0f) {
+#endif
                         active = true;
                         break;
                     }
@@ -174,7 +178,11 @@ KERNEL(XMap_AnalyzeStreaming)(
         for(int dz = 0; dz < 8; dz += 3) {
             for(int dy = 0; dy < 8; dy += 3) {
                 for(int dx = 0; dx < 8; dx += 3) {
+#if defined(PLATFORM_METAL)
                     if (Evaluate(brickPos.x + dx, brickPos.y + dy, brickPos.z + dz) > 0.0f) {
+#else
+                    if (Evaluate(brickPos.x + (float)dx, brickPos.y + (float)dy, brickPos.z + (float)dz) > 0.0f) {
+#endif
                         active = true;
                         break;
                     }
@@ -332,7 +340,7 @@ KERNEL(XMap_FillBricks)(
 #endif
 }
 
-ulong pack_4x4x4_block(float3 startPos) {
+GPU_FUNC ulong pack_4x4x4_block(float3 startPos) {
     ulong packed = 0;
     for(int z=0; z<4; z++) {
         for(int y=0; y<4; y++) {

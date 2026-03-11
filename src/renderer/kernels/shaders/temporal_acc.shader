@@ -16,20 +16,6 @@ using namespace metal;
 // Uses neighborhood clamping to reject invalid history.
 // ============================================================================
 
-inline float3 RGBToYCoCg(float3 rgb) {
-    float Y  = dot(rgb, float3(0.25f, 0.50f, 0.25f));
-    float Co = dot(rgb, float3(0.50f, 0.00f, -0.50f));
-    float Cg = dot(rgb, float3(-0.25f, 0.50f, -0.25f));
-    return float3(Y, Co, Cg);
-}
-
-inline float3 YCoCgToRGB(float3 ycocg) {
-    float Y  = ycocg.x;
-    float Co = ycocg.y;
-    float Cg = ycocg.z;
-    return float3(Y + Co - Cg, Y + Cg, Y - Co - Cg);
-}
-
 KERNEL(TemporalAccumulation)(
     PARAM_TEXTURE_WRITE(tex2d_f32_w, texAccum, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texRawIndirect, 1),
@@ -53,39 +39,72 @@ KERNEL(TemporalAccumulation)(
 #endif
 
     // Read current frame color
+#if defined(PLATFORM_METAL)
     float3 currentDirect = TEX_READ_2D(texDirect, gid).rgb;
     float3 currentIndirect = TEX_READ_2D(texRawIndirect, gid).rgb;
+#else
+    float4 direct4 = TEX_READ_2D(texDirect, gid);
+    float4 indirect4 = TEX_READ_2D(texRawIndirect, gid);
+    float3 currentDirect = make_float3(direct4.x, direct4.y, direct4.z);
+    float3 currentIndirect = make_float3(indirect4.x, indirect4.y, indirect4.z);
+#endif
     float3 currentRGB = currentDirect + currentIndirect;
     
     // NaN check
-    if (ANY_ISNAN(currentDirect) || ANY_ISINF(currentDirect)) {
+#if defined(PLATFORM_METAL)
+    if (any(isnan(currentDirect)) || any(isinf(currentDirect))) {
+#else
+    if (isnan(currentDirect.x) || isnan(currentDirect.y) || isnan(currentDirect.z) ||
+        isinf(currentDirect.x) || isinf(currentDirect.y) || isinf(currentDirect.z)) {
+#endif
 #if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texAccum, float4(1.0, 0.0, 1.0, 1.0), gid);
 #else
-        TEX_WRITE_2D(texAccum, make_float4(1.0f, 0.0f, 1.0f, 1.0f), gid);
+        float4 errVal = make_float4(1.0f, 0.0f, 1.0f, 1.0f);
+        TEX_WRITE_2D(texAccum, errVal, gid);
 #endif
         return;
     }
-    if (ANY_ISNAN(currentIndirect) || ANY_ISINF(currentIndirect)) {
+#if defined(PLATFORM_METAL)
+    if (any(isnan(currentIndirect)) || any(isinf(currentIndirect))) {
+#else
+    if (isnan(currentIndirect.x) || isnan(currentIndirect.y) || isnan(currentIndirect.z) ||
+        isinf(currentIndirect.x) || isinf(currentIndirect.y) || isinf(currentIndirect.z)) {
+#endif
 #if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texAccum, float4(0.0, 1.0, 1.0, 1.0), gid);
 #else
-        TEX_WRITE_2D(texAccum, make_float4(0.0f, 1.0f, 1.0f, 1.0f), gid);
+        float4 errVal = make_float4(0.0f, 1.0f, 1.0f, 1.0f);
+        TEX_WRITE_2D(texAccum, errVal, gid);
 #endif
         return;
     }
 
     // Motion and UVs
+#if defined(PLATFORM_METAL)
     float2 motion = TEX_READ_2D(texMotion, gid).xy;
+#else
+    float4 motion4 = TEX_READ_2D(texMotion, gid);
+    float2 motion = make_float2(motion4.x, motion4.y);
+#endif
     float velMag = length(motion);
-    float movementFactor = saturate(velMag * 200.0f);
+    float movementFactor = fminf(fmaxf(velMag * 200.0f, 0.0f), 1.0f);
 
-    float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);
+#if defined(PLATFORM_METAL)
+    float2 uv = (float2(gid) + 0.5f) / float2(width, height);
+#else
+    float2 uv = make_float2((gid.x + 0.5f) / (float)width, (gid.y + 0.5f) / (float)height);
+#endif
     float2 prevUV = uv - motion;
 
     // Neighborhood statistics
+#if defined(PLATFORM_METAL)
     float3 m1 = float3(0.0f);
     float3 m2 = float3(0.0f);
+#else
+    float3 m1 = make_float3(0.0f, 0.0f, 0.0f);
+    float3 m2 = make_float3(0.0f, 0.0f, 0.0f);
+#endif
     
     for(int y = -1; y <= 1; ++y) {
         for(int x = -1; x <= 1; ++x) {
@@ -99,33 +118,82 @@ KERNEL(TemporalAccumulation)(
             tapCoord.y = max(0, min(tapCoord.y, height - 1));
 #endif
 
-            float3 neighborRGB = TEX_READ_2D(texDirect, tapCoord).rgb + 
-                                TEX_READ_2D(texRawIndirect, tapCoord).rgb;
-            float3 neighborYCoCg = RGBToYCoCg(neighborRGB);
+#if defined(PLATFORM_METAL)
+            float3 neighborDirect = TEX_READ_2D(texDirect, tapCoord).rgb;
+            float3 neighborIndirect = TEX_READ_2D(texRawIndirect, tapCoord).rgb;
+#else
+            float4 nd4 = TEX_READ_2D(texDirect, tapCoord);
+            float4 ni4 = TEX_READ_2D(texRawIndirect, tapCoord);
+            float3 neighborDirect = make_float3(nd4.x, nd4.y, nd4.z);
+            float3 neighborIndirect = make_float3(ni4.x, ni4.y, ni4.z);
+#endif
+            float3 neighborRGB = neighborDirect + neighborIndirect;
+            
+            // RGB to YCoCg
+#if defined(PLATFORM_METAL)
+            float Y  = dot(neighborRGB, float3(0.25f, 0.50f, 0.25f));
+            float Co = dot(neighborRGB, float3(0.50f, 0.00f, -0.50f));
+            float Cg = dot(neighborRGB, float3(-0.25f, 0.50f, -0.25f));
+            float3 neighborYCoCg = float3(Y, Co, Cg);
+#else
+            float Y  = neighborRGB.x * 0.25f + neighborRGB.y * 0.50f + neighborRGB.z * 0.25f;
+            float Co = neighborRGB.x * 0.50f + neighborRGB.y * 0.00f - neighborRGB.z * 0.50f;
+            float Cg = -neighborRGB.x * 0.25f + neighborRGB.y * 0.50f - neighborRGB.z * 0.25f;
+            float3 neighborYCoCg = make_float3(Y, Co, Cg);
+#endif
 
-            m1 += neighborYCoCg;
-            m2 += neighborYCoCg * neighborYCoCg;
+            m1 = m1 + neighborYCoCg;
+            m2 = m2 + neighborYCoCg * neighborYCoCg;
         }
     }
 
     float3 mu = m1 / 9.0f;
-    float3 sigma = sqrt(abs(m2 / 9.0f - mu * mu));
+    float3 diff = m2 / 9.0f - mu * mu;
+    float3 sigma = make_float3(sqrtf(fabsf(diff.x)), sqrtf(fabsf(diff.y)), sqrtf(fabsf(diff.z)));
 
-    float gamma = mix(10.0f, 0.75f, movementFactor);
+    float gamma = 10.0f - (10.0f - 0.75f) * movementFactor;
     float3 minColor = mu - gamma * sigma;
     float3 maxColor = mu + gamma * sigma;
 
     // Sample history
     DECLARE_SAMPLER(sLinear, linear, clamp_to_edge);
+#if defined(PLATFORM_METAL)
     float3 historyRGB = TEX_SAMPLE_2D(texHistory, prevUV).rgb;
+#else
+    float4 hist4 = TEX_SAMPLE_2D(texHistory, prevUV);
+    float3 historyRGB = make_float3(hist4.x, hist4.y, hist4.z);
+#endif
     if (isnan(historyRGB.x) || isnan(historyRGB.y) || isnan(historyRGB.z))
         historyRGB = currentRGB;
 
-    float3 historyYCoCg = RGBToYCoCg(historyRGB);
-    float3 clampedHistoryYCoCg = clamp(historyYCoCg, minColor, maxColor);
-    float3 clampedHistoryRGB = YCoCgToRGB(clampedHistoryYCoCg);
+    // YCoCg conversion
+#if defined(PLATFORM_METAL)
+    float hY  = dot(historyRGB, float3(0.25f, 0.50f, 0.25f));
+    float hCo = dot(historyRGB, float3(0.50f, 0.00f, -0.50f));
+    float hCg = dot(historyRGB, float3(-0.25f, 0.50f, -0.25f));
+    float3 historyYCoCg = float3(hY, hCo, hCg);
+#else
+    float hY  = historyRGB.x * 0.25f + historyRGB.y * 0.50f + historyRGB.z * 0.25f;
+    float hCo = historyRGB.x * 0.50f + historyRGB.y * 0.00f - historyRGB.z * 0.50f;
+    float hCg = -historyRGB.x * 0.25f + historyRGB.y * 0.50f - historyRGB.z * 0.25f;
+    float3 historyYCoCg = make_float3(hY, hCo, hCg);
+#endif
 
-    float blendWeight = mix(0.98f, 0.9f, movementFactor);
+    float3 clampedHistoryYCoCg;
+    clampedHistoryYCoCg.x = fmaxf(minColor.x, fminf(historyYCoCg.x, maxColor.x));
+    clampedHistoryYCoCg.y = fmaxf(minColor.y, fminf(historyYCoCg.y, maxColor.y));
+    clampedHistoryYCoCg.z = fmaxf(minColor.z, fminf(historyYCoCg.z, maxColor.z));
+
+    // YCoCg to RGB
+    float3 clampedHistoryRGB;
+    float cY = clampedHistoryYCoCg.x;
+    float cCo = clampedHistoryYCoCg.y;
+    float cCg = clampedHistoryYCoCg.z;
+    clampedHistoryRGB.x = cY + cCo - cCg;
+    clampedHistoryRGB.y = cY + cCg;
+    clampedHistoryRGB.z = cY - cCo - cCg;
+
+    float blendWeight = 0.98f - (0.98f - 0.9f) * movementFactor;
     
     // Depth rejection
     bool validHistory = (prevUV.x >= 0.0f && prevUV.x <= 1.0f && 
@@ -134,12 +202,19 @@ KERNEL(TemporalAccumulation)(
 #if defined(PLATFORM_METAL)
         uint2 prevCoords = uint2(prevUV.x * width, prevUV.y * height);
 #else
-        uint2 prevCoords = make_uint2(prevUV.x * width, prevUV.y * height);
+        uint2 prevCoords = make_uint2((unsigned int)(prevUV.x * width), (unsigned int)(prevUV.y * height));
 #endif
+#if defined(PLATFORM_METAL)
         float currentDepth = TEX_READ_2D(texDepth, gid).r;
         float prevDepth = TEX_READ_2D(texPrevDepth, prevCoords).r;
+#else
+        float4 cd4 = TEX_READ_2D(texDepth, gid);
+        float4 pd4 = TEX_READ_2D(texPrevDepth, prevCoords);
+        float currentDepth = cd4.x;
+        float prevDepth = pd4.x;
+#endif
         
-        float diff = abs(currentDepth - prevDepth) / (currentDepth + 1e-5f);
+        float diff = fabsf(currentDepth - prevDepth) / (currentDepth + 1e-5f);
         if (diff > 0.05f) {
             blendWeight = 0.0f;
         }
@@ -148,6 +223,11 @@ KERNEL(TemporalAccumulation)(
     }
 
     // Blend
-    float3 result = mix(currentRGB, clampedHistoryRGB, blendWeight);
+    float3 result = currentRGB + (clampedHistoryRGB - currentRGB) * blendWeight;
+#if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texAccum, float4(result, 1.0f), gid);
+#else
+    float4 result4 = make_float4(result.x, result.y, result.z, 1.0f);
+    TEX_WRITE_2D(texAccum, result4, gid);
+#endif
 }

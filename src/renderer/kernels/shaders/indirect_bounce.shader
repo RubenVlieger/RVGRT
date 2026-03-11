@@ -27,7 +27,7 @@ KERNEL(IndirectBounce)(
     PARAM_CONSTANT(FrameData, frame, 1),
     
     PARAM_TEXTURE_READ(tex2d_arr_f32_s, textureAtlas, 8),
-    PARAM_TEXTURE_READ(tex3d_u32, indirection, 3),
+    PARAM_INDIRECTION(indirection, 3),
     PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(uchar, dataBuffer, 5),
@@ -53,27 +53,45 @@ KERNEL(IndirectBounce)(
     return;
 #endif
 
-    float depth = TEX_READ_2D(texDepth, gid).r;
+    float4 depthData = TEX_READ_2D(texDepth, gid);
+#if defined(PLATFORM_METAL)
+    float depth = depthData.r;
+#else
+    float depth = depthData.x;
+#endif
     if (depth > 50000.0f) {
+#if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texRawIndirect, float4(0,0,0,0), gid);
+#else
+        TEX_WRITE_2D(texRawIndirect, make_float4(0.0f, 0.0f, 0.0f, 0.0f), gid);
+#endif
         return;
     }
 
+#if defined(PLATFORM_METAL)
     half3 normal = HALF3_FROM_FLOAT3(TEX_READ_2D(texNormal, gid).rgb);
+#else
+    float4 normalData = TEX_READ_2D(texNormal, gid);
+    half3 normal = HALF3_FROM_FLOAT3(make_float3(normalData.x, normalData.y, normalData.z));
+#endif
     float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);
     float3 pos = reconstructPos(depth, uv, camera);
 
-    uint voxelHash = hash3_to_1(int3(pos * 1024.f));
+    uint voxelHash = hash3_to_1(INT3(pos.x * 1024.f, pos.y * 1024.f, pos.z * 1024.f));
     uint seed = voxelHash + uint(frame.time * 123456.0f);
 
     // Orthonormal Basis
     float3 N = (float3)normal;
     if (dot(N, N) < 0.5f) {
+#if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texRawIndirect, float4(0.02f, 0.02f, 0.02f, 1.0f), gid);
+#else
+        TEX_WRITE_2D(texRawIndirect, make_float4(0.02f, 0.02f, 0.02f, 1.0f), gid);
+#endif
         return;
     }
 
-    float3 helper = abs(N.x) > 0.99f ? float3(0,0,1) : float3(1,0,0);
+    float3 helper = abs(N.x) > 0.99f ? FLOAT3(0,0,1) : FLOAT3(1,0,0);
     float3 Tangent = normalize(cross(N, helper));
     float3 Bitangent = cross(N, Tangent);
 
@@ -83,7 +101,7 @@ KERNEL(IndirectBounce)(
     float phi = 2.0f * 3.14159f * r1;
     float cosTheta = sqrt(1.0f - r2);
     float sinTheta = sqrt(r2);
-    float3 localDir = float3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
+    float3 localDir = FLOAT3(sinTheta * cos(phi), cosTheta, sinTheta * sin(phi));
     float3 rayDir = normalize(localDir.x * Tangent + localDir.y * N + localDir.z * Bitangent);
 
     // Bounce Trace
@@ -113,9 +131,17 @@ KERNEL(IndirectBounce)(
         incomingLight = (directLightAtHit * bouncedAlbedo) + (bouncedAlbedo * HALF_LITERAL(0.05f));
     } else {
         half3 skyLight = sampleSky(rayDir, frame.sunDirection);
-        float luma = dot((float3)skyLight, make_float3(0.3f, 0.59f, 0.11f));
+#if defined(PLATFORM_METAL)
+        float luma = dot((float3)skyLight, float3(0.3f, 0.59f, 0.11f));
+#else
+        float luma = skyLight.x * 0.3f + skyLight.y * 0.59f + skyLight.z * 0.11f;
+#endif
         incomingLight = mix(skyLight, HALF3(luma, luma, luma), HALF_LITERAL(0.6f)) * HALF_LITERAL(0.25f);
     }
     
+#if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texRawIndirect, float4((float3)incomingLight, 1.0f), gid);
+#else
+    TEX_WRITE_2D(texRawIndirect, make_float4(incomingLight.x, incomingLight.y, incomingLight.z, 1.0f), gid);
+#endif
 }

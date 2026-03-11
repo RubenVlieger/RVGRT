@@ -1,223 +1,183 @@
-# RVGRT (RubenVlieger GPU Ray Tracer) - Exhaustive Project Architecture & LLM Context
+# RVGRT - GPU Ray Tracer Project Architecture
 
-This document is the master architectural blueprint for RVGRT, an advanced, cross-platform (Metal/CUDA) Minecraft-like path-traced voxel engine. It is specifically designed to provide LLMs with maximum context, accelerating debugging, feature implementation, and optimization.
+Cross-platform (Metal/CUDA/D3D12) voxel path-tracing engine. macOS Metal is primary; Windows CUDA/D3D12 supported.
 
-## Recent Restructuring (March 2025)
-
-The codebase was recently reorganized to improve maintainability and provide clearer separation of platform-specific code:
-
-### New Directory Structure
-
-**Platform-specific code** has been moved to dedicated subdirectories:
-- `src/renderer/Metal/` and `include/renderer/Metal/` - Metal implementations (macOS)
-- `src/renderer/CUDA/` and `include/renderer/CUDA/` - CUDA implementations (Windows)
-- `src/renderer/D3D12/` and `include/renderer/D3D12/` - DirectX 12 implementations (Windows)
-
-## 1. Executive Summary & Philosophy
-- **Core Goal:** Real-time path tracing of massive voxel terrains at high framerates using GPU compute.
-- **Rendering Paradigm:** A deferred, multi-pass compute pipeline. It eschews traditional rasterization in favor of pure compute raytracing.
-- **Platform Strategy:** C++ core logic, abstracted `Renderer` interfaces, and OS-specific backends. Currently, **Apple Metal (macOS)** is the primary, actively developed path using Objective-C++ (`.mm`) and `.metal` shaders. A CUDA/D3D12 fallback exists on Windows but is not actively maintained.
-- **Memory Philosophy:** GPUs have limited memory; a massive world cannot fit in dense grids. The engine dictates a strict, aggressive **3-Level Sparse Voxel Octree (SVO-like)** structure mapping world space to toroidal fixed-capacity GPU buffers.
-
-## 2. Directory Layout & Core Components
+## Directory Structure
 
 ```
-[RVGRT Root]
-├── CMakeLists.txt        # Handles OS branching, Metal shader compilation (.air/.metallib), and CUDA targets.
-├── project_structure.txt # This file
-├── include/              # Shared C++ Headers (Platform agnostic).
-│   ├── d3d12/           # DirectX 12 SDK headers
-│   ├── glm/             # GLM math library headers
-│   ├── platform/        # OS window/event interfaces.
+[Root]
+├── CMakeLists.txt              # Build config (Metal shaders, CUDA, D3D12)
+├── AGENTS.md                   # Agent build instructions
+├── README.md                   # Project readme
+├── project_structure.txt       # This file
+├── include/                    # Shared headers
+│   ├── d3d12/                  # DirectX 12 SDK headers
+│   ├── glm/                    # Math library
+│   ├── platform/               # OS/window interfaces
 │   │   ├── GameView.h
 │   │   ├── MacOSPlatform.hpp
-│   │   ├── NetworkClient.hpp
 │   │   ├── Platform.hpp
+│   │   ├── NetworkClient.hpp
 │   │   └── WindowsPlatform.hpp
-│   ├── renderer/        # Renderer interfaces, struct definitions shared with shaders.
-│   │   ├── CUDA/       # CUDA renderer headers
-│   │   │   ├── CudaBrickPool.cuh
-│   │   │   ├── CudaBuffer.cuh
-│   │   │   ├── CudaMaterialMap.cuh
-│   │   │   ├── CudaRender.cuh
-│   │   │   └── CudaRenderer.cuh
-│   │   ├── D3D12/      # DirectX 12 headers
-│   │   │   └── D3D12Device.hpp
-│   │   ├── Metal/      # Metal renderer headers
-│   │   │   ├── MetalBuffer.hpp
-│   │   │   ├── MetalDevice.hpp
-│   │   │   └── MetalRenderer.hpp
+│   ├── renderer/               # Renderer interfaces & GPU structs
+│   │   ├── Buffer.hpp
 │   │   ├── BrickPool.hpp
 │   │   ├── BrickPoolTraits.hpp
-│   │   ├── Buffer.hpp
 │   │   ├── FrameDataManager.hpp
 │   │   ├── GraphicsDevice.hpp
+│   │   ├── hitInfo.h
 │   │   ├── MaterialMap.hpp
 │   │   ├── RenderTargetManager.hpp
 │   │   ├── Renderer.hpp
 │   │   ├── RendererBase.hpp
 │   │   ├── RendererTraits.hpp
-│   │   ├── ShaderTypes.h       # CRITICAL: Memory layout bridge between C++ and Metal/CUDA.
+│   │   ├── shader_settings.h
+│   │   ├── ShaderTypes.h       # CRITICAL: C++/GPU memory layout bridge
 │   │   ├── SystemConfig.h
-│   │   ├── hitInfo.h
-│   │   ├── intersections.h     # Contains the core hierarchical DDA ray traversal maths (Metal C++).
-│   │   └── shader_settings.h
+│   │   ├── intersections.h     # Hierarchical DDA ray traversal
+│   │   ├── CUDA/
+│   │   │   ├── CudaBrickPool.cuh
+│   │   │   ├── CudaBuffer.cuh
+│   │   │   ├── CudaMaterialMap.cuh
+│   │   │   ├── CudaRender.cuh
+│   │   │   └── CudaRenderer.cuh
+│   │   ├── D3D12/
+│   │   │   └── D3D12Device.hpp
+│   │   └── Metal/
+│   │       ├── MetalBuffer.hpp
+│   │       ├── MetalDevice.hpp
+│   │       └── MetalRenderer.hpp
 │   ├── Character.hpp
-│   ├── CudaD3D12Texture.cuh
-│   ├── State.hpp
-│   ├── TerrainGeneration.h
-│   ├── Texturepack.h
-│   ├── basewin.h
 │   ├── Camera.hpp
+│   ├── CudaD3D12Texture.cuh
 │   ├── cumath.h
 │   ├── hitInfo.hpp
 │   ├── raytracing_functions.h
 │   ├── shader_macros.h
+│   ├── State.hpp
 │   ├── stb_image.h
 │   ├── tables.h
+│   ├── TerrainGeneration.h
+│   ├── Texturepack.h
 │   ├── texturepackdata.h
-│   └── Timer.hpp
-├── resources/           # Application resources
-│   └── AppIcon.icns
-├── src/                 # Implementations.
-│   ├── CudaD3D12Texture.cu
-│   ├── Camera.cpp
-│   ├── Character.cpp
-│   ├── State.cpp
-│   ├── TerrainGeneration.cu
-│   ├── main.cpp
-│   ├── platform/       # Platform-specific source
-│   │   ├── GameView.mm
-│   │   ├── MacOSNetworkClient.mm
-│   │   ├── MacOSPlatform.mm
-│   │   ├── Win32NetworkClient.cpp
-│   │   ├── WindowsPlatform.cpp
-│   │   ├── macos_main.mm    # Sets up the MetalView
-│   │   └── win32_main.cpp   # Sets up the D3D12/CUDA interop
-│   ├── renderer/       # Renderer implementations
-│   │   ├── CUDA/      # CUDA implementation (Windows)
-│   │   │   ├── BrickPool_CUDA.cu
-│   │   │   ├── CudaBuffer.cu
-│   │   │   ├── CudaMaterialMap.cu
-│   │   │   ├── CudaRenderer.cu
-│   │   │   ├── CudaRenderer.cpp
-│   │   │   ├── CudaRenderer_mac_stub.cpp
-│   │   │   └── CudaTraits.cu
-│   │   ├── D3D12/     # DirectX 12 implementation (Windows)
-│   │   │   └── D3D12Device.cpp
-│   │   ├── Metal/     # Metal implementation (macOS)
-│   │   │   ├── BrickPool_Metal.mm
-│   │   │   ├── MetalBuffer.mm
-│   │   │   ├── MetalDevice.mm
-│   │   │   ├── MetalRenderer.mm    # The orchestrator. Executes the 8-pass compute pipeline.
-│   │   │   └── MetalTraits.mm
-│   │   ├── FrameDataManager.cpp
-│   │   ├── MaterialMap.mm          # Handles async terrain generation and toroidal LOD streaming.
-│   │   ├── RendererBase.mm
-│   │   ├── TexturePack_impl.cu
-│   │   ├── TexturePack_impl.mm
-│   │   ├── kernels/   # Shader kernels
-│   │   │   └── shaders/   # Compute shader files
-│   │   │       ├── composite.shader
-│   │   │       ├── denoise.shader
-│   │   │       ├── direct_light.shader
-│   │   │       ├── dist_approx.shader
-│   │   │       ├── exposure.shader
-│   │   │       ├── indirect_bounce.shader
-│   │   │       ├── material_gen.shader (Procedural voxel generation)
-│   │   │       ├── tables.shader
-│   │   │       ├── temporal_acc.shader
-│   │   │       └── volumetric.shader
-│   │   └── raytracing_functions_impl.cu
-│   └── exports.def
-└── vendor/            # Third-party dependencies
+│   ├── Timer.hpp
+│   └── util.hpp
+├── resources/
+│   ├── AppIcon.icns
+│   └── texturepack.png
+└── src/
+    ├── main.cpp
+    ├── Camera.cpp
+    ├── Character.cpp
+    ├── State.cpp
+    ├── TerrainGeneration.cu
+    ├── CudaD3D12Texture.cu
+    ├── platform/                   # Platform entry points
+    │   ├── GameView.mm
+    │   ├── MacOSPlatform.cpp
+    │   ├── MacOSPlatform.mm
+    │   ├── MacOSNetworkClient.mm
+    │   ├── WindowsPlatform.cpp
+    │   ├── Win32NetworkClient.cpp
+    │   ├── win32_main.cpp
+    │   └── macos_main.mm
+    └── renderer/
+        ├── FrameDataManager.cpp
+        ├── MaterialMap.mm           # Async terrain gen, toroidal LOD streaming
+        ├── RendererBase.mm
+        ├── TexturePack_impl.cu
+        ├── TexturePack_impl.mm
+        ├── raytracing_functions_impl.cu
+        ├── CUDA/                    # Windows implementation
+        │   ├── BrickPool_CUDA.cu
+        │   ├── CudaBuffer.cu
+        │   ├── CudaMaterialMap.cu
+        │   ├── CudaRenderer.cu
+        │   ├── CudaRenderer.cpp
+        │   ├── CudaRenderer_mac_stub.cpp
+        │   └── CudaTraits.cu
+        ├── D3D12/
+        │   └── D3D12Device.cpp
+        ├── Metal/                   # macOS implementation (primary)
+        │   ├── BrickPool_Metal.mm
+        │   ├── MetalBuffer.mm
+        │   ├── MetalDevice.mm
+        │   ├── MetalRenderer.mm     # 8-pass compute pipeline orchestrator
+        │   └── MetalTraits.mm
+        └── kernels/shaders/
+            ├── composite.shader
+            ├── denoise.shader
+            ├── direct_light.shader
+            ├── dist_approx.shader
+            ├── exposure.shader
+            ├── indirect_bounce.shader
+            ├── material_gen.shader
+            ├── tables.shader
+            ├── temporal_acc.shader
+            └── volumetric.shader
 ```
 
-## 3. Data Structures & Memory Management (The Voxel Backbone)
-To render millions of voxels smoothly, the world is broken down into a 3-level hierarchical sparsity model managed by `MaterialMap` and `BrickPool`.
+## Memory Model (4-Level Sparse)
 
-### Levels of Abstraction
-1. **Level 1 (Indirection):** A toroidal 3D `MTLTexture` (`_indirectionTexture`, R32Uint). It wraps around the camera's spawn. It holds a single integer index pointing to the `SectorBuffer`. If a sector is unallocated, it reads `SECTOR_HANDLE_EMPTY`.
-2. **Level 2 (Sector Buffer):** A flat buffer of `SectorInfo` structs. A "Sector" represents a 32x32x32 span of voxels space. `SectorInfo` contains a 64-bit `brickMask` denoting which inner 8x8x8 bricks actually exist, and a `baseBrickIndex` pointing into the `BrickPool`.
-3. **Level 3 (Occupancy Buffer / Sub-Brick):** Inside the `BrickPool`, an occupancy mask defines the solid status of a 4x4x4 block of voxels using 64-bit integers (`ulong`).
-4. **Level 4 (Data Buffer / Voxel):** The actual material IDs (`uchar` / `uint8_t`) for the 1x1x1 voxels. 512 bytes per brick.
-5. **Character Buffer:** Contains `CharacterGPUData` holding inverse model matrices (`simd_float4x4`) for up to 16 characters (1 bounding box + 6 body parts each). It dynamically streams CPU-animated character transforms to the GPU per frame. Note: strict 16-byte MSL alignment matching C++ `simd_float4x4` arrays is critical for correct data mapping.
+1. **Indirection**: Toroidal 3D MTLTexture (R32Uint) → SectorBuffer index
+2. **Sector Buffer**: `SectorInfo` with 64-bit brickMask + baseBrickIndex
+3. **Occupancy**: 4x4x4 block status (64-bit integers in BrickPool)
+4. **Voxel Data**: Material IDs (uchar), 512 bytes per brick
 
-**Toroidal Streaming:** `MaterialMap::UpdateStreaming(cameraPos)` fires every frame. As the player moves across sector boundaries, old sectors at the trailing edge of the 3D texture are unloaded, and new sectors at the leading edge are queued for async GPU procedural generation (`psoAnalyze`, `psoFill`).
+## 8-Pass Rendering Pipeline (MetalRenderer::Draw)
 
-## 4. The Rendering Pipeline (Deep Dive)
-The `MetalRenderer::Draw()` loop executes an 8-Pass Deferred Compute Pipeline on the GPU.
+| Pass | Kernel | Output |
+|------|--------|--------|
+| 0 | distApproximationKernel | Half-res depth |
+| 1 | GBufferAndDirectLight | Albedo, Normal, Motion, Direct Light |
+| 2 | IndirectBounce | GI (noisy) |
+| 3 | TemporalAccumulation | Reprojected, accumulated GI |
+| 4 | BilateralDenoise | A-Trous filtered GI |
+| 5 | VolumetricFog | God-rays, scattering |
+| 6 | ComputeExposure | Luminance avg |
+| 7 | Composite | HDR + tone-map |
 
-1. **Pass 0: DistApprox (`distApproximationKernel`)**
-   - Renders a half-resolution depth map. Optimizes ray starting points for the main passes.
-2. **Pass 1: GBuffer & Direct Light (`GBufferAndDirectLight`)**
-   - Full resolution. Shoots primary rays (`hitInfo = trace()`).
-   - Computes Water logic (surface noise, reflections, specularity, refractions).
-   - Trace shadow rays to the sun. Outputs Albedo, Normal, Motion Vectors, and Direct Lighting.
-3. **Pass 2: Indirect Bounce (`IndirectBounce`)**
-   - Hemisphere sampling via cosine-weighted random rays based on the `normal`.
-   - Bounces rays to calculate Global Illumination (GI). Traces short shadow rays for the bounced light.
-   - Output is extremely noisy.
-4. **Pass 3: Temporal Accumulation (`TemporalAccumulation`)**
-   - Uses Motion Vectors from Pass 1 to reproject the previous frame's Indirect Light.
-   - Exponential moving average of the raw indirect light to settle the noise over time.
-5. **Pass 4: Denoise (`BilateralDenoise`)**
-   - An *A-Trous Edge-Avoiding Spatial Filter* executing in 3 iterations (Step widths: 1, 2, and 4).
-   - Preserves geometry edges using Normal and Depth strictness weights while smoothing out the accumulated GI noise.
-6. **Pass 5: Volumetric (`VolumetricFog`)**
-   - Half-resolution raymarching through the SVO.
-   - Samples shadow maps incrementally to compute realistic god-rays and scattering in empty air.
-7. **Pass 6: Exposure (`ComputeExposure`)**
-   - A compute shader that averages scene luminance and writes to a shared 1-element buffer to smoothly adapt camera exposure over time.
-8. **Pass 7: Composite (`Composite`)**
-   - Combines Direct Light, Denoised Indirect Light, Albedo, Volumetrics, and Skybox into an HDR buffer, applying the Exposure modifier and tone-mapping.
-9. **Post-Process:** Apple `MetalFX` (Temporal Scaler/TAA) upscales to native resolution and provides anti-aliasing.
+Post: MetalFX temporal upscaling + TAA
 
-## 5. Raytracing Algorithms (`intersections.h`)
-The heart of the performance lies in `intersections.h` (included by `.metal` kernels).
-- **Character AABB Intersections:** Before voxel traversal, rays evaluate O(1) intersections against `CharacterGPUData` bounding boxes and 6 local body part AABBs (`[-0.5, 0.5]^3`). Ray collisions return Grass (`matID = 255`) and resolve local face normals accurately via inverse-transpose mapping. Primary rays skip self-intersections inside the player bounding box.
-- **`GetStepPos()`**: Evaluates the hierarchy. Checks Level 1 (Indirection), then Level 2 (Sector Mask), then Level 3 (Occupancy). 
-- **LOD Optimization:** If a region is empty or far away, it identifies the sparse bounds using `GetIsotropicLOD()` and skips vast empty spaces instantly by advancing the ray position to the cell boundary.
-- **Bitwise Magic:** Utilizes `popcnt64()` and bitmasking (`BitTestHalf64`) against a `RayMaskOptimizationLUT` to cheaply calculate intersection boundaries within an 8x8x8 or 4x4x4 cell without standard AABB testing.
+## Key Algorithms (intersections.h)
 
-## 6. Guidelines & Constraints for LLMs
-1. **Never Break the GPU/CPU Boundary:** If you alter a struct in `ShaderTypes.h` (e.g., adding a float to `CameraData` or `FrameData`), be extremely mindful of alignment and padding (16-byte boundaries) since Metal and C++ must interpret the raw bytes identically.
-2. **Minimize Divergence in Shaders:** In `.metal` files, keep thread divergence low.
-3. **Performance is King:** Because path tracing is inherently slow, if you suggest a feature (e.g., glass refraction), implement it as cheaply as possible (single extra trace) rather than exploding the ray count.
+- Character AABB intersections: O(1) vs bounding box + 6 body parts
+- `GetStepPos()`: Level 1→2→3 hierarchy checks
+- LOD: `GetIsotropicLOD()` skips empty regions
+- Bitwise: `popcnt64()` + `BitTestHalf64` for cell boundaries
 
-## 7. Include Path Reference
+## Include Patterns
 
-When adding new files, use these include patterns:
-
-### Platform-Specific Headers
 ```cpp
-// Metal
+// Platform-specific
 #include "renderer/Metal/MetalDevice.hpp"
-#include "renderer/Metal/MetalRenderer.hpp"
-
-// CUDA
 #include "renderer/CUDA/CudaRenderer.cuh"
-#include "renderer/CUDA/CudaBuffer.cuh"
-
-// D3D12
 #include "renderer/D3D12/D3D12Device.hpp"
-```
 
-### Shared Headers
-```cpp
+// Shared
 #include "renderer/Renderer.hpp"
 #include "renderer/ShaderTypes.h"
 #include "renderer/BrickPool.hpp"
 ```
 
-## 8. Build System Notes
+## Build Commands
 
-The project uses CMake with platform-specific configuration:
-- **macOS**: Metal shaders compiled at build time, Objective-C++ sources
-- **Windows**: CUDA kernels preprocessed from .shader files, compiled with nvcc
+```bash
+# CMake
+mkdir build && cd build && cmake ..
 
-Key files in `CMakeLists.txt`:
-- `src/renderer/Metal/` sources for macOS builds
-- `src/renderer/CUDA/` and `src/renderer/D3D12/` sources for Windows builds
+# Windows (CUDA + D3D12)
+cmake -G "Visual Studio 17 2022" -A x64 ..
+cmake --build . --config Release
 
-Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`.
+# macOS (Metal)
+cmake -G Xcode ..
+cmake --build . --config Release
+```
+
+## Critical Rules
+
+1. **16-byte alignment** for all `simd_float4x4` / GPU data structs
+2. Keep `.shader` files synchronized between Metal and CUDA code paths
+3. Minimize thread divergence in Metal kernels
+4. Path tracing is expensive; add features as single extra traces when possible

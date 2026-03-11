@@ -42,12 +42,14 @@ __constant__ FrameData c_frame;
 // Distance Approximation Pass (half-res)
 __global__ void distApproximationKernel(
     cudaSurfaceObject_t distSurf,
+    CameraData camera,
+    FrameData frame,
     const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* occupancyBuffer,
-    const uint8_t* dataBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
+    SectorInfo* sectorBuffer,
+    uint64_t* occupancyBuffer,
+    uint8_t* dataBuffer,
+    uint64_t* sectorMaskBuffer,
+    CharacterGPUData charData,
     int width, int height
 );
 
@@ -58,14 +60,16 @@ __global__ void GBufferAndDirectLight(
     cudaSurfaceObject_t texNormal,
     cudaSurfaceObject_t texMotion,
     cudaSurfaceObject_t texDepth,
-    cudaTextureObject_t halfDistTex,
-    cudaTextureObject_t textureAtlas,
+    CameraData camera,
+    FrameData frame,
     const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* occupancyBuffer,
-    const uint8_t* dataBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
+    SectorInfo* sectorBuffer,
+    uint64_t* occupancyBuffer,
+    uint8_t* dataBuffer,
+    uint64_t* sectorMaskBuffer,
+    CharacterGPUData charData,
+    cudaTextureObject_t textureAtlas,
+    cudaTextureObject_t halfDistTex,
     int width, int height
 );
 
@@ -74,12 +78,15 @@ __global__ void IndirectBounce(
     cudaSurfaceObject_t texRawIndirect,
     cudaTextureObject_t texNormal,
     cudaTextureObject_t texDepth,
+    CameraData camera,
+    FrameData frame,
+    cudaTextureObject_t textureAtlas,
     const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* occupancyBuffer,
-    const uint8_t* dataBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
+    SectorInfo* sectorBuffer,
+    uint64_t* occupancyBuffer,
+    uint8_t* dataBuffer,
+    uint64_t* sectorMaskBuffer,
+    CharacterGPUData charData,
     int width, int height
 );
 
@@ -110,16 +117,20 @@ __global__ void VolumetricFog(
     cudaSurfaceObject_t texVolumetric,
     cudaTextureObject_t texDepth,
     cudaTextureObject_t texHistory,
+    CameraData camera,
+    FrameData frame,
     const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
+    SectorInfo* sectorBuffer,
+    uint64_t* occupancyBuffer,
+    uint64_t* sectorMaskBuffer,
+    CharacterGPUData charData,
     int width, int height
 );
 
 // Compute Exposure Pass (reduction)
 __global__ void ComputeExposure(
     ExposureData* exposure,
+    FrameData frame,
     cudaTextureObject_t texDirect,
     cudaTextureObject_t texAccum,
     cudaTextureObject_t texAlbedo,
@@ -134,7 +145,7 @@ __global__ void Composite(
     cudaTextureObject_t texAlbedo,
     cudaTextureObject_t texDepth,
     cudaTextureObject_t texVolumetric,
-    const ExposureData* exposure,
+    ExposureData* exposure,
     int width, int height
 );
 
@@ -207,7 +218,7 @@ void CudaRenderer::allocateTarget(CudaRenderTarget& target, uint32_t width,
     cudaTextureDesc texDesc = {};
     texDesc.addressMode[0] = cudaAddressModeClamp;
     texDesc.addressMode[1] = cudaAddressModeClamp;
-    texDesc.filterMode = cudaFilterModeLinear;
+    texDesc.filterMode = (format.f == cudaChannelFormatKindUnsigned) ? cudaFilterModePoint : cudaFilterModeLinear;
     texDesc.readMode = cudaReadModeElementType;
     texDesc.normalizedCoords = 0;  // false - pixel coordinates
     
@@ -437,12 +448,13 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     // ============================================================================
     distApproximationKernel<<<gridSizeHalf, groupSize8, 0, _cudaStream>>>(
         _halfDistTexture.surface,
+        camData, frameData,
         _materialMap.GetIndirectionPtr(),
-        _materialMap.GetSectorBufferPtr(),
-        _materialMap.GetOccupancyPtr(),
-        _materialMap.GetDataPtr(),
-        _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
+        (SectorInfo*)_materialMap.GetSectorBufferPtr(),
+        (uint64_t*)_materialMap.GetOccupancyPtr(),
+        (uint8_t*)_materialMap.GetDataPtr(),
+        (uint64_t*)_materialMap.GetSectorMaskPtr(),
+        charData,
         _width, _height
     );
     
@@ -455,14 +467,15 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
         _texNormal.surface,
         _texMotion.surface,
         _texDepth[currIdx].surface,
-        _halfDistTexture.texture,
-        _texturepack.getTextureObject(),
+        camData, frameData,
         _materialMap.GetIndirectionPtr(),
-        _materialMap.GetSectorBufferPtr(),
-        _materialMap.GetOccupancyPtr(),
-        _materialMap.GetDataPtr(),
-        _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
+        (SectorInfo*)_materialMap.GetSectorBufferPtr(),
+        (uint64_t*)_materialMap.GetOccupancyPtr(),
+        (uint8_t*)_materialMap.GetDataPtr(),
+        (uint64_t*)_materialMap.GetSectorMaskPtr(),
+        charData,
+        _texturepack.getTextureObject(),
+        _halfDistTexture.texture,
         _width, _height
     );
     
@@ -473,12 +486,14 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
         _texRawIndirect.surface,
         _texNormal.texture,
         _texDepth[currIdx].texture,
+        camData, frameData,
+        _texturepack.getTextureObject(),
         _materialMap.GetIndirectionPtr(),
-        _materialMap.GetSectorBufferPtr(),
-        _materialMap.GetOccupancyPtr(),
-        _materialMap.GetDataPtr(),
-        _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
+        (SectorInfo*)_materialMap.GetSectorBufferPtr(),
+        (uint64_t*)_materialMap.GetOccupancyPtr(),
+        (uint8_t*)_materialMap.GetDataPtr(),
+        (uint64_t*)_materialMap.GetSectorMaskPtr(),
+        charData,
         _width, _height
     );
     
@@ -536,10 +551,12 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
         _texVolumetric[currIdx].surface,
         _texDepth[currIdx].texture,
         _texVolumetric[prevIdx].texture,
+        camData, frameData,
         _materialMap.GetIndirectionPtr(),
-        _materialMap.GetSectorBufferPtr(),
-        _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
+        (SectorInfo*)_materialMap.GetSectorBufferPtr(),
+        (uint64_t*)_materialMap.GetOccupancyPtr(),
+        (uint64_t*)_materialMap.GetSectorMaskPtr(),
+        charData,
         _width, _height
     );
     
@@ -549,6 +566,7 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     dim3 singleGroup(16, 16);
     ComputeExposure<<<singleGroup, singleGroup, 0, _cudaStream>>>(
         (ExposureData*)_exposureBuffer,
+        frameData,
         _texDirectLight.texture,
         _texAccum[currIdx].texture,
         _texAlbedo.texture,

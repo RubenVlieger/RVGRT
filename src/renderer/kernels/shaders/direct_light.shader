@@ -28,7 +28,7 @@ KERNEL(GBufferAndDirectLight)(
     PARAM_CONSTANT(CameraData, camera, 0),
     PARAM_CONSTANT(FrameData, frame, 1),
 
-    PARAM_TEXTURE_READ(tex3d_u32, indirection, 5),
+    PARAM_INDIRECTION(indirection, 5),
     PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(uchar, dataBuffer, 5),
@@ -55,13 +55,18 @@ KERNEL(GBufferAndDirectLight)(
     // Ray Gen
     float2 pixelCenter = AS_FLOAT2(gid) + 0.5f;
     float2 jitteredCoord = pixelCenter + camera.jitter;
-    float2 uv = jitteredCoord / make_float2(width, height);
+    float2 uv = jitteredCoord / make_float2((float)width, (float)height);
     float2 ndc = uv * 2.0f - 1.0f;
     float3 dir = normalize(camera.forward + ndc.x * camera.right + ndc.y * camera.up);
 
     // Read Dist Approx
     DECLARE_SAMPLER(sLinear, linear, clamp_to_edge);
+#if defined(PLATFORM_METAL)
     float startDist = TEX_SAMPLE_2D(halfDistTex, uv).r;
+#else
+    float4 halfDistSample = TEX_SAMPLE_2D(halfDistTex, uv);
+    float startDist = halfDistSample.x;
+#endif
 
     hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer,
                         occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
@@ -76,26 +81,47 @@ KERNEL(GBufferAndDirectLight)(
         normal = hit.normal;
 
         // Motion Vectors
+#if defined(PLATFORM_METAL)
         float2 motionVector = float2(0.0f);
+#else
+        float2 motionVector = make_float2(0.0f, 0.0f);
+#endif
         if (depth < 50000.0f) {
+#if defined(PLATFORM_METAL)
             float4 currentClipPos = camera.unjitteredViewProjection * float4(hit.pos, 1.0f);
             float4 previousClipPos = camera.prevUnjitteredViewProjection * float4(hit.pos, 1.0f);
+#else
+            float4 currentClipPos = camera.unjitteredViewProjection * make_float4(hit.pos.x, hit.pos.y, hit.pos.z, 1.0f);
+            float4 previousClipPos = camera.prevUnjitteredViewProjection * make_float4(hit.pos.x, hit.pos.y, hit.pos.z, 1.0f);
+#endif
             if (previousClipPos.w > 0.0f && currentClipPos.w > 0.0f) {
-                float2 prevNDC = previousClipPos.xy / previousClipPos.w;
-                float2 currNDC = currentClipPos.xy / currentClipPos.w;
+                float2 prevNDC = make_float2(previousClipPos.x / previousClipPos.w, previousClipPos.y / previousClipPos.w);
+                float2 currNDC = make_float2(currentClipPos.x / currentClipPos.w, currentClipPos.y / currentClipPos.w);
                 motionVector = 0.5f * (currNDC - prevNDC);
                 motionVector.y = -motionVector.y;
             }
         }
+#if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texMotion, float4(motionVector.x, motionVector.y, 0, 0), gid);
+#else
+        TEX_WRITE_2D(texMotion, make_float4(motionVector.x, motionVector.y, 0.0f, 0.0f), gid);
+#endif
 
         // Water Logic
+#if defined(PLATFORM_METAL)
         bool isWater = (hit.pos.y <= 3.001f && normal.y > HALF_LITERAL(0.8f));
+#else
+        bool isWater = (hit.pos.y <= 3.001f && normal.y > 0.8f);
+#endif
         if (isWater) {
             albedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, depth * depth);
             float nx = fbm3D(hit.pos.x, hit.pos.z, frame.time, 3, 0.06f, 2.0f, 0.6f);
             float ny = fbm3D(hit.pos.z, hit.pos.x, frame.time + 112.0f, 3, 0.06f, 2.0f, 0.6f);
+#if defined(PLATFORM_METAL)
             half3 distNormal = normalize(normal + HALF3(HALF_LITERAL(nx*0.1f), HALF_LITERAL(0.0f), HALF_LITERAL(ny*0.1f)));
+#else
+            half3 distNormal = normalize(normal + make_float3(nx*0.1f, 0.0f, ny*0.1f));
+#endif
             
             float3 reflDir = reflect(dir, (float3)distNormal);
             
@@ -122,7 +148,11 @@ KERNEL(GBufferAndDirectLight)(
 #else
                 bool rShadow = false;
 #endif
+#if defined(PLATFORM_METAL)
                 reflectColor = rAlbedo * (rShadow ? HALF3(0.05f, 0.05f, 0.05f) : HALF3_FROM_FLOAT3(c_sunColor));
+#else
+                reflectColor = rAlbedo * (rShadow ? make_float3(0.05f, 0.05f, 0.05f) : make_float3(c_sunColor.x, c_sunColor.y, c_sunColor.z));
+#endif
             } else {
                 reflectColor = sampleSky(reflDir, frame.sunDirection);
             }
@@ -133,9 +163,15 @@ KERNEL(GBufferAndDirectLight)(
             float3 viewDir = -dir;
             float3 halfVec = normalize(viewDir + frame.sunDirection);
             float NdotH = max(dot((float3)distNormal, halfVec), 0.0f);
+#if defined(PLATFORM_METAL)
             half specular = pow(NdotH, 512.0f) * 4.0f;
             half NdotV = max(dot(distNormal, HALF3_FROM_FLOAT3(viewDir)), HALF_LITERAL(0.0f));
             half fresnel = HALF_LITERAL(0.02f) + HALF_LITERAL(0.98f) * pow(HALF_LITERAL(1.0f) - NdotV, HALF_LITERAL(5.0f));
+#else
+            float specular = powf(NdotH, 512.0f) * 4.0f;
+            float NdotV = max(dot(distNormal, viewDir), 0.0f);
+            float fresnel = 0.02f + 0.98f * powf(1.0f - NdotV, 5.0f);
+#endif
             
 #if SHADOWS
             bool waterShadow = traceShadow(reflHit.pos, frame.sunDirection, WATER_SHADOW_MAXDIST,
@@ -144,9 +180,13 @@ KERNEL(GBufferAndDirectLight)(
 #else
             bool waterShadow = false;
 #endif
-            
+#if defined(PLATFORM_METAL)
             irradiance = (reflectColor * fresnel) + (HALF3_FROM_FLOAT3(c_sunColor) * specular * (waterShadow ? HALF_LITERAL(0.0f) : HALF_LITERAL(1.0f)));
             irradiance /= (albedo + HALF_LITERAL(0.001f));
+#else
+            irradiance = (reflectColor * fresnel) + (make_float3(c_sunColor.x, c_sunColor.y, c_sunColor.z) * specular * (waterShadow ? 0.0f : 1.0f));
+            irradiance = irradiance / (albedo + make_float3(0.001f, 0.001f, 0.001f));
+#endif
         } else {
             // Standard Solid Block
             albedo = sampleTexture(hit.uv, hit.matID, hit.normal, textureAtlas, depth * depth);
@@ -168,8 +208,13 @@ KERNEL(GBufferAndDirectLight)(
         albedo = HALF3(1.0f, 1.0f, 1.0f);
         
         float3 fakePos = camera.position + dir * 1000.0f;
+#if defined(PLATFORM_METAL)
         float4 currentClipPos = camera.unjitteredViewProjection * float4(fakePos, 1.0f);
         float4 previousClipPos = camera.prevUnjitteredViewProjection * float4(fakePos, 1.0f);
+#else
+        float4 currentClipPos = camera.unjitteredViewProjection * make_float4(fakePos.x, fakePos.y, fakePos.z, 1.0f);
+        float4 previousClipPos = camera.prevUnjitteredViewProjection * make_float4(fakePos.x, fakePos.y, fakePos.z, 1.0f);
+#endif
         float2 mv = make_float2(0.0f, 0.0f);
         if (previousClipPos.w > 0.0f && currentClipPos.w > 0.0f) {
             float2 prevNDC = make_float2(previousClipPos.x / previousClipPos.w, previousClipPos.y / previousClipPos.w);

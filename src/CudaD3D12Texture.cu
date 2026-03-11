@@ -243,7 +243,7 @@ void CudaD3D12Texture::Initialize(ID3D12Device* device, UINT _width, UINT _heigh
     heapDesc.SizeInBytes = allocInfo.SizeInBytes;
     heapDesc.Properties.Type = D3D12_HEAP_TYPE_DEFAULT;
     heapDesc.Alignment = allocInfo.Alignment;
-    heapDesc.Flags = D3D12_HEAP_FLAG_SHARED | D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER;
+    heapDesc.Flags = D3D12_HEAP_FLAG_SHARED;
     checkHresult(device->CreateHeap(&heapDesc, IID_PPV_ARGS(&m_d3dHeap)), "CreateHeap failed for shared texture.");
     // 3. Create a Placed Resource on the Heap
     checkHresult(device->CreatePlacedResource(

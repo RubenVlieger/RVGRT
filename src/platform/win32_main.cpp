@@ -11,6 +11,7 @@
 #include "renderer/D3D12/D3D12Device.hpp"
 #include "renderer/CUDA/CudaRender.cuh"
 #include "CudaD3D12Texture.cuh"
+#include <d3d12/d3dx12.h>
 
 #ifdef HAS_STREAMLINE
 #include <sl.h>
@@ -19,13 +20,10 @@
 
 // Forward declarations
 void renderLoop();
+int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow);
 std::atomic<bool> running = true;
 
-// The one and only main function for the entire project.
-int main(int argc, char *argv[]) {
-  // On Windows, call the Win32 entry point.
-  return Win32Main(GetModuleHandle(NULL), NULL, GetCommandLineA(), SW_SHOW);
-}
+
 
 int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance,
                      LPSTR lpCmdLine, int nCmdShow) {

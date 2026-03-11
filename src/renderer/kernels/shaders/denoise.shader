@@ -52,13 +52,17 @@ KERNEL(BilateralDenoise)(
     // Gaussian-approximate weights for 3x3
     const float kernelWeights[3] = { 1.0f, 2.0f / 1.0f, 4.0f / 1.0f };
 
+#if defined(PLATFORM_METAL)
     float3 sumColor = float3(0.0f);
+#else
+    float3 sumColor = make_float3(0.0f, 0.0f, 0.0f);
+#endif
     float sumWeight = 0.0f;
 
     // 3x3 grid with holes (A-Trous)
     for(int y = -1; y <= 1; y++) {
         for(int x = -1; x <= 1; x++) {
-            int2 offset = int2(x, y) * step_width;
+            int2 offset = make_int2(x, y) * step_width;
             
 #if defined(PLATFORM_METAL)
             uint2 tapCoord = uint2(gid.x + offset.x, gid.y + offset.y);
@@ -83,21 +87,25 @@ KERNEL(BilateralDenoise)(
             float3 tapC = make_float3(tapC4.x, tapC4.y, tapC4.z);
             float3 tapN = make_float3(tapN4.x, tapN4.y, tapN4.z);
             float tapD = tapD4.x;
-#endif;
+#endif
 
             // Normal weight
+#if defined(PLATFORM_METAL)
             float dotN = max(dot(centerN, tapN), 0.0f);
-            float wNormal = pow(dotN, 16.0f);
+#else
+            float dotN = fmaxf(centerN.x * tapN.x + centerN.y * tapN.y + centerN.z * tapN.z, 0.0f);
+#endif
+            float wNormal = powf(dotN, 16.0f);
 
             // Depth weight
-            float wDepth = (abs(centerD - tapD) < 1.5f) ? 1.0f : 0.0f;
+            float wDepth = (fabsf(centerD - tapD) < 1.5f) ? 1.0f : 0.0f;
 
             // Kernel weight
             float kWeight = kernelWeights[abs(x)] * kernelWeights[abs(y)];
             float w = wNormal * wDepth * kWeight;
 
-            sumColor += tapC * w;
-            sumWeight += w;
+            sumColor = sumColor + tapC * w;
+            sumWeight = sumWeight + w;
         }
     }
 
@@ -110,6 +118,7 @@ KERNEL(BilateralDenoise)(
     TEX_WRITE_2D(texDenoised, float4(sumColor / sumWeight, 1.0f), gid);
 #else
     float3 finalColor = sumColor / sumWeight;
-    TEX_WRITE_2D(texDenoised, make_float4(finalColor.x, finalColor.y, finalColor.z, 1.0f), gid);
+    float4 final4 = make_float4(finalColor.x, finalColor.y, finalColor.z, 1.0f);
+    TEX_WRITE_2D(texDenoised, final4, gid);
 #endif
 }

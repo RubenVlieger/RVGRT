@@ -13,6 +13,37 @@
 //   #include <metal_stdlib>
 //   using namespace metal;
 //   #endif
+
+// ============================================================================
+// CUDA VECTOR OPERATORS - Add operators for float3/float2 that work in both host/device
+// ============================================================================
+#if defined(PLATFORM_CUDA) && !defined(FLOAT3_OPS_DEFINED)
+// Define half3 as float3 for CUDA (they're the same type in our implementation)
+typedef float3 half3;
+
+// Additional float2 operators for CUDA (basic ones are in cumath.h)
+__host__ __device__ inline float2 operator+(float2 v, float s) { return make_float2(v.x + s, v.y + s); }
+__host__ __device__ inline float2 operator-(float2 v, float s) { return make_float2(v.x - s, v.y - s); }
+__host__ __device__ inline float2 operator+(float s, float2 v) { return v + s; }
+__host__ __device__ inline float2 operator-(float s, float2 v) { return make_float2(s - v.x, s - v.y); }
+__host__ __device__ inline float2 operator/(float2 a, float2 b) { return make_float2(a.x / b.x, a.y / b.y); }
+
+// float3 operators for CUDA (these also work for half3 since it's typedef'd to float3)
+__host__ __device__ inline float3 operator+(float3 a, float3 b) { return make_float3(a.x + b.x, a.y + b.y, a.z + b.z); }
+__host__ __device__ inline float3 operator-(float3 a, float3 b) { return make_float3(a.x - b.x, a.y - b.y, a.z - b.z); }
+__host__ __device__ inline float3 operator*(float3 a, float3 b) { return make_float3(a.x * b.x, a.y * b.y, a.z * b.z); }
+__host__ __device__ inline float3 operator/(float3 a, float3 b) { return make_float3(a.x / b.x, a.y / b.y, a.z / b.z); }
+__host__ __device__ inline float3 operator+(float3 v, float s) { return make_float3(v.x + s, v.y + s, v.z + s); }
+__host__ __device__ inline float3 operator-(float3 v, float s) { return make_float3(v.x - s, v.y - s, v.z - s); }
+__host__ __device__ inline float3 operator*(float3 v, float s) { return make_float3(v.x * s, v.y * s, v.z * s); }
+__host__ __device__ inline float3 operator/(float3 v, float s) { return make_float3(v.x / s, v.y / s, v.z / s); }
+__host__ __device__ inline float3 operator*(float s, float3 v) { return v * s; }
+__host__ __device__ inline float3 operator+(float s, float3 v) { return v + s; }
+__host__ __device__ inline float3 operator-(float s, float3 v) { return make_float3(s - v.x, s - v.y, s - v.z); }
+__host__ __device__ inline float3 operator-(float3 v) { return make_float3(-v.x, -v.y, -v.z); }
+
+#define FLOAT3_OPS_DEFINED 1
+#endif
 //   #include "cumath.h"
 // ============================================================================
 
@@ -100,6 +131,8 @@
     #define PARAM_TEXTURE_WRITE(type, name, slot) cudaSurfaceObject_t name
     #define PARAM_BUFFER(type, name, slot) type* name
     #define PARAM_CONSTANT(type, name, slot) type name
+    // Special macro for indirection - uses raw pointer, not texture object
+    #define PARAM_INDIRECTION(name, slot) const uint32_t* name
 #endif
 
 // ============================================================================
@@ -240,6 +273,7 @@
     #define SELECT(t, f, cond) ((cond) ? (t) : (f))
     #define ANY_ISNAN(v) (isnan((v).x) || isnan((v).y) || isnan((v).z))
     #define ANY_ISINF(v) (isinf((v).x) || isinf((v).y) || isinf((v).z))
+    #define c_sunColor make_half3(4.5f, 3.6f, 3.0f)
 #endif
 
 // ============================================================================

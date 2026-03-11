@@ -4,9 +4,15 @@
 using namespace metal;
 #define TABLE_CONST static constant
 #else
+#if defined(__CUDACC__)
+#include <stdint.h>
+#define TABLE_CONST static __constant__
+typedef uint64_t ulong;
+#else
 #include <stdint.h>
 #define TABLE_CONST static const
 typedef uint64_t ulong;
+#endif
 #endif
 
 // Precomputed Ray-Cell Interaction Mask LUT

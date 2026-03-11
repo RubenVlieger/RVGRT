@@ -1,3 +1,14 @@
+#ifdef _WIN32
+#ifdef _WIN32_WINNT
+#undef _WIN32_WINNT
+#endif
+#define _WIN32_WINNT 0x0A00
+#ifdef WINVER
+#undef WINVER
+#endif
+#define WINVER 0x0A00
+#endif
+
 #include "platform/NetworkClient.hpp"
 #include "Character.hpp"
 #include <mutex>
@@ -142,8 +153,7 @@ public:
         WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
         WinHttpReceiveResponse(hRequest, NULL);
         
-        hWebSocket = WinHttpWebSocketCreate(hRequest, NULL);
-        WinHttpWebSocketCompleteUpgrade(hWebSocket, NULL);
+        hWebSocket = WinHttpWebSocketCompleteUpgrade(hRequest, 0);
         
         hThread = CreateThread(NULL, 0, ReceiveThread, this, 0, NULL);
     }

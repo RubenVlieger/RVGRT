@@ -15,7 +15,7 @@ using namespace metal;
 // Used for auto-exposure tone mapping.
 // ============================================================================
 
-inline float getLuminance(float3 color) {
+GPU_FUNC inline float getLuminance(float3 color) {
 #if defined(PLATFORM_METAL)
     return dot(color, float3(0.2126f, 0.7152f, 0.0722f));
 #else
@@ -28,9 +28,13 @@ KERNEL(ComputeExposure)(
     PARAM_CONSTANT(FrameData, frame, 1),
     PARAM_TEXTURE_READ(tex2d_f32_r, texDirect, 0),
     PARAM_TEXTURE_READ(tex2d_f32_r, texAccum, 1),
-    PARAM_TEXTURE_READ(tex2d_f32_r, texAlbedo, 2),
-    DECLARE_GID(),
-    DECLARE_TID()
+    PARAM_TEXTURE_READ(tex2d_f32_r, texAlbedo, 2)
+#if defined(PLATFORM_METAL)
+    , DECLARE_GID()
+    , DECLARE_TID()
+#else
+    , int _width, int _height
+#endif
 )
 {
 #if defined(PLATFORM_METAL)
@@ -69,6 +73,10 @@ KERNEL(ComputeExposure)(
             float3 direct = TEX_READ_2D(texDirect, coords).rgb;
             float3 indirect = TEX_READ_2D(texAccum, coords).rgb;
             float3 albedo = TEX_READ_2D(texAlbedo, coords).rgb;
+            float2 uv = float2(x / width, y / height);
+            float dist = length(uv - 0.5f);
+            float weight = 1.0f - smoothstep(0.2f, 0.6f, dist);
+            weight = max(weight, 0.1f);
 #else
             float4 direct4 = TEX_READ_2D(texDirect, coords);
             float4 indirect4 = TEX_READ_2D(texAccum, coords);
@@ -76,18 +84,16 @@ KERNEL(ComputeExposure)(
             float3 direct = make_float3(direct4.x, direct4.y, direct4.z);
             float3 indirect = make_float3(indirect4.x, indirect4.y, indirect4.z);
             float3 albedo = make_float3(albedo4.x, albedo4.y, albedo4.z);
+            float2 uv = make_float2(x / (float)width, y / (float)height);
+            float dist = length(uv - make_float2(0.5f, 0.5f));
+            float weight = 1.0f - smoothstep(0.2f, 0.6f, dist);
+            weight = fmaxf(weight, 0.1f);
 #endif
             
             float3 color = (direct + indirect) * albedo;
             float lum = getLuminance(color);
             
-            // Center weighting
-            float2 uv = make_float2(x / width, y / height);
-            float dist = length(uv - 0.5f);
-            float weight = 1.0f - smoothstep(0.2f, 0.6f, dist);
-            weight = max(weight, 0.1f);
-            
-            localLogSum += log(max(lum, 0.0001f)) * weight;
+            localLogSum += log(fmaxf(lum, 0.0001f)) * weight;
             pixelCount++;
         }
     }
@@ -127,7 +133,7 @@ KERNEL(ComputeExposure)(
         float interpolatedLum = lastLum + (currentSceneLum - lastLum) * 
                                (1.0f - exp(-frame.deltaTime * adaptationSpeed));
         
-        if (isnan(interpolatedLum)) interpolatedLum = 0.5f;
+        if (isnan(interpolatedLum) || !(interpolatedLum == interpolatedLum)) interpolatedLum = 0.5f;
 
         exposure->sceneLuminance = interpolatedLum;
     }
