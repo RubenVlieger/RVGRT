@@ -118,7 +118,11 @@ KERNEL(BilateralDenoise)(
     TEX_WRITE_2D(texDenoised, float4(sumColor / sumWeight, 1.0f), gid);
 #else
     float3 finalColor = sumColor / sumWeight;
-    float4 final4 = make_float4(finalColor.x, finalColor.y, finalColor.z, 1.0f);
-    TEX_WRITE_2D(texDenoised, final4, gid);
+    ushort4 finalHalf4;
+    finalHalf4.x = __float2half_rn(finalColor.x);
+    finalHalf4.y = __float2half_rn(finalColor.y);
+    finalHalf4.z = __float2half_rn(finalColor.z);
+    finalHalf4.w = __float2half_rn(1.0f);
+    TEX_WRITE_2D_RGBA16F(texDenoised, finalHalf4, gid);
 #endif
 }

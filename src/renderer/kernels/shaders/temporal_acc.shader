@@ -60,8 +60,12 @@ KERNEL(TemporalAccumulation)(
 #if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texAccum, float4(1.0, 0.0, 1.0, 1.0), gid);
 #else
-        float4 errVal = make_float4(1.0f, 0.0f, 1.0f, 1.0f);
-        TEX_WRITE_2D(texAccum, errVal, gid);
+        ushort4 errHalf4;
+        errHalf4.x = __float2half_rn(1.0f);
+        errHalf4.y = __float2half_rn(0.0f);
+        errHalf4.z = __float2half_rn(1.0f);
+        errHalf4.w = __float2half_rn(1.0f);
+        TEX_WRITE_2D_RGBA16F(texAccum, errHalf4, gid);
 #endif
         return;
     }
@@ -74,8 +78,12 @@ KERNEL(TemporalAccumulation)(
 #if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texAccum, float4(0.0, 1.0, 1.0, 1.0), gid);
 #else
-        float4 errVal = make_float4(0.0f, 1.0f, 1.0f, 1.0f);
-        TEX_WRITE_2D(texAccum, errVal, gid);
+        ushort4 errHalf4;
+        errHalf4.x = __float2half_rn(0.0f);
+        errHalf4.y = __float2half_rn(1.0f);
+        errHalf4.z = __float2half_rn(1.0f);
+        errHalf4.w = __float2half_rn(1.0f);
+        TEX_WRITE_2D_RGBA16F(texAccum, errHalf4, gid);
 #endif
         return;
     }
@@ -227,7 +235,11 @@ KERNEL(TemporalAccumulation)(
 #if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texAccum, float4(result, 1.0f), gid);
 #else
-    float4 result4 = make_float4(result.x, result.y, result.z, 1.0f);
-    TEX_WRITE_2D(texAccum, result4, gid);
+    ushort4 resultHalf4;
+    resultHalf4.x = __float2half_rn(result.x);
+    resultHalf4.y = __float2half_rn(result.y);
+    resultHalf4.z = __float2half_rn(result.z);
+    resultHalf4.w = __float2half_rn(1.0f);
+    TEX_WRITE_2D_RGBA16F(texAccum, resultHalf4, gid);
 #endif
 }

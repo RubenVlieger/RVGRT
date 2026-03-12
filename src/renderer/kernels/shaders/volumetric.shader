@@ -30,7 +30,7 @@ KERNEL(VolumetricFog)(
     PARAM_BUFFER(SectorInfo, sectorBuffer, 3),
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData, charData, 7),
+    PARAM_CONSTANT_PTR(CharacterGPUData, charData, 7),
 
     DECLARE_GID()
 )
@@ -50,8 +50,8 @@ KERNEL(VolumetricFog)(
 #if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texVolumetric, float4(0.0f), gid);
 #else
-    float4 zeroVal = make_float4(0.0f, 0.0f, 0.0f, 0.0f);
-    TEX_WRITE_2D(texVolumetric, zeroVal, gid);
+    ushort4 zeroHalf4 = make_ushort4(0, 0, 0, 0);
+    TEX_WRITE_2D_RGBA16F(texVolumetric, zeroHalf4, gid);
 #endif
     return;
 #endif
@@ -140,7 +140,7 @@ KERNEL(VolumetricFog)(
 #if SHADOWS
             isShadowed = traceShadow(pos, frame.sunDirection, VOLUMETRIC_SHADOW_MAXDIST,
                                     VOLUMETRIC_SHADOW_STEPS, indirection, sectorBuffer,
-                                    occupancyBuffer, (uchar*)0, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                                    occupancyBuffer, (uchar*)0, sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
 #else
             isShadowed = false;
 #endif
@@ -202,7 +202,12 @@ KERNEL(VolumetricFog)(
     TEX_WRITE_2D(texVolumetric, float4(result, 1.0f), gid);
 #else
     float3 result = mix(accumulatedLight, history, blendFactor);
-    float4 result4 = make_float4(result.x, result.y, result.z, 1.0f);
-    TEX_WRITE_2D(texVolumetric, result4, gid);
+    // Convert float4 to half4 (ushort4) for RGBA16F format
+    ushort4 resultHalf4;
+    resultHalf4.x = __float2half_rn(result.x);
+    resultHalf4.y = __float2half_rn(result.y);
+    resultHalf4.z = __float2half_rn(result.z);
+    resultHalf4.w = __float2half_rn(1.0f);
+    TEX_WRITE_2D_RGBA16F(texVolumetric, resultHalf4, gid);
 #endif
 }

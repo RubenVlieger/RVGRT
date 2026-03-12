@@ -39,6 +39,11 @@
 #define IND_Z (WORLD_SIZE_Z >> BRICK_SIZE_SHIFT)
 #define IND_SIZE (IND_X * IND_Y * IND_Z)
 
+// Sector grid dimensions (world / sector_size) - used for indirection texture/buffer bounds
+#define SECTOR_IND_X (WORLD_SIZE_X / SECTOR_SIZE)  // 128
+#define SECTOR_IND_Y (WORLD_SIZE_Y / SECTOR_SIZE)  // 16
+#define SECTOR_IND_Z (WORLD_SIZE_Z / SECTOR_SIZE)  // 128
+
 // Geometry packing (1 pixel holds 4x4x2 voxels)
 #define GEO_PACK_X 4
 #define GEO_PACK_Y 4

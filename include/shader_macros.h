@@ -14,12 +14,21 @@
 //   using namespace metal;
 //   #endif
 
+
 // ============================================================================
 // CUDA VECTOR OPERATORS - Add operators for float3/float2 that work in both host/device
 // ============================================================================
 #if defined(PLATFORM_CUDA) && !defined(FLOAT3_OPS_DEFINED)
 // Define half3 as float3 for CUDA (they're the same type in our implementation)
 typedef float3 half3;
+
+// ushort vector constructors for half-precision texture writes
+// __host__ __device__ inline ushort2 make_ushort2(unsigned short x, unsigned short y) {
+//     ushort2 v; v.x = x; v.y = y; return v;
+// }
+// __host__ __device__ inline ushort4 make_ushort4(unsigned short x, unsigned short y, unsigned short z, unsigned short w) {
+//     ushort4 v; v.x = x; v.y = y; v.z = z; v.w = w; return v;
+// }
 
 // Additional float2 operators for CUDA (basic ones are in cumath.h)
 __host__ __device__ inline float2 operator+(float2 v, float s) { return make_float2(v.x + s, v.y + s); }
@@ -126,11 +135,13 @@ __host__ __device__ inline float3 operator-(float3 v) { return make_float3(-v.x,
     #define PARAM_TEXTURE_WRITE(type, name, slot) type name [[texture(slot)]]
     #define PARAM_BUFFER(type, name, slot) device type* name [[buffer(slot)]]
     #define PARAM_CONSTANT(type, name, slot) constant type& name [[buffer(slot)]]
+    #define PARAM_CONSTANT_PTR(type, name, slot) constant type* name [[buffer(slot)]]
 #elif defined(PLATFORM_CUDA)
     #define PARAM_TEXTURE_READ(type, name, slot) type name
     #define PARAM_TEXTURE_WRITE(type, name, slot) cudaSurfaceObject_t name
     #define PARAM_BUFFER(type, name, slot) type* name
     #define PARAM_CONSTANT(type, name, slot) type name
+    #define PARAM_CONSTANT_PTR(type, name, slot) const type* name
     // Special macro for indirection - uses raw pointer, not texture object
     #define PARAM_INDIRECTION(name, slot) const uint32_t* name
 #endif
@@ -167,6 +178,24 @@ __host__ __device__ inline float3 operator-(float3 v) { return make_float3(-v.x,
     #define TEX_GET_HEIGHT(tex) tex.get_height()
     #define TEX_GET_DEPTH(tex) tex.get_depth()
 #elif defined(PLATFORM_CUDA)
+    // Format-specific read/write macros for CUDA surfaces
+    // R32F - single float (4 bytes per pixel)
+    #define TEX_READ_2D_R32F(surf, coord) surf2Dread<float>(surf, (coord).x * sizeof(float), (coord).y)
+    #define TEX_WRITE_2D_R32F(surf, val, coord) surf2Dwrite(val, surf, (coord).x * sizeof(float), (coord).y)
+    
+    // RGBA16F - half4 (8 bytes per pixel)
+    #define TEX_READ_2D_RGBA16F(surf, coord) surf2Dread<ushort4>(surf, (coord).x * sizeof(ushort4), (coord).y)
+    #define TEX_WRITE_2D_RGBA16F(surf, val, coord) surf2Dwrite(val, surf, (coord).x * sizeof(ushort4), (coord).y)
+    
+    // RGBA8 - uchar4 (4 bytes per pixel)
+    #define TEX_READ_2D_RGBA8(surf, coord) surf2Dread<uchar4>(surf, (coord).x * sizeof(uchar4), (coord).y)
+    #define TEX_WRITE_2D_RGBA8(surf, val, coord) surf2Dwrite(val, surf, (coord).x * sizeof(uchar4), (coord).y)
+    
+    // RG16F - half2 (4 bytes per pixel)
+    #define TEX_READ_2D_RG16F(surf, coord) surf2Dread<ushort2>(surf, (coord).x * sizeof(ushort2), (coord).y)
+    #define TEX_WRITE_2D_RG16F(surf, val, coord) surf2Dwrite(val, surf, (coord).x * sizeof(ushort2), (coord).y)
+    
+    // Generic macros (default to float4 for backward compatibility)
     #define TEX_READ_2D(surf, coord) surf2Dread<float4>(surf, (coord).x * sizeof(float4), (coord).y)
     #define TEX_READ_3D(tex, coord) tex3D<uint>(tex, (coord).x, (coord).y, (coord).z)
     #define TEX_WRITE_2D(surf, val, coord) surf2Dwrite(val, surf, (coord).x * sizeof(float4), (coord).y)

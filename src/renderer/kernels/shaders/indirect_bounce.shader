@@ -32,7 +32,7 @@ KERNEL(IndirectBounce)(
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(uchar, dataBuffer, 5),
     PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData, charData, 7),
+    PARAM_CONSTANT_PTR(CharacterGPUData, charData, 7),
     
     DECLARE_GID()
 )
@@ -49,7 +49,12 @@ KERNEL(IndirectBounce)(
 #endif
 
 #if !INDIRECT_LIGHTING
+#if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texRawIndirect, float4(0.0f), gid);
+#else
+    ushort4 zeroHalf4 = make_ushort4(0, 0, 0, 0);
+    TEX_WRITE_2D_RGBA16F(texRawIndirect, zeroHalf4, gid);
+#endif
     return;
 #endif
 
@@ -63,7 +68,8 @@ KERNEL(IndirectBounce)(
 #if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texRawIndirect, float4(0,0,0,0), gid);
 #else
-        TEX_WRITE_2D(texRawIndirect, make_float4(0.0f, 0.0f, 0.0f, 0.0f), gid);
+        ushort4 zeroHalf4 = make_ushort4(0, 0, 0, 0);
+        TEX_WRITE_2D_RGBA16F(texRawIndirect, zeroHalf4, gid);
 #endif
         return;
     }
@@ -86,7 +92,12 @@ KERNEL(IndirectBounce)(
 #if defined(PLATFORM_METAL)
         TEX_WRITE_2D(texRawIndirect, float4(0.02f, 0.02f, 0.02f, 1.0f), gid);
 #else
-        TEX_WRITE_2D(texRawIndirect, make_float4(0.02f, 0.02f, 0.02f, 1.0f), gid);
+        ushort4 valHalf4;
+        valHalf4.x = __float2half_rn(0.02f);
+        valHalf4.y = __float2half_rn(0.02f);
+        valHalf4.z = __float2half_rn(0.02f);
+        valHalf4.w = __float2half_rn(1.0f);
+        TEX_WRITE_2D_RGBA16F(texRawIndirect, valHalf4, gid);
 #endif
         return;
     }
@@ -106,7 +117,7 @@ KERNEL(IndirectBounce)(
 
     // Bounce Trace
     hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer,
-                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
     
     half3 incomingLight = HALF3(0.0f, 0.0f, 0.0f);
 
@@ -117,7 +128,7 @@ KERNEL(IndirectBounce)(
                                       INDIRECT_SHADOW_MAXDIST,
                                       INDIRECT_SHADOW_STEPS,
                                       indirection, sectorBuffer, occupancyBuffer,
-                                      dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                                      dataBuffer, sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
 #else
         bool isShadowed = false;
 #endif
@@ -142,6 +153,11 @@ KERNEL(IndirectBounce)(
 #if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texRawIndirect, float4((float3)incomingLight, 1.0f), gid);
 #else
-    TEX_WRITE_2D(texRawIndirect, make_float4(incomingLight.x, incomingLight.y, incomingLight.z, 1.0f), gid);
+    ushort4 incomingHalf4;
+    incomingHalf4.x = __float2half_rn(incomingLight.x);
+    incomingHalf4.y = __float2half_rn(incomingLight.y);
+    incomingHalf4.z = __float2half_rn(incomingLight.z);
+    incomingHalf4.w = __float2half_rn(1.0f);
+    TEX_WRITE_2D_RGBA16F(texRawIndirect, incomingHalf4, gid);
 #endif
 }

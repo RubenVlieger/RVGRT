@@ -51,8 +51,8 @@ public:
     bool IsValid() const { return m_d3dResource != nullptr && m_cudaExtMem != nullptr; }
 
 private:
-    size_t width;
-    size_t height;
+    size_t width = 0;
+    size_t height = 0;
     void Release();
 
     // D3D12 Resources
@@ -65,12 +65,10 @@ private:
     // CUDA Interop Resources
     cudaExternalMemory_t m_cudaExtMem = nullptr;
     HANDLE m_sharedHandle = nullptr;
+    void* m_cudaDevPtr = nullptr;
+    size_t m_pitch = 0;
     
     // CUDA-side representations
-    void* m_cudaDevPtr = nullptr;
     cudaMipmappedArray_t m_cudaMipmappedArray = nullptr;
     cudaArray_t m_cudaArray = nullptr;
-    
-    // Texture properties
-    size_t m_pitch = 0;
 };

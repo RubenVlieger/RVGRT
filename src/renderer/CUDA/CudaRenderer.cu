@@ -9,6 +9,7 @@
 #include "renderer/ShaderTypes.h"
 #include <cuda_runtime.h>
 #include <device_launch_parameters.h>
+#include <cuda_fp16.h>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -26,6 +27,23 @@
         exit(1); \
     } \
 } while(0)
+
+// Kernel launch checking macro - checks for launch errors immediately
+#define CUDA_KERNEL_SYNC(kernelCall) do { \
+    kernelCall; \
+    cudaError_t err = cudaGetLastError(); \
+    if (err != cudaSuccess) { \
+        fprintf(stderr, "CUDA kernel launch error at %s:%d: %s\n", __FILE__, __LINE__, cudaGetErrorString(err)); \
+        exit(1); \
+    } \
+} while(0)
+
+// Debug synchronization - syncs after kernel in debug builds only
+#ifdef _DEBUG
+#define CUDA_SYNC_STREAM(stream) CUDA_CHECK(cudaStreamSynchronize(stream))
+#else
+#define CUDA_SYNC_STREAM(stream) ((void)0)
+#endif
 
 // ============================================================================
 // CONSTANT MEMORY (matching Metal's constant buffers)
@@ -49,7 +67,7 @@ __global__ void distApproximationKernel(
     uint64_t* occupancyBuffer,
     uint8_t* dataBuffer,
     uint64_t* sectorMaskBuffer,
-    CharacterGPUData charData,
+    const CharacterGPUData* charData,
     int width, int height
 );
 
@@ -67,7 +85,7 @@ __global__ void GBufferAndDirectLight(
     uint64_t* occupancyBuffer,
     uint8_t* dataBuffer,
     uint64_t* sectorMaskBuffer,
-    CharacterGPUData charData,
+    const CharacterGPUData* charData,
     cudaTextureObject_t textureAtlas,
     cudaTextureObject_t halfDistTex,
     int width, int height
@@ -76,8 +94,8 @@ __global__ void GBufferAndDirectLight(
 // Indirect Bounce Pass (full-res)
 __global__ void IndirectBounce(
     cudaSurfaceObject_t texRawIndirect,
-    cudaTextureObject_t texNormal,
-    cudaTextureObject_t texDepth,
+    cudaSurfaceObject_t texNormal,
+    cudaSurfaceObject_t texDepth,
     CameraData camera,
     FrameData frame,
     cudaTextureObject_t textureAtlas,
@@ -86,28 +104,28 @@ __global__ void IndirectBounce(
     uint64_t* occupancyBuffer,
     uint8_t* dataBuffer,
     uint64_t* sectorMaskBuffer,
-    CharacterGPUData charData,
+    const CharacterGPUData* charData,
     int width, int height
 );
 
 // Temporal Accumulation Pass (full-res)
 __global__ void TemporalAccumulation(
     cudaSurfaceObject_t texAccum,
-    cudaTextureObject_t texRawIndirect,
+    cudaSurfaceObject_t texRawIndirect,
     cudaTextureObject_t texHistory,
-    cudaTextureObject_t texMotion,
-    cudaTextureObject_t texDepth,
-    cudaTextureObject_t texPrevDepth,
-    cudaTextureObject_t texDirect,
+    cudaSurfaceObject_t texMotion,
+    cudaSurfaceObject_t texDepth,
+    cudaSurfaceObject_t texPrevDepth,
+    cudaSurfaceObject_t texDirect,
     int width, int height
 );
 
 // Bilateral Denoise Pass (full-res, multi-iteration)
 __global__ void BilateralDenoise(
     cudaSurfaceObject_t output,
-    cudaTextureObject_t input,
-    cudaTextureObject_t texNormal,
-    cudaTextureObject_t texDepth,
+    cudaSurfaceObject_t input,
+    cudaSurfaceObject_t texNormal,
+    cudaSurfaceObject_t texDepth,
     int stepWidth,
     int width, int height
 );
@@ -115,7 +133,7 @@ __global__ void BilateralDenoise(
 // Volumetric Fog Pass (half-res)
 __global__ void VolumetricFog(
     cudaSurfaceObject_t texVolumetric,
-    cudaTextureObject_t texDepth,
+    cudaSurfaceObject_t texDepth,
     cudaTextureObject_t texHistory,
     CameraData camera,
     FrameData frame,
@@ -123,7 +141,7 @@ __global__ void VolumetricFog(
     SectorInfo* sectorBuffer,
     uint64_t* occupancyBuffer,
     uint64_t* sectorMaskBuffer,
-    CharacterGPUData charData,
+    const CharacterGPUData* charData,
     int width, int height
 );
 
@@ -131,20 +149,20 @@ __global__ void VolumetricFog(
 __global__ void ComputeExposure(
     ExposureData* exposure,
     FrameData frame,
-    cudaTextureObject_t texDirect,
-    cudaTextureObject_t texAccum,
-    cudaTextureObject_t texAlbedo,
+    cudaSurfaceObject_t texDirect,
+    cudaSurfaceObject_t texAccum,
+    cudaSurfaceObject_t texAlbedo,
     int width, int height
 );
 
 // Composite Pass (full-res)
 __global__ void Composite(
     cudaSurfaceObject_t texFinal,
-    cudaTextureObject_t texDirect,
-    cudaTextureObject_t texAccum,
-    cudaTextureObject_t texAlbedo,
-    cudaTextureObject_t texDepth,
-    cudaTextureObject_t texVolumetric,
+    cudaSurfaceObject_t texDirect,
+    cudaSurfaceObject_t texAccum,
+    cudaSurfaceObject_t texAlbedo,
+    cudaSurfaceObject_t texDepth,
+    cudaSurfaceObject_t texVolumetric,
     ExposureData* exposure,
     int width, int height
 );
@@ -437,6 +455,7 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     CUDA_CHECK(cudaMemcpyToSymbolAsync(c_frame, &frameData, sizeof(FrameData),
                                        0, cudaMemcpyHostToDevice, _cudaStream));
     
+    CUDA_SYNC_STREAM(_cudaStream);
     // Grid and block sizes
     dim3 gridSizeFull((_width + 15) / 16, (_height + 15) / 16);
     dim3 gridSizeHalf((_width / 2 + 7) / 8, (_height / 2 + 7) / 8);
@@ -446,7 +465,7 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     // ============================================================================
     // PASS 0: Distance Approximation (half-res, 8x8 threads)
     // ============================================================================
-    distApproximationKernel<<<gridSizeHalf, groupSize8, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((distApproximationKernel<<<gridSizeHalf, groupSize8, 0, _cudaStream>>>(
         _halfDistTexture.surface,
         camData, frameData,
         _materialMap.GetIndirectionPtr(),
@@ -454,14 +473,15 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
         (uint64_t*)_materialMap.GetOccupancyPtr(),
         (uint8_t*)_materialMap.GetDataPtr(),
         (uint64_t*)_materialMap.GetSectorMaskPtr(),
-        charData,
-        _width, _height
-    );
+        (const CharacterGPUData*)_characterBuffer,
+        _width / 2, _height / 2
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // ============================================================================
     // PASS 1: GBuffer + Direct Light (full-res, 16x16 threads)
     // ============================================================================
-    GBufferAndDirectLight<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((GBufferAndDirectLight<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
         _texDirectLight.surface,
         _texAlbedo.surface,
         _texNormal.surface,
@@ -473,19 +493,20 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
         (uint64_t*)_materialMap.GetOccupancyPtr(),
         (uint8_t*)_materialMap.GetDataPtr(),
         (uint64_t*)_materialMap.GetSectorMaskPtr(),
-        charData,
+        (const CharacterGPUData*)_characterBuffer,
         _texturepack.getTextureObject(),
         _halfDistTexture.texture,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // ============================================================================
     // PASS 2: Indirect Bounce (full-res)
     // ============================================================================
-    IndirectBounce<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((IndirectBounce<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
         _texRawIndirect.surface,
-        _texNormal.texture,
-        _texDepth[currIdx].texture,
+        _texNormal.surface,
+        _texDepth[currIdx].surface,
         camData, frameData,
         _texturepack.getTextureObject(),
         _materialMap.GetIndirectionPtr(),
@@ -493,99 +514,107 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
         (uint64_t*)_materialMap.GetOccupancyPtr(),
         (uint8_t*)_materialMap.GetDataPtr(),
         (uint64_t*)_materialMap.GetSectorMaskPtr(),
-        charData,
+        (const CharacterGPUData*)_characterBuffer,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // ============================================================================
     // PASS 3: Temporal Accumulation
     // ============================================================================
-    TemporalAccumulation<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((TemporalAccumulation<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
         _texAccum[currIdx].surface,
-        _texRawIndirect.texture,
+        _texRawIndirect.surface,
         _texAccum[prevIdx].texture,
-        _texMotion.texture,
-        _texDepth[currIdx].texture,
-        _texDepth[prevIdx].texture,
-        _texDirectLight.texture,
+        _texMotion.surface,
+        _texDepth[currIdx].surface,
+        _texDepth[prevIdx].surface,
+        _texDirectLight.surface,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // ============================================================================
     // PASS 4: Bilateral Denoise (3 iterations: step 1, 2, 4)
     // ============================================================================
     // Iteration 1: step = 1
-    BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
         _texDenoiseTemp.surface,
-        _texAccum[currIdx].texture,
-        _texNormal.texture,
-        _texDepth[currIdx].texture,
+        _texAccum[currIdx].surface,
+        _texNormal.surface,
+        _texDepth[currIdx].surface,
         1,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // Iteration 2: step = 2
-    BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
         _texDenoised.surface,
-        _texDenoiseTemp.texture,
-        _texNormal.texture,
-        _texDepth[currIdx].texture,
+        _texDenoiseTemp.surface,
+        _texNormal.surface,
+        _texDepth[currIdx].surface,
         2,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // Iteration 3: step = 4
-    BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
         _texDenoiseTemp.surface,
-        _texDenoised.texture,
-        _texNormal.texture,
-        _texDepth[currIdx].texture,
+        _texDenoised.surface,
+        _texNormal.surface,
+        _texDepth[currIdx].surface,
         4,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // ============================================================================
     // PASS 5: Volumetric Fog (half-res)
     // ============================================================================
-    VolumetricFog<<<gridSizeHalf, groupSize8, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((VolumetricFog<<<gridSizeHalf, groupSize8, 0, _cudaStream>>>(
         _texVolumetric[currIdx].surface,
-        _texDepth[currIdx].texture,
+        _texDepth[currIdx].surface,
         _texVolumetric[prevIdx].texture,
         camData, frameData,
         _materialMap.GetIndirectionPtr(),
         (SectorInfo*)_materialMap.GetSectorBufferPtr(),
         (uint64_t*)_materialMap.GetOccupancyPtr(),
         (uint64_t*)_materialMap.GetSectorMaskPtr(),
-        charData,
-        _width, _height
-    );
+        (const CharacterGPUData*)_characterBuffer,
+        _width / 2, _height / 2
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // ============================================================================
     // PASS 6: Compute Exposure (reduction kernel)
     // ============================================================================
     dim3 singleGroup(16, 16);
-    ComputeExposure<<<singleGroup, singleGroup, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((ComputeExposure<<<singleGroup, singleGroup, 0, _cudaStream>>>(
         (ExposureData*)_exposureBuffer,
         frameData,
-        _texDirectLight.texture,
-        _texAccum[currIdx].texture,
-        _texAlbedo.texture,
+        _texDirectLight.surface,
+        _texAccum[currIdx].surface,
+        _texAlbedo.surface,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // ============================================================================
     // PASS 7: Composite (full-res)
     // ============================================================================
-    Composite<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((Composite<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
         _texCompositeResult.surface,
-        _texDirectLight.texture,
-        _texDenoiseTemp.texture,  // Output from final denoise iteration
-        _texAlbedo.texture,
-        _texDepth[currIdx].texture,
-        _texVolumetric[currIdx].texture,
+        _texDirectLight.surface,
+        _texDenoiseTemp.surface,  // Output from final denoise iteration
+        _texAlbedo.surface,
+        _texDepth[currIdx].surface,
+        _texVolumetric[currIdx].surface,
         (ExposureData*)_exposureBuffer,
         _width, _height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     // Store jitter for next frame (for DLSS)
     _jitterX = character.jitterX;
@@ -610,11 +639,12 @@ void CudaRenderer::PostDraw(cudaSurfaceObject_t outputSurface,
     dim3 gridSize((width + 15) / 16, (height + 15) / 16);
     dim3 blockSize(16, 16);
     
-    CopyToInteropKernel<<<gridSize, blockSize, 0, _cudaStream>>>(
+    CUDA_KERNEL_SYNC((CopyToInteropKernel<<<gridSize, blockSize, 0, _cudaStream>>>(
         _texCompositeResult.surface,
         outputSurface,
         width, height
-    );
+    )));
+    CUDA_SYNC_STREAM(_cudaStream);
     
     CUDA_CHECK(cudaStreamSynchronize(_cudaStream));
 }
@@ -636,9 +666,9 @@ __global__ void CopyToInteropKernel(
     
     if (x >= width || y >= height) return;
     
-    float4 color;
-    surf2Dread(&color, src, x * sizeof(float4), y);
-    
-    // Simple copy (formats should match)
-    surf2Dwrite(color, dst, x * sizeof(float4), y);
+    // Both src and dst are R16G16B16A16_FLOAT (half4 = 8 bytes per pixel)
+    // Use uchar4 to read/write 8 bytes at a time
+    uchar4 color;
+    surf2Dread(&color, src, x * 8, y);  // 8 bytes stride
+    surf2Dwrite(color, dst, x * 8, y);  // 8 bytes stride
 }

@@ -4,6 +4,8 @@
 #include <thread>
 #include <windows.h>
 #include <iostream>
+#include <stdexcept>
+#include <cuda_runtime.h>
 
 #include "State.hpp"
 #include "platform/NetworkClient.hpp"
@@ -39,6 +41,12 @@ int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance,
 
     // 3. Create the CUDA renderer (mirrors macOS MetalRenderer creation)
     State::state.renderer = std::make_unique<CudaRenderer>();
+    
+    cudaError_t syncErr = cudaDeviceSynchronize();
+    if (syncErr != cudaSuccess) {
+        fprintf(stderr, "CUDA error after init: %s\n", cudaGetErrorString(syncErr));
+        fflush(stderr);
+    }
     
     // Initialize DLSS if available
     D3D12Device* d3d12Device = static_cast<D3D12Device*>(State::state.graphicsDevice.get());
@@ -100,95 +108,110 @@ static constexpr sl::DLSSOptions kDlssOptions = {
 #endif
 
 void renderLoop() {
-  D3D12Device *d3d12Device =
-      static_cast<D3D12Device *>(State::state.graphicsDevice.get());
-  CudaRenderer *cudaRenderer =
-      static_cast<CudaRenderer *>(State::state.renderer.get());
-  
-  // Create interop texture for CUDA -> D3D12 output
-  CudaD3D12Texture interopTexture;
-  interopTexture.Initialize(
-      d3d12Device->GetD3D12Device(),
-      State::dispWIDTH,
-      State::dispHEIGHT,
-      DXGI_FORMAT_R16G16B16A16_FLOAT,
-      D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
-      L"CUDA-D3D12 Interop"
-  );
+  try {
+    printf("[Render] Thread started\n"); fflush(stdout);
 
-  using clock = std::chrono::steady_clock;
-  auto lastTime = clock::now();
-  double frameTimeMs = 16.6f;
-  unsigned int frameCount = 0;
-  float npcTime = 0.0f;
-
-  while (running) {
-    State::state.graphicsDevice->BeginFrame();
-
-    // Update game state
-    State::state.character.Update(frameCount);
-    State::state.platform->deltaTime = (float)frameTimeMs / 1000.f;
-
-    // Network updates
-    if (State::state.networkClient) {
-      State::state.networkClient->SendState(State::state.character);
-      State::state.networkClient->PollUpdates(State::state.otherCharacters);
-    } else {
-      npcTime += frameTimeMs / 1000.0f;
-      for (auto &npc : State::state.otherCharacters) {
-        npc.UpdateTestNPC(npcTime, frameTimeMs / 1000.0f);
-      }
-    }
-
-    // MAIN RENDER CALL
-    if (State::state.renderer) {
-      cudaRenderer->Draw(State::state.character, frameCount);
-    }
+    D3D12Device *d3d12Device =
+        static_cast<D3D12Device *>(State::state.graphicsDevice.get());
+    CudaRenderer *cudaRenderer =
+        static_cast<CudaRenderer *>(State::state.renderer.get());
     
-    // Copy CUDA output to D3D12 interop texture
-    cudaRenderer->PostDraw(interopTexture.getCudaSurfObject(), 
-                            State::dispWIDTH, State::dispHEIGHT, false);
+    // Create interop texture for CUDA -> D3D12 output
+    CudaD3D12Texture interopTexture;
+    printf("[Render] Initializing interop texture\n"); fflush(stdout);
+    interopTexture.Initialize(
+        d3d12Device->GetD3D12Device(),
+        State::dispWIDTH,
+        State::dispHEIGHT,
+        DXGI_FORMAT_R16G16B16A16_FLOAT,
+        D3D12_RESOURCE_FLAG_ALLOW_UNORDERED_ACCESS,
+        L"CUDA-D3D12 Interop"
+    );
+    printf("[Render] Interop texture initialized\n"); fflush(stdout);
 
-    // Copy to backbuffer
-    ID3D12Resource *backBuffer = d3d12Device->GetCurrentBackBuffer();
-    ID3D12GraphicsCommandList *cmdList = d3d12Device->GetCommandList();
-    ID3D12Resource *outputResource = interopTexture.GetD3D12Resource();
+    using clock = std::chrono::steady_clock;
+    auto lastTime = clock::now();
+    double frameTimeMs = 16.6f;
+    unsigned int frameCount = 0;
+    float npcTime = 0.0f;
 
-    D3D12_RESOURCE_BARRIER copyBarriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(
-            outputResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
-            D3D12_RESOURCE_STATE_COPY_SOURCE),
-        CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
-                                             D3D12_RESOURCE_STATE_PRESENT,
-                                             D3D12_RESOURCE_STATE_COPY_DEST)};
-    cmdList->ResourceBarrier(_countof(copyBarriers), copyBarriers);
-    cmdList->CopyResource(backBuffer, outputResource);
+    while (running) {
+      printf("[Render] BeginFrame\n"); fflush(stdout);
+      State::state.graphicsDevice->BeginFrame();
 
-    D3D12_RESOURCE_BARRIER finalBarriers[] = {
-        CD3DX12_RESOURCE_BARRIER::Transition(outputResource,
-                                             D3D12_RESOURCE_STATE_COPY_SOURCE,
-                                             D3D12_RESOURCE_STATE_COMMON),
-        CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
-                                             D3D12_RESOURCE_STATE_COPY_DEST,
-                                             D3D12_RESOURCE_STATE_PRESENT)};
-    cmdList->ResourceBarrier(_countof(finalBarriers), finalBarriers);
+      // Update game state
+      State::state.character.Update(frameCount);
+      State::state.platform->deltaTime = (float)frameTimeMs / 1000.f;
 
-    State::state.graphicsDevice->EndFrame();
+      // Network updates
+      if (State::state.networkClient) {
+        State::state.networkClient->SendState(State::state.character);
+        State::state.networkClient->PollUpdates(State::state.otherCharacters);
+      } else {
+        npcTime += frameTimeMs / 1000.0f;
+        for (auto &npc : State::state.otherCharacters) {
+          npc.UpdateTestNPC(npcTime, frameTimeMs / 1000.0f);
+        }
+      }
 
-    // Frame Timing
-    frameTimeMs =
-        std::chrono::duration<double, std::milli>(clock::now() - lastTime)
-            .count();
-    State::state.platform->frameTimeAverager.addFrameTime(frameTimeMs);
-    lastTime = clock::now();
+      // MAIN RENDER CALL
+      if (State::state.renderer) {
+        printf("[Render] About to Draw\n"); fflush(stdout);
+        cudaRenderer->Draw(State::state.character, frameCount);
+        printf("[Render] Draw complete\n"); fflush(stdout);
+      }
+      
+      printf("[Render] PostDraw and resource barriers\n"); fflush(stdout);
+      // Copy CUDA output to D3D12 interop texture
+      cudaRenderer->PostDraw(interopTexture.getCudaSurfObject(), 
+                              State::dispWIDTH, State::dispHEIGHT, false);
 
-    // Update window title
-    char title[256];
-    snprintf(title, sizeof(title), "RVGRT: %.1f ms | Avg: %.1f ms", frameTimeMs,
-             State::state.platform->frameTimeAverager.getAverage());
-    SetWindowTextA(static_cast<HWND>(State::state.platform->GetWindowHandle()),
-                   title);
-    frameCount++;
+      // Copy to backbuffer
+      ID3D12Resource *backBuffer = d3d12Device->GetCurrentBackBuffer();
+      ID3D12GraphicsCommandList *cmdList = d3d12Device->GetCommandList();
+      ID3D12Resource *outputResource = interopTexture.GetD3D12Resource();
+
+      D3D12_RESOURCE_BARRIER copyBarriers[] = {
+          CD3DX12_RESOURCE_BARRIER::Transition(
+              outputResource, D3D12_RESOURCE_STATE_UNORDERED_ACCESS,
+              D3D12_RESOURCE_STATE_COPY_SOURCE),
+          CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
+                                               D3D12_RESOURCE_STATE_PRESENT,
+                                               D3D12_RESOURCE_STATE_COPY_DEST)};
+      cmdList->ResourceBarrier(_countof(copyBarriers), copyBarriers);
+      cmdList->CopyResource(backBuffer, outputResource);
+
+      D3D12_RESOURCE_BARRIER finalBarriers[] = {
+          CD3DX12_RESOURCE_BARRIER::Transition(outputResource,
+                                               D3D12_RESOURCE_STATE_COPY_SOURCE,
+                                               D3D12_RESOURCE_STATE_COMMON),
+          CD3DX12_RESOURCE_BARRIER::Transition(backBuffer,
+                                               D3D12_RESOURCE_STATE_COPY_DEST,
+                                               D3D12_RESOURCE_STATE_PRESENT)};
+      cmdList->ResourceBarrier(_countof(finalBarriers), finalBarriers);
+
+      printf("[Render] EndFrame\n"); fflush(stdout);
+      State::state.graphicsDevice->EndFrame();
+
+      // Frame Timing
+      frameTimeMs =
+          std::chrono::duration<double, std::milli>(clock::now() - lastTime)
+              .count();
+      State::state.platform->frameTimeAverager.addFrameTime(frameTimeMs);
+      lastTime = clock::now();
+
+      // Update window title
+      char title[256];
+      snprintf(title, sizeof(title), "RVGRT: %.1f ms | Avg: %.1f ms", frameTimeMs,
+               State::state.platform->frameTimeAverager.getAverage());
+      SetWindowTextA(static_cast<HWND>(State::state.platform->GetWindowHandle()),
+                     title);
+      frameCount++;
+    }
+  } catch (const std::exception& e) {
+    fprintf(stderr, "Render thread crashed with exception: %s\n", e.what());
+    fflush(stderr);
+    running = false;
   }
 }
 

@@ -28,7 +28,7 @@ KERNEL(distApproximationKernel)(
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(uchar, dataBuffer, 5),
     PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData, charData, 7),
+    PARAM_CONSTANT_PTR(CharacterGPUData, charData, 7),
     
     DECLARE_GID()
 )
@@ -61,7 +61,7 @@ KERNEL(distApproximationKernel)(
     // Trace ray through voxel data
     hitInfo hit = trace(camera.position, dir, indirection, sectorBuffer, 
                         occupancyBuffer, dataBuffer, sectorMaskBuffer, 
-                        frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                        frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
     
 #if defined(PLATFORM_METAL)
     float dist = hit.hit ? length(hit.pos - camera.position) : 5000.0f;
@@ -79,7 +79,6 @@ KERNEL(distApproximationKernel)(
 #if defined(PLATFORM_METAL)
     TEX_WRITE_2D(distTex, float4(dist, 0, 0, 0), gid);
 #else
-    float4 distVal = make_float4(dist, 0.0f, 0.0f, 0.0f);
-    TEX_WRITE_2D(distTex, distVal, gid);
+    TEX_WRITE_2D_R32F(distTex, dist, gid);
 #endif
 }

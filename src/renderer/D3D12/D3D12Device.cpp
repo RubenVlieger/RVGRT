@@ -199,7 +199,7 @@ void D3D12Device::MoveToNextFrame() {
 
     frameIndex = swapChain->GetCurrentBackBufferIndex();
 
-    if (fence->GetCompletedValue() < fenceValues[frameIndex]) {
+    if (fenceValues[frameIndex] != 0 && fence->GetCompletedValue() < fenceValues[frameIndex]) {
         fence->SetEventOnCompletion(fenceValues[frameIndex], fenceEvent);
         WaitForSingleObject(fenceEvent, INFINITE);
     }
@@ -207,6 +207,7 @@ void D3D12Device::MoveToNextFrame() {
 }
 
 void D3D12Device::WaitForGpu() {
+    if (fenceValue == 0) return;  // Guard against fence value 0
     commandQueue->Signal(fence.Get(), fenceValue);
     fence->SetEventOnCompletion(fenceValue, fenceEvent);
     WaitForSingleObject(fenceEvent, INFINITE);

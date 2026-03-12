@@ -189,7 +189,12 @@ KERNEL(Composite)(
 #if defined(PLATFORM_METAL)
     TEX_WRITE_2D(texFinal, float4(finalColor, 1.0f), gid);
 #else
-    float4 finalVal = make_float4(finalColor.x, finalColor.y, finalColor.z, 1.0f);
-    TEX_WRITE_2D(texFinal, finalVal, gid);
+    // RGBA8 format for final output (LDR)
+    uchar4 finalUChar4;
+    finalUChar4.x = (unsigned char)(fminf(fmaxf(finalColor.x * 255.0f, 0.0f), 255.0f));
+    finalUChar4.y = (unsigned char)(fminf(fmaxf(finalColor.y * 255.0f, 0.0f), 255.0f));
+    finalUChar4.z = (unsigned char)(fminf(fmaxf(finalColor.z * 255.0f, 0.0f), 255.0f));
+    finalUChar4.w = 255;
+    TEX_WRITE_2D_RGBA8(texFinal, finalUChar4, gid);
 #endif
 }

@@ -6,7 +6,6 @@
 extern "C" __global__
 void fillKernel(uint32_t* __restrict__ data, uint64_t numWords)
 {
-    // ... (same exact kernel logic as before) ...
     uint64_t wordIdx = (uint64_t)blockIdx.x * blockDim.x + threadIdx.x;
     if (wordIdx >= numWords) return;
 

@@ -33,7 +33,7 @@ KERNEL(GBufferAndDirectLight)(
     PARAM_BUFFER(ulong, occupancyBuffer, 4),
     PARAM_BUFFER(uchar, dataBuffer, 5),
     PARAM_BUFFER(ulong, sectorMaskBuffer, 6),
-    PARAM_CONSTANT(CharacterGPUData, charData, 7),
+    PARAM_CONSTANT_PTR(CharacterGPUData, charData, 7),
     
     PARAM_TEXTURE_READ(tex2d_arr_f32_s, textureAtlas, 8),
     PARAM_TEXTURE_READ(tex2d_f32_s, halfDistTex, 9),
@@ -69,7 +69,7 @@ KERNEL(GBufferAndDirectLight)(
 #endif
 
     hitInfo hit = trace(camera.position + startDist * dir, dir, indirection, sectorBuffer,
-                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
 
     float depth = 100000.0f;
     half3 irradiance = HALF3(0.0f, 0.0f, 0.0f);
@@ -102,9 +102,13 @@ KERNEL(GBufferAndDirectLight)(
             }
         }
 #if defined(PLATFORM_METAL)
-        TEX_WRITE_2D(texMotion, float4(motionVector.x, motionVector.y, 0, 0), gid);
+    TEX_WRITE_2D(texMotion, float4(motionVector.x, motionVector.y, 0, 0), gid);
 #else
-        TEX_WRITE_2D(texMotion, make_float4(motionVector.x, motionVector.y, 0.0f, 0.0f), gid);
+    // RG16F format for motion vectors
+    ushort2 motionHalf2;
+    motionHalf2.x = __float2half_rn(motionVector.x);
+    motionHalf2.y = __float2half_rn(motionVector.y);
+    TEX_WRITE_2D_RG16F(texMotion, motionHalf2, gid);
 #endif
 
         // Water Logic
@@ -127,7 +131,7 @@ KERNEL(GBufferAndDirectLight)(
             
 #if REFLECTIONS
             hitInfo reflHit = trace(hit.pos, reflDir, indirection, sectorBuffer, occupancyBuffer,
-                                   dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                                   dataBuffer, sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
 #else
             hitInfo reflHit;
             reflHit.hit = false;
@@ -144,7 +148,7 @@ KERNEL(GBufferAndDirectLight)(
                 bool rShadow = traceShadow(reflHit.pos + (float3)reflHit.normal * 0.01f,
                                            frame.sunDirection, REFLECTION_SHADOW_MAXDIST, REFLECTION_SHADOW_STEPS,
                                            indirection, sectorBuffer, occupancyBuffer, dataBuffer,
-                                           sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                                           sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
 #else
                 bool rShadow = false;
 #endif
@@ -176,7 +180,7 @@ KERNEL(GBufferAndDirectLight)(
 #if SHADOWS
             bool waterShadow = traceShadow(reflHit.pos, frame.sunDirection, WATER_SHADOW_MAXDIST,
                                           WATER_SHADOW_STEPS, indirection, sectorBuffer, occupancyBuffer,
-                                          dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                                          dataBuffer, sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
 #else
             bool waterShadow = false;
 #endif
@@ -194,7 +198,7 @@ KERNEL(GBufferAndDirectLight)(
 #if SHADOWS
             bool isShadowed = traceShadow(hit.pos + (float3)normal * 0.005f, frame.sunDirection,
                                           SHADOW_MAXDIST, SHADOW_STEPS, indirection, sectorBuffer,
-                                          occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                                          occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, SECTOR_IND_X, SECTOR_IND_Y, SECTOR_IND_Z, charData);
 #else
             bool isShadowed = false;
 #endif
@@ -223,9 +227,13 @@ KERNEL(GBufferAndDirectLight)(
             mv.y = -mv.y;
         }
 #if defined(PLATFORM_METAL)
-        TEX_WRITE_2D(texMotion, float4(mv.x, mv.y, 0, 0), gid);
+    TEX_WRITE_2D(texMotion, float4(mv.x, mv.y, 0, 0), gid);
 #else
-        TEX_WRITE_2D(texMotion, make_float4(mv.x, mv.y, 0.0f, 0.0f), gid);
+    // RG16F format for motion vectors
+    ushort2 mvHalf2;
+    mvHalf2.x = __float2half_rn(mv.x);
+    mvHalf2.y = __float2half_rn(mv.y);
+    TEX_WRITE_2D_RG16F(texMotion, mvHalf2, gid);
 #endif
     }
 
@@ -238,9 +246,28 @@ KERNEL(GBufferAndDirectLight)(
     TEX_WRITE_2D(texNormal, float4(normalF3, 1.0f), gid);
     TEX_WRITE_2D(texDepth, float4(depth), gid);
 #else
-    TEX_WRITE_2D(texDirectLight, make_float4(irradianceF3.x, irradianceF3.y, irradianceF3.z, 1.0f), gid);
-    TEX_WRITE_2D(texAlbedo, make_float4(albedoF3.x, albedoF3.y, albedoF3.z, 1.0f), gid);
-    TEX_WRITE_2D(texNormal, make_float4(normalF3.x, normalF3.y, normalF3.z, 1.0f), gid);
-    TEX_WRITE_2D(texDepth, make_float4(depth, 0.0f, 0.0f, 0.0f), gid);
+    // RGBA16F format for direct light and normal
+    ushort4 irradianceHalf4, normalHalf4;
+    irradianceHalf4.x = __float2half_rn(irradianceF3.x);
+    irradianceHalf4.y = __float2half_rn(irradianceF3.y);
+    irradianceHalf4.z = __float2half_rn(irradianceF3.z);
+    irradianceHalf4.w = __float2half_rn(1.0f);
+    normalHalf4.x = __float2half_rn(normalF3.x);
+    normalHalf4.y = __float2half_rn(normalF3.y);
+    normalHalf4.z = __float2half_rn(normalF3.z);
+    normalHalf4.w = __float2half_rn(1.0f);
+    TEX_WRITE_2D_RGBA16F(texDirectLight, irradianceHalf4, gid);
+    TEX_WRITE_2D_RGBA16F(texNormal, normalHalf4, gid);
+    
+    // RGBA8 format for albedo
+    uchar4 albedoUChar4;
+    albedoUChar4.x = (unsigned char)(fminf(fmaxf(albedoF3.x * 255.0f, 0.0f), 255.0f));
+    albedoUChar4.y = (unsigned char)(fminf(fmaxf(albedoF3.y * 255.0f, 0.0f), 255.0f));
+    albedoUChar4.z = (unsigned char)(fminf(fmaxf(albedoF3.z * 255.0f, 0.0f), 255.0f));
+    albedoUChar4.w = 255;
+    TEX_WRITE_2D_RGBA8(texAlbedo, albedoUChar4, gid);
+    
+    // R32F format for depth
+    TEX_WRITE_2D_R32F(texDepth, depth, gid);
 #endif
 }

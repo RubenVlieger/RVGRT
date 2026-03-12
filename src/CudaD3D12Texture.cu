@@ -1,47 +1,7 @@
 #include "CudaD3D12Texture.cuh"
 #include <stdexcept>
 #include <iostream>
-#include <aclapi.h> // For security attributes
-#include <cumath.h>
-
-// (You can reuse your existing WindowsSecurityAttributes class here)
-class WindowsSecurityAttributes {
-protected:
-    SECURITY_ATTRIBUTES m_winSecurityAttributes;
-    PSECURITY_DESCRIPTOR m_winPSecurityDescriptor;
-public:
-    WindowsSecurityAttributes() {
-        m_winPSecurityDescriptor = (PSECURITY_DESCRIPTOR)calloc(1, SECURITY_DESCRIPTOR_MIN_LENGTH + 2 * sizeof(void**));
-        if (!m_winPSecurityDescriptor) throw std::runtime_error("Failed to allocate security descriptor.");
-        
-        PSID* ppSID = (PSID*)((PBYTE)m_winPSecurityDescriptor + SECURITY_DESCRIPTOR_MIN_LENGTH);
-        PACL* ppACL = (PACL*)((PBYTE)ppSID + sizeof(PSID*));
-        InitializeSecurityDescriptor(m_winPSecurityDescriptor, SECURITY_DESCRIPTOR_REVISION);
-        SID_IDENTIFIER_AUTHORITY sidIdentifierAuthority = SECURITY_WORLD_SID_AUTHORITY;
-        AllocateAndInitializeSid(&sidIdentifierAuthority, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, ppSID);
-        EXPLICIT_ACCESS explicitAccess;
-        ZeroMemory(&explicitAccess, sizeof(EXPLICIT_ACCESS));
-        explicitAccess.grfAccessPermissions = STANDARD_RIGHTS_ALL | SPECIFIC_RIGHTS_ALL;
-        explicitAccess.grfAccessMode = SET_ACCESS;
-        explicitAccess.grfInheritance = INHERIT_ONLY;
-        explicitAccess.Trustee.TrusteeForm = TRUSTEE_IS_SID;
-        explicitAccess.Trustee.TrusteeType = TRUSTEE_IS_WELL_KNOWN_GROUP;
-        explicitAccess.Trustee.ptstrName = (LPTSTR)*ppSID;
-        SetEntriesInAcl(1, &explicitAccess, NULL, ppACL);
-        SetSecurityDescriptorDacl(m_winPSecurityDescriptor, TRUE, *ppACL, FALSE);
-        m_winSecurityAttributes.nLength = sizeof(m_winSecurityAttributes);
-        m_winSecurityAttributes.lpSecurityDescriptor = m_winPSecurityDescriptor;
-        m_winSecurityAttributes.bInheritHandle = TRUE;
-    }
-    ~WindowsSecurityAttributes() {
-        PSID* ppSID = (PSID*)((PBYTE)m_winPSecurityDescriptor + SECURITY_DESCRIPTOR_MIN_LENGTH);
-        PACL* ppACL = (PACL*)((PBYTE)ppSID + sizeof(PSID*));
-        if (*ppSID) FreeSid(*ppSID);
-        if (*ppACL) LocalFree(*ppACL);
-        free(m_winPSecurityDescriptor);
-    }
-    SECURITY_ATTRIBUTES* operator&() { return &m_winSecurityAttributes; }
-};
+#include <cuda_fp16.h>
 
 static inline void checkCudaError(cudaError_t err, const char* msg) {
     if (err != cudaSuccess) {
@@ -65,6 +25,25 @@ CudaD3D12Texture::~CudaD3D12Texture() {
 }
 
 void CudaD3D12Texture::Release() {
+    if (m_cudaSurfaceObj) {
+        cudaDestroySurfaceObject(m_cudaSurfaceObj);
+        m_cudaSurfaceObj = 0;
+    }
+    if (m_cudaTextureObj) {
+        cudaDestroyTextureObject(m_cudaTextureObj);
+        m_cudaTextureObj = 0;
+    }
+    if (m_cudaMipmappedArray) {
+        cudaFreeMipmappedArray(m_cudaMipmappedArray);
+        m_cudaMipmappedArray = nullptr;
+    }
+    m_cudaArray = nullptr;
+    
+    if (m_cudaDevPtr) {
+        // Device pointer is from external memory mapping, don't free directly
+        m_cudaDevPtr = nullptr;
+    }
+    
     if (m_cudaExtMem) {
         cudaDestroyExternalMemory(m_cudaExtMem);
         m_cudaExtMem = nullptr;
@@ -75,11 +54,6 @@ void CudaD3D12Texture::Release() {
     }
     m_d3dResource.Reset();
     m_d3dHeap.Reset();
-    
-    // These are derived from m_cudaExtMem, so just null them out
-    m_cudaDevPtr = nullptr;
-    m_cudaMipmappedArray = nullptr;
-    m_cudaArray = nullptr;
     m_pitch = 0;
 }
 
@@ -91,6 +65,8 @@ static cudaChannelFormatDesc GetCudaChannelDesc(DXGI_FORMAT format) {
             return cudaCreateChannelDesc<half2>();
         case DXGI_FORMAT_R16_FLOAT:
             return cudaCreateChannelDesc<half>();
+        case DXGI_FORMAT_R16G16B16A16_FLOAT:
+            return cudaCreateChannelDescHalf4();
         case DXGI_FORMAT_R32G32B32A32_FLOAT:
             return cudaCreateChannelDesc<float4>();
         case DXGI_FORMAT_R32G32_FLOAT:
@@ -107,15 +83,25 @@ static cudaChannelFormatDesc GetCudaChannelDesc(DXGI_FORMAT format) {
 CudaD3D12Texture::CudaD3D12Texture(CudaD3D12Texture&& other) noexcept
     : m_d3dResource(std::move(other.m_d3dResource)),
       m_d3dHeap(std::move(other.m_d3dHeap)),
+      m_cudaSurfaceObj(other.m_cudaSurfaceObj),
+      m_cudaTextureObj(other.m_cudaTextureObj),
       m_cudaExtMem(other.m_cudaExtMem),
       m_sharedHandle(other.m_sharedHandle),
       m_cudaDevPtr(other.m_cudaDevPtr),
+      m_pitch(other.m_pitch),
       m_cudaMipmappedArray(other.m_cudaMipmappedArray),
       m_cudaArray(other.m_cudaArray),
-      m_pitch(other.m_pitch) {
+      width(other.width),
+      height(other.height) {
     // Leave the moved-from object in a safe state
+    other.m_cudaSurfaceObj = 0;
+    other.m_cudaTextureObj = 0;
     other.m_cudaExtMem = nullptr;
     other.m_sharedHandle = nullptr;
+    other.m_cudaDevPtr = nullptr;
+    other.m_pitch = 0;
+    other.m_cudaMipmappedArray = nullptr;
+    other.m_cudaArray = nullptr;
 }
 
 CudaD3D12Texture& CudaD3D12Texture::operator=(CudaD3D12Texture&& other) noexcept {
@@ -123,17 +109,25 @@ CudaD3D12Texture& CudaD3D12Texture::operator=(CudaD3D12Texture&& other) noexcept
         Release();
         m_d3dResource = std::move(other.m_d3dResource);
         m_d3dHeap = std::move(other.m_d3dHeap);
+        m_cudaSurfaceObj = other.m_cudaSurfaceObj;
+        m_cudaTextureObj = other.m_cudaTextureObj;
         m_cudaExtMem = other.m_cudaExtMem;
         m_sharedHandle = other.m_sharedHandle;
         m_cudaDevPtr = other.m_cudaDevPtr;
+        m_pitch = other.m_pitch;
         m_cudaMipmappedArray = other.m_cudaMipmappedArray;
         m_cudaArray = other.m_cudaArray;
-        m_pitch = other.m_pitch;
         width = other.width;
         height = other.height;
 
+        other.m_cudaSurfaceObj = 0;
+        other.m_cudaTextureObj = 0;
         other.m_cudaExtMem = nullptr;
         other.m_sharedHandle = nullptr;
+        other.m_cudaDevPtr = nullptr;
+        other.m_pitch = 0;
+        other.m_cudaMipmappedArray = nullptr;
+        other.m_cudaArray = nullptr;
     }
     return *this;
 }
@@ -213,15 +207,15 @@ void CudaD3D12Texture::Initialize_D3D12_Only(ID3D12Device* device, UINT _width, 
 }
 
 void CudaD3D12Texture::Initialize(ID3D12Device* device, UINT _width, UINT _height, DXGI_FORMAT format, D3D12_RESOURCE_FLAGS flags, const wchar_t* debugName) {
+    (void)flags; // Flags are ignored for shared interop - ROW_MAJOR forbids UAV
+    
     if (IsValid()) {
         Release();
     }
     width = _width;
     height = _height;
 
-    // --- Steps 1-5 remain exactly the same ---
-    
-    // 1. Create D3D12 Resource Description
+    // 1. Create D3D12 Resource Description with ROW_MAJOR layout (required for CUDA interop)
     D3D12_RESOURCE_DESC desc = {};
     desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
     desc.Width = (unsigned int)width;
@@ -230,76 +224,101 @@ void CudaD3D12Texture::Initialize(ID3D12Device* device, UINT _width, UINT _heigh
     desc.MipLevels = 1;
     desc.Format = format;
     desc.SampleDesc.Count = 1;
-    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;
-    desc.Flags = flags;
+    desc.Layout = D3D12_TEXTURE_LAYOUT_ROW_MAJOR;  // Required for CUDA interop via heap
+    desc.Flags = D3D12_RESOURCE_FLAG_ALLOW_CROSS_ADAPTER;  // Required when using SHARED_CROSS_ADAPTER heap
 
+    // 2. Get allocation info for the resource
     D3D12_RESOURCE_ALLOCATION_INFO allocInfo = device->GetResourceAllocationInfo(0, 1, &desc);
-    if (allocInfo.SizeInBytes == 0) {
-        throw std::runtime_error("Resource allocation size is zero.");
-    }
 
-    // 2. Create a Shared Heap
+    // 3. Create shared heap
     D3D12_HEAP_DESC heapDesc = {};
     heapDesc.SizeInBytes = allocInfo.SizeInBytes;
     heapDesc.Properties.Type = D3D12_HEAP_TYPE_DEFAULT;
+    heapDesc.Properties.CPUPageProperty = D3D12_CPU_PAGE_PROPERTY_UNKNOWN;
+    heapDesc.Properties.MemoryPoolPreference = D3D12_MEMORY_POOL_UNKNOWN;
     heapDesc.Alignment = allocInfo.Alignment;
-    heapDesc.Flags = D3D12_HEAP_FLAG_SHARED;
-    checkHresult(device->CreateHeap(&heapDesc, IID_PPV_ARGS(&m_d3dHeap)), "CreateHeap failed for shared texture.");
-    // 3. Create a Placed Resource on the Heap
+    heapDesc.Flags = D3D12_HEAP_FLAG_SHARED | D3D12_HEAP_FLAG_SHARED_CROSS_ADAPTER;
+
+    checkHresult(device->CreateHeap(&heapDesc, IID_PPV_ARGS(&m_d3dHeap)),
+        "CreateHeap failed for shared CUDA-D3D12 interop.");
+
+    // 4. Create placed resource on the heap
     checkHresult(device->CreatePlacedResource(
-        m_d3dHeap.Get(), 0, &desc, D3D12_RESOURCE_STATE_COMMON,
-        nullptr, IID_PPV_ARGS(&m_d3dResource)), "CreatePlacedResource failed for shared texture.");
+        m_d3dHeap.Get(),
+        0,
+        &desc,
+        D3D12_RESOURCE_STATE_COMMON,
+        nullptr,
+        IID_PPV_ARGS(&m_d3dResource)),
+        "CreatePlacedResource failed for CUDA-D3D12 interop.");
     m_d3dResource->SetName(debugName);
-    
-    // 4. Create a Shared Handle for the Heap
-    checkHresult(device->CreateSharedHandle(m_d3dHeap.Get(), nullptr, GENERIC_ALL, nullptr, &m_sharedHandle), "CreateSharedHandle failed for D3D12 heap.");
-    
-    // 5. Import Heap into CUDA as External Memory
+
+    // 5. Create shared handle for the heap (not the resource)
+    checkHresult(device->CreateSharedHandle(
+        m_d3dHeap.Get(),
+        nullptr, GENERIC_ALL, nullptr, &m_sharedHandle),
+        "CreateSharedHandle for heap failed.");
+
+    // 6. Import heap into CUDA
     cudaExternalMemoryHandleDesc extMemHandleDesc = {};
     extMemHandleDesc.type = cudaExternalMemoryHandleTypeD3D12Heap;
     extMemHandleDesc.handle.win32.handle = m_sharedHandle;
     extMemHandleDesc.size = allocInfo.SizeInBytes;
     extMemHandleDesc.flags = cudaExternalMemoryDedicated;
-    checkCudaError(cudaImportExternalMemory(&m_cudaExtMem, &extMemHandleDesc), "cudaImportExternalMemory from heap.");
+    checkCudaError(cudaImportExternalMemory(&m_cudaExtMem, &extMemHandleDesc),
+        "cudaImportExternalMemory from heap failed.");
 
-    // --- 6. Map to Buffers (MODIFIED LOGIC) ---
-    
-    // Always map to a linear buffer to get a raw device pointer for kernels
+    // 7. Map as linear buffer
     cudaExternalMemoryBufferDesc bufferDesc = {};
     bufferDesc.offset = 0;
     bufferDesc.size = allocInfo.SizeInBytes;
-    checkCudaError(cudaExternalMemoryGetMappedBuffer(&m_cudaDevPtr, m_cudaExtMem, &bufferDesc), "cudaExternalMemoryGetMappedBuffer");
+    bufferDesc.flags = 0;
+    checkCudaError(cudaExternalMemoryGetMappedBuffer(&m_cudaDevPtr, m_cudaExtMem, &bufferDesc),
+        "cudaExternalMemoryGetMappedBuffer failed.");
 
-    // MODIFICATION: Only map to a mipmapped array if the format is supported by CUDA textures.
-    // DXGI_FORMAT_R16G16_FLOAT is not supported.
-    if (format != DXGI_FORMAT_R16G16_FLOAT && 
-        format != DXGI_FORMAT_R16_FLOAT) 
-    {
+    // 8. Get row pitch using GetCopyableFootprints
+    UINT64 totalSize = 0;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT layout;
+    device->GetCopyableFootprints(&desc, 0, 1, 0, &layout, nullptr, nullptr, &totalSize);
+    m_pitch = layout.Footprint.RowPitch;
+
+    // 9. Map as mipmapped array (if format is supported)
+    if (format != DXGI_FORMAT_R16G16_FLOAT && format != DXGI_FORMAT_R16_FLOAT) {
         cudaExternalMemoryMipmappedArrayDesc mipmappedDesc = {};
         mipmappedDesc.extent = make_cudaExtent(width, height, 0);
         mipmappedDesc.formatDesc = GetCudaChannelDesc(format);
         mipmappedDesc.numLevels = 1;
         mipmappedDesc.flags = cudaArraySurfaceLoadStore;
 
-        cudaError_t mapArrayResult = cudaExternalMemoryGetMappedMipmappedArray(&m_cudaMipmappedArray, m_cudaExtMem, &mipmappedDesc);
-        if (mapArrayResult == cudaSuccess) {
-            checkCudaError(cudaGetMipmappedArrayLevel(&m_cudaArray, m_cudaMipmappedArray, 0), "cudaGetMipmappedArrayLevel");
-        } else {
-            // Log a warning if it fails for an unexpected format
-            std::cerr << "Warning: cudaExternalMemoryGetMappedMipmappedArray failed for format " << format
-                      << " with error: " << cudaGetErrorString(mapArrayResult) << ". Fallback to linear memory access." << std::endl;
-        }
+        checkCudaError(cudaExternalMemoryGetMappedMipmappedArray(&m_cudaMipmappedArray, m_cudaExtMem, &mipmappedDesc),
+            "cudaExternalMemoryGetMappedMipmappedArray failed.");
+        checkCudaError(cudaGetMipmappedArrayLevel(&m_cudaArray, m_cudaMipmappedArray, 0),
+            "cudaGetMipmappedArrayLevel failed.");
+
+        // 10. Create Surface Object (for writing)
+        cudaResourceDesc resDescSurf = {};
+        resDescSurf.resType = cudaResourceTypeArray;
+        resDescSurf.res.array.array = m_cudaArray;
+        checkCudaError(cudaCreateSurfaceObject(&m_cudaSurfaceObj, &resDescSurf),
+            "cudaCreateSurfaceObject failed.");
+
+        // 11. Create Texture Object (for reading with filtering)
+        cudaResourceDesc resDescTex = {};
+        resDescTex.resType = cudaResourceTypeArray;
+        resDescTex.res.array.array = m_cudaArray;
+        
+        cudaTextureDesc texDesc = {};
+        texDesc.addressMode[0] = cudaAddressModeClamp;
+        texDesc.addressMode[1] = cudaAddressModeClamp;
+        texDesc.filterMode = cudaFilterModeLinear;
+        texDesc.readMode = cudaReadModeElementType;
+        texDesc.normalizedCoords = 1;
+        
+        checkCudaError(cudaCreateTextureObject(&m_cudaTextureObj, &resDescTex, &texDesc, nullptr),
+            "cudaCreateTextureObject failed.");
     } else {
-        std::cout << "Info: Skipping cudaMipmappedArray for DXGI_FORMAT_R16G16_FLOAT. Use linear device pointer (m_cudaDevPtr) instead." << std::endl;
+        throw std::runtime_error("Format not supported for CUDA interop. Use DXGI_FORMAT_R8G8B8A8_UNORM, R32G32B32A32_FLOAT, or R32_FLOAT.");
     }
-    
-    // --- 7. Get the correct row pitch from D3D12 (Crucial for linear access) ---
-    D3D12_PLACED_SUBRESOURCE_FOOTPRINT placedFootprint;
-    UINT numRows;
-    UINT64 rowSizeInBytes;
-    UINT64 totalBytes;
-    device->GetCopyableFootprints(&desc, 0, 1, 0, &placedFootprint, &numRows, &rowSizeInBytes, &totalBytes);
-    m_pitch = placedFootprint.Footprint.RowPitch;
 
     checkCudaError(cudaDeviceSynchronize(), "cudaDeviceSynchronize");
     checkCudaError(cudaGetLastError(), "cudaGetLastError");
