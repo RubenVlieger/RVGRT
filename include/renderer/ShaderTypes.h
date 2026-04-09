@@ -105,4 +105,24 @@ struct SectorWorkItem {
   uint32_t wrappedIdx; // Linear index in the indirection texture (wrapped)
 };
 
+struct GlyphInstance {
+    simd_float2 screenPos;     // Top-left corner in screen pixels
+    simd_float2 screenSize;    // Width/height in pixels of this glyph instance
+    simd_float2 atlasUVMin;     // Top-left UV in the SDF atlas
+    simd_float2 atlasUVMax;     // Bottom-right UV in the SDF atlas
+    simd_float4 color;          // RGBA tint (premultiplied alpha)
+    float softness;             // SDF edge softness for anti-aliasing
+    float sceneDepth;           // Depth for 3D text occlusion (FLT_MAX for HUD)
+    uint32_t flags;             // Bit 0: depth test enable
+    uint32_t _pad;
+};
+
+struct TextOverlayData {
+    uint32_t numGlyphs;
+    uint32_t numTilesX;
+    uint32_t numTilesY;
+    uint32_t screenWidth;
+    uint32_t screenHeight;
+};
+
 #endif

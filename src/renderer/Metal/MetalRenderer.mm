@@ -24,6 +24,7 @@ MetalRenderer::MetalRenderer(Device device)
     , _counterSampleBuffer(nullptr)
     , _timestampBuffer(nullptr)
     , _supportsTimestamps(false)
+    , _psoTextOverlay(nullptr)
 {
     // Create command queue
     _commandQueue = [device newCommandQueue];
@@ -54,6 +55,18 @@ MetalRenderer::MetalRenderer(Device device)
     
     // Setup timestamp support (optional)
     SetupTimestampSupport();
+    
+    // Initialize text rendering
+    id<MTLDevice> metalDevice = (id<MTLDevice>)_device;
+    if (_fontAtlas.InitializeWithSystemFont(TEXT_FONT_SIZE)) {
+        if (_textRenderer.Initialize(metalDevice, _fontAtlas)) {
+            NSLog(@"[TextRenderer] Initialized successfully with SDF font atlas");
+        } else {
+            NSLog(@"[TextRenderer] WARNING: Failed to initialize renderer");
+        }
+    } else {
+        NSLog(@"[TextRenderer] WARNING: Failed to load system font");
+    }
     
     // Generate world
     NSLog(@"Starting Dynamic World Generation (XBrickMap)...");
@@ -91,12 +104,15 @@ void MetalRenderer::CreatePipelineStates() {
     _psoVolumetric = [device newComputePipelineStateWithFunction:
                        [_library newFunctionWithName:@"VolumetricFog"]
                                                             error:&error];
-    _psoExposure = [device newComputePipelineStateWithFunction:
-                     [_library newFunctionWithName:@"ComputeExposure"]
-                                                          error:&error];
+_psoExposure = [device newComputePipelineStateWithFunction:
+                      [_library newFunctionWithName:@"ComputeExposure"]
+                                                           error:&error];
+    _psoTextOverlay = [device newComputePipelineStateWithFunction:
+                         [_library newFunctionWithName:@"TextOverlay"]
+                                                              error:&error];
     
     if (!_psoDistApprox || !_psoGBuffer || !_psoIndirect || !_psoAccumulate ||
-        !_psoDenoise || !_psoComposite || !_psoVolumetric || !_psoExposure) {
+        !_psoDenoise || !_psoComposite || !_psoVolumetric || !_psoExposure || !_psoTextOverlay) {
         NSLog(@"FATAL: Failed to load kernels. Error: %@", error);
         abort();
     }
@@ -112,6 +128,7 @@ void MetalRenderer::DestroyPipelineStates() {
     _psoComposite = nullptr;
     _psoVolumetric = nullptr;
     _psoExposure = nullptr;
+    _psoTextOverlay = nullptr;
     _library = nullptr;
 }
 
@@ -254,6 +271,15 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     bool sectorsChanged = _materialMap.UpdateStreaming(camPos);
     if (sectorsChanged) {
         _scalerNeedsReset = true;
+    }
+    
+    // Prepare text overlay (Hello World placeholder)
+    if (_fontAtlas.IsValid()) {
+        _textRenderer.BeginFrame(State::dispWIDTH, State::dispHEIGHT);
+        _textRenderer.AddText("Hello World", 20.0f, 20.0f, 1.0f,
+                              simd_make_float4(1.0f, 1.0f, 1.0f, 1.0f), 0.03f, false, 1e30f);
+        _textRenderer.EndFrame();
+        _textRenderer.UpdateBuffers((id<MTLDevice>)_device);
     }
     
     // Upload character data
@@ -459,6 +485,20 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
         [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:15 withBarrier:YES];
+    }
+    
+    // Pass 8: Text Overlay
+    if (_fontAtlas.IsValid() && _textRenderer.GetNumGlyphs() > 0) {
+        [encoder pushDebugGroup:@"Pass 8: TextOverlay"];
+        [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoTextOverlay];
+        [encoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:0];
+        [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:1];
+        [encoder setTexture:(id<MTLTexture>)_textRenderer.GetAtlasTexture() atIndex:2];
+        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetGlyphBuffer() offset:0 atIndex:0];
+        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetOverlayDataBuffer() offset:0 atIndex:1];
+        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetTileBuffer() offset:0 atIndex:2];
+        [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
+        [encoder popDebugGroup];
     }
     
     [encoder endEncoding];

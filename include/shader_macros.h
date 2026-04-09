@@ -31,6 +31,7 @@
     // Texture type aliases to avoid commas in macro arguments
     typedef texture2d<float, access::read> tex2d_f32_r;
     typedef texture2d<float, access::write> tex2d_f32_w;
+    typedef texture2d<float, access::read_write> tex2d_f32_rw;
     typedef texture2d<float, access::sample> tex2d_f32_s;
     typedef texture2d<half, access::read> tex2d_f16_r;
     typedef texture2d<half, access::write> tex2d_f16_w;
@@ -46,6 +47,7 @@
 #if defined(PLATFORM_CUDA)
     // CUDA uses cudaSurfaceObject_t for writable surfaces
     typedef cudaSurfaceObject_t tex2d_f32_w;
+    typedef cudaSurfaceObject_t tex2d_f32_rw;
     typedef cudaTextureObject_t tex2d_f32_r;
     typedef cudaTextureObject_t tex2d_f32_s;
     typedef cudaTextureObject_t tex2d_f16_r;
@@ -93,11 +95,13 @@
 #if defined(PLATFORM_METAL)
     #define PARAM_TEXTURE_READ(type, name, slot) type name [[texture(slot)]]
     #define PARAM_TEXTURE_WRITE(type, name, slot) type name [[texture(slot)]]
+    #define PARAM_TEXTURE_READWRITE(type, name, slot) type name [[texture(slot)]]
     #define PARAM_BUFFER(type, name, slot) device type* name [[buffer(slot)]]
     #define PARAM_CONSTANT(type, name, slot) constant type& name [[buffer(slot)]]
 #elif defined(PLATFORM_CUDA)
     #define PARAM_TEXTURE_READ(type, name, slot) type name
     #define PARAM_TEXTURE_WRITE(type, name, slot) cudaSurfaceObject_t name
+    #define PARAM_TEXTURE_READWRITE(type, name, slot) cudaSurfaceObject_t name
     #define PARAM_BUFFER(type, name, slot) type* name
     #define PARAM_CONSTANT(type, name, slot) type name
 #endif
@@ -111,13 +115,21 @@
     #define GET_GID_X() gid.x
     #define GET_GID_Y() gid.y
     #define DECLARE_GID() uint2 gid [[thread_position_in_grid]]
+    #define DECLARE_GID_3D() uint3 gid [[thread_position_in_grid]]
     #define DECLARE_TID() uint2 tid [[thread_position_in_threadgroup]]
+    #define DECLARE_TID_3D() uint3 tid [[thread_position_in_threadgroup]]
+    #define GET_GROUP_X() ((uint)gid.x / 64)
+    #define GET_TID_X() ((uint)gid.x % 64)
 #elif defined(PLATFORM_CUDA)
     #define GET_GID_X() (blockIdx.x * blockDim.x + threadIdx.x)
     #define GET_GID_Y() (blockIdx.y * blockDim.y + threadIdx.y)
     #define GET_GID() make_int2(GET_GID_X(), GET_GID_Y())
     #define DECLARE_GID() int _width, int _height
+    #define DECLARE_GID_3D() int _width, int _height, int _depth
     #define DECLARE_TID() /* CUDA: tid computed from threadIdx */
+    #define DECLARE_TID_3D() /* CUDA: tid computed from threadIdx */
+    #define GET_GROUP_X() blockIdx.x
+    #define GET_TID_X() threadIdx.x
 #endif
 
 // ============================================================================
@@ -225,7 +237,7 @@
     #define AS_UINT2(v) uint2(v)
     #define HALF3(x,y,z) half3(x,y,z)
     #define HALF3_FROM_FLOAT3(v) half3(v)
-    #define HALF_LITERAL(v) (v##h)
+    #define HALF_LITERAL(v) half(v)
     #define SELECT(t, f, cond) select(t, f, cond)
     #define ANY_ISNAN(v) any(isnan(v))
     #define ANY_ISINF(v) any(isinf(v))

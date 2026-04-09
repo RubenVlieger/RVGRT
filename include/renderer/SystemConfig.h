@@ -145,6 +145,19 @@
 #define RT_EPSILON 0.001f
 
 // ============================================================================
+// TEXT RENDERING SETTINGS
+// ============================================================================
+#define TEXT_ATLAS_WIDTH 512
+#define TEXT_ATLAS_HEIGHT 256
+#define TEXT_FONT_SIZE 32.0f
+#define TEXT_SDF_SPREAD 8
+#define TEXT_TILE_SIZE 64
+#define TEXT_MAX_GLYPHS 512
+#define TEXT_MAX_GLYPHS_PER_TILE 32
+#define TEXT_FIRST_CHAR 32
+#define TEXT_NUM_CHARS 96
+
+// ============================================================================
 // POST-PROCESSING
 // ============================================================================
 #define EXPOSURE_HISTOGRAM_SIZE 256

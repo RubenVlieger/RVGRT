@@ -710,9 +710,6 @@ GPU_FUNC GPU_INLINE void atomicAdd(unsigned int *address, unsigned int val) {
 
 #if defined(PLATFORM_METAL)
 // For MSL, use #define to ensure these are expanded as compile-time literals
-#define SHIX 12
-#define SHIY 9
-#define SHIZ 12
 // World dimension aliases from SystemConfig.h
 #define SHIX WORLD_SHIFT_X
 #define SHIY WORLD_SHIFT_Y

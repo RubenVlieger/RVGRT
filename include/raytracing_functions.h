@@ -199,7 +199,7 @@ GPU_FUNC float2 reconstructUVFloat(float3 pos, float3 normal) {
 #if defined(PLATFORM_CUDA)
     float3 fpos = float3_floor(pos);
 #else
-    float3 fpos = float3_floor(pos);
+    float3 fpos = floor(pos);
 #endif
     float2 uv;
     if (abs(normal.x) > 0.5f)      uv = make_float2(pos.y - fpos.y, pos.z - fpos.z);
@@ -210,7 +210,7 @@ GPU_FUNC float2 reconstructUVFloat(float3 pos, float3 normal) {
 
 #if defined(PLATFORM_METAL)
 GPU_FUNC half2 reconstructUV(float3 pos, half3 normal) {
-    float3 fpos = float3_floor(pos);
+    float3 fpos = floor(pos);
     half2 uv;
     if (abs(normal.x) > 0.5h)      uv = half2(pos.y - fpos.y, pos.z - fpos.z);
     else if (abs(normal.y) > 0.5h) uv = half2(pos.x - fpos.x, pos.z - fpos.z);
@@ -381,7 +381,7 @@ inline half3 sampleSky(const float3 dir, const float3 sunDir)
     half3 zenith = half3(0.1h, 0.4h, 0.8h);
     half3 horizon = half3(0.4h, 0.6h, 0.9h);
     
-    half3 skyColor = lerp(horizon, zenith, half(pow(y, 0.7f)));
+    half3 skyColor = mix(horizon, zenith, half(pow(y, 0.7f)));
     
     return skyColor;
 }
