@@ -63,6 +63,18 @@ KERNEL(TextOverlay)(
 
         if ((g.flags & 1u) != 0 && depth < g.sceneDepth) continue;
 
+        // Solid rectangle mode: fill AABB with flat color, no SDF sampling
+        if ((g.flags & GLYPH_FLAG_SOLID_RECT) != 0) {
+            float srcAlpha = g.color.w;
+            color = make_float4(
+                color.x * (1.0f - srcAlpha) + g.color.x * srcAlpha,
+                color.y * (1.0f - srcAlpha) + g.color.y * srcAlpha,
+                color.z * (1.0f - srcAlpha) + g.color.z * srcAlpha,
+                1.0f
+            );
+            continue;
+        }
+
         float2 localPos = (AS_FLOAT2(gid) - AS_FLOAT2(g.screenPos)) / AS_FLOAT2(g.screenSize);
         float2 uv = AS_FLOAT2(g.atlasUVMin) + localPos * (AS_FLOAT2(g.atlasUVMax) - AS_FLOAT2(g.atlasUVMin));
 

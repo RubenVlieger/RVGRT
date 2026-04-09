@@ -22,6 +22,8 @@ public:
     void BeginFrame(uint32_t screenWidth, uint32_t screenHeight);
     void AddText(const std::string& text, float x, float y, float scale,
                  simd_float4 color, float softness = 0.1f, bool depthTest = false, float sceneDepth = 1e30f);
+    void AddRect(float x, float y, float w, float h,
+                 simd_float4 color, float sceneDepth = 1e30f);
     void EndFrame();
 
     void UpdateBuffers(id<MTLDevice> device);

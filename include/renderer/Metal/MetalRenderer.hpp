@@ -5,6 +5,7 @@
 #include "renderer/MaterialMap.hpp"
 #include "renderer/FontAtlas.hpp"
 #include "renderer/TextRenderer.hpp"
+#include "console/GameConsole.hpp"
 #include "Texturepack.h"
 
 #ifdef __OBJC__
@@ -81,6 +82,9 @@ private:
     FontAtlas _fontAtlas;
     TextRenderer _textRenderer;
     id _psoTextOverlay;
+    
+    // Console rendering helper
+    void RenderConsole();
     
     // Helper methods
     void SetupTimestampSupport();

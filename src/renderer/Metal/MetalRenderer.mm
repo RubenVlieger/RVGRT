@@ -5,6 +5,8 @@
 #include "cumath.h"
 #include "renderer/MaterialMap.hpp"
 #include "renderer/ShaderTypes.h"
+#include "console/GameConsole.hpp"
+#include "console/ConsoleBuffer.hpp"
 #include <MetalFX/MetalFX.h>
 #import <MetalKit/MetalKit.h>
 #include <cassert>
@@ -273,11 +275,10 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
         _scalerNeedsReset = true;
     }
     
-    // Prepare text overlay (Hello World placeholder)
+    // Prepare text overlay (console rendering)
     if (_fontAtlas.IsValid()) {
         _textRenderer.BeginFrame(State::dispWIDTH, State::dispHEIGHT);
-        _textRenderer.AddText("Hello World", 20.0f, 20.0f, 1.0f,
-                              simd_make_float4(1.0f, 1.0f, 1.0f, 1.0f), 0.03f, false, 1e30f);
+        RenderConsole();
         _textRenderer.EndFrame();
         _textRenderer.UpdateBuffers((id<MTLDevice>)_device);
     }
@@ -549,4 +550,66 @@ id MetalRenderer::GetOutputTexture() {
 
 void MetalRenderer::GenerateWorld() {
     _materialMap.GenerateDynamic();
+}
+
+static simd_float4 GetConsoleMsgColor(ConsoleMsgType type, float alpha) {
+    switch (type) {
+        case ConsoleMsgType::System:  return simd_make_float4(1.0f, 1.0f, 1.0f, alpha);
+        case ConsoleMsgType::Command: return simd_make_float4(0.7f, 0.7f, 0.7f, alpha);
+        case ConsoleMsgType::Chat:    return simd_make_float4(1.0f, 1.0f, 0.5f, alpha);
+        case ConsoleMsgType::Error:   return simd_make_float4(1.0f, 0.3f, 0.3f, alpha);
+        default:                       return simd_make_float4(1.0f, 1.0f, 1.0f, alpha);
+    }
+}
+
+void MetalRenderer::RenderConsole() {
+    GameConsole& console = State::state.console;
+    float screenWidth = static_cast<float>(State::dispWIDTH);
+    float screenHeight = static_cast<float>(State::dispHEIGHT);
+    bool isOpen = console.IsOpen();
+
+    float lineHeight = CONSOLE_LINE_HEIGHT * CONSOLE_FONT_SCALE;
+    float inputLineHeight = lineHeight + 6.0f;
+
+    // Background rect — only when console is open
+    if (isOpen) {
+        float bgTop = screenHeight
+                    - (CONSOLE_VISIBLE_LINES * lineHeight)
+                    - inputLineHeight
+                    - CONSOLE_MARGIN_BOTTOM
+                    - 10.0f;
+        float bgHeight = screenHeight - bgTop;
+
+        _textRenderer.AddRect(0.0f, bgTop, screenWidth, bgHeight,
+                              simd_make_float4(0.0f, 0.0f, 0.0f, CONSOLE_BG_ALPHA));
+    }
+
+    // Visible messages — always rendered (alpha differs open vs closed)
+    std::vector<const ConsoleMessage*> messages;
+    console.GetVisibleMessages(messages);
+
+    float alpha = isOpen ? CONSOLE_TEXT_ALPHA : CONSOLE_TEXT_ALPHA_FADED;
+    float inputOffset = isOpen ? inputLineHeight : 0.0f;
+    float baseY = screenHeight - CONSOLE_MARGIN_BOTTOM - inputOffset;
+
+    for (int i = static_cast<int>(messages.size()) - 1; i >= 0; --i) {
+        float y = baseY - (static_cast<int>(messages.size()) - 1 - i) * lineHeight;
+        if (y < 0.0f) break;
+
+        simd_float4 color = GetConsoleMsgColor(messages[i]->type, alpha);
+        _textRenderer.AddText(messages[i]->text,
+                              CONSOLE_MARGIN_X, y,
+                              CONSOLE_FONT_SCALE, color, 0.05f);
+    }
+
+    // Input line — only when console is open
+    if (isOpen) {
+        std::string inputText = console.GetInputDisplayText();
+        float inputY = screenHeight - CONSOLE_MARGIN_BOTTOM;
+        _textRenderer.AddText(inputText,
+                              CONSOLE_MARGIN_X, inputY,
+                              CONSOLE_FONT_SCALE,
+                              simd_make_float4(1.0f, 1.0f, 1.0f, 1.0f),
+                              0.05f);
+    }
 }

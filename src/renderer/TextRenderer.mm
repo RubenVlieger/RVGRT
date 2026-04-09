@@ -112,6 +112,23 @@ void TextRenderer::AddText(const std::string& text, float x, float y, float scal
     }
 }
 
+void TextRenderer::AddRect(float x, float y, float w, float h,
+                           simd_float4 color, float sceneDepth) {
+    if (_glyphs.size() >= TEXT_MAX_GLYPHS) return;
+
+    GlyphInstance gi;
+    gi.screenPos = simd_make_float2(x, y);
+    gi.screenSize = simd_make_float2(w, h);
+    gi.atlasUVMin = simd_make_float2(0.0f, 0.0f);
+    gi.atlasUVMax = simd_make_float2(1.0f, 1.0f);
+    gi.color = color;
+    gi.softness = 0.5f;
+    gi.sceneDepth = sceneDepth;
+    gi.flags = GLYPH_FLAG_SOLID_RECT;
+    gi._pad = 0;
+    _glyphs.push_back(gi);
+}
+
 void TextRenderer::EndFrame() {
     BuildTileCoverage();
     _buffersDirty = true;

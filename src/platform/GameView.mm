@@ -33,11 +33,46 @@
     if (!platform || [event isARepeat]) {
         return;
     }
-    
+
+    // Console is open — route all input to the console
+    if (State::state.console.IsOpen()) {
+        if (event.keyCode == kVK_Escape) {
+            platform->keysPressed.set(event.keyCode, 1);
+        } else if (event.keyCode == kVK_Return) {
+            platform->keysPressed.set(event.keyCode, 1);
+        } else if (event.keyCode == kVK_Delete) {
+            platform->keysPressed.set(event.keyCode, 1);
+        } else if (event.keyCode == kVK_UpArrow) {
+            platform->keysPressed.set(event.keyCode, 1);
+        } else if (event.keyCode == kVK_DownArrow) {
+            platform->keysPressed.set(event.keyCode, 1);
+        } else {
+            // Printable ASCII characters
+            NSString* chars = [event characters];
+            if (chars.length > 0) {
+                unichar c = [chars characterAtIndex:0];
+                if (c >= 32 && c < 127) {
+                    std::lock_guard<std::mutex> lock(platform->textInputMutex);
+                    platform->textInputQueue.push(static_cast<char>(c));
+                }
+            }
+        }
+        return;
+    }
+
+    // Console toggle keys — 'T' opens blank, '/' opens with prefix
+    if (event.keyCode == kVK_ANSI_T || event.keyCode == kVK_ANSI_Slash) {
+        char prefix = (event.keyCode == kVK_ANSI_Slash) ? '/' : 0;
+        State::state.console.Open(prefix);
+        platform->consoleOpen = true;
+        [self setMouseLock:NO];
+        return;
+    }
+
     // Set the corresponding bit in our cross-platform bitset
     platform->keysPressed.set(event.keyCode, 1);
-    
-    // Add a key to toggle mouse lock (Escape key)
+
+    // Escape key toggles mouse lock when console is not open
     if (event.keyCode == kVK_Escape) {
         [self setMouseLock:!_mouseIsLocked];
     }

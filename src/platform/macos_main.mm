@@ -6,6 +6,7 @@
 
 #include "Character.hpp"
 #include "State.hpp"
+#include "console/GameConsole.hpp"
 #import "platform/GameView.h"
 #include "platform/MacOSPlatform.hpp"
 #include "platform/NetworkClient.hpp"
@@ -86,6 +87,9 @@
   // 5. Create the compute-based Metal renderer.
   State::state.renderer = std::make_unique<MetalRenderer>(device);
 
+  // 6. Initialize the in-game console.
+  State::state.console.Initialize();
+
   _view.clearColor = MTLClearColorMake(0, 0, 0, 1);
 
   // --- Final Window and App Setup ---
@@ -121,6 +125,7 @@
 
   State::state.platform->deltaTime = frameTimeMs;
 
+  State::state.console.Update(frameTimeMs / 1000.0f);
   State::state.character.Update(globalFrameCount);
 
   if (State::state.networkClient) {
