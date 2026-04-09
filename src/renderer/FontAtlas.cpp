@@ -152,13 +152,6 @@ bool FontAtlas::GenerateSDFAtlas(const std::vector<uint8_t>& fontData, float fon
         _metrics[i].bearingX = (float)xoff;
         _metrics[i].bearingY = (float)yoff;
 
-        if (i < 5) {
-            fprintf(stderr, "FontAtlas: char='%c' advance=%.1f size=%dx%d uv=(%.3f,%.3f)-(%.3f,%.3f)\n",
-                  codepoint, advance * scaleFactor, sdfWidth, sdfHeight,
-                  _metrics[i].uvMinX, _metrics[i].uvMinY,
-                  _metrics[i].uvMaxX, _metrics[i].uvMaxY);
-        }
-
         cursorX += sdfWidth + 1;
         rowHeight = std::max(rowHeight, sdfHeight + 1);
     }

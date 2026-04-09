@@ -212,6 +212,17 @@ public:
             }
         }
     }
+
+    void SendChat(const std::string& sender, const std::string& text) override {
+        if (!hWebSocket || !running) return;
+        std::string payload = "{\"type\":\"chat\",\"sender\":\"" + sender + "\",\"text\":\"" + text + "\"}";
+        WinHttpWebSocketSend(hWebSocket, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)payload.data(), (DWORD)payload.size());
+    }
+
+    void SetChatCallback(ChatCallback callback) override {
+        // Windows client does not currently support incoming chat callbacks
+        (void)callback;
+    }
 };
 
 std::unique_ptr<NetworkClient> NetworkClient::Create() {

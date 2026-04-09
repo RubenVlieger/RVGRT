@@ -237,7 +237,7 @@ void GameConsole::SubmitInput() {
         _buffer.AddMessage(displayText, ConsoleMsgType::Chat, _playerName);
 
         if (_chatCallback) {
-            _chatCallback(fullText);
+            _chatCallback(_playerName, fullText);
         }
     }
 

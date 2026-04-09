@@ -16,6 +16,7 @@ private:
     std::mutex stateMutex;
     std::vector<std::vector<float>> latestForeignStates;
     std::string savedUrl;
+    ChatCallback _chatCallback;
     
     void ReadLoop() {
         if (!webSocketTask) return;
@@ -75,6 +76,16 @@ private:
                         
                         std::lock_guard<std::mutex> lock(weakThis->stateMutex);
                         weakThis->latestForeignStates = std::move(newlyReceived);
+                    }
+                    else if ([type isEqualToString:@"chat"]) {
+                        int senderId = [json[@"client_id"] intValue];
+                        NSString* senderName = json[@"sender"];
+                        NSString* chatText = json[@"text"];
+                        if (weakThis->_chatCallback) {
+                            std::string sender = senderName ? [senderName UTF8String] : "Unknown";
+                            std::string txt = chatText ? [chatText UTF8String] : "";
+                            weakThis->_chatCallback(senderId, sender, txt);
+                        }
                     }
                 }
             }
@@ -197,6 +208,35 @@ public:
                 }
             }
         }
+    }
+
+    void SendChat(const std::string& sender, const std::string& text) override {
+        if (!webSocketTask || webSocketTask.state != NSURLSessionTaskStateRunning) {
+            return;
+        }
+        
+        NSDictionary* payload = @{
+            @"type": @"chat",
+            @"sender": [NSString stringWithUTF8String:sender.c_str()],
+            @"text": [NSString stringWithUTF8String:text.c_str()]
+        };
+        
+        NSError* error = nil;
+        NSData* jsonData = [NSJSONSerialization dataWithJSONObject:payload options:0 error:&error];
+        if (!error && jsonData) {
+            NSString* jsonStr = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+            NSURLSessionWebSocketMessage* msg = [[NSURLSessionWebSocketMessage alloc] initWithString:jsonStr];
+            
+            [webSocketTask sendMessage:msg completionHandler:^(NSError * _Nullable sendError) {
+                if (sendError) {
+                    NSLog(@"Error sending chat message: %@", sendError);
+                }
+            }];
+        }
+    }
+
+    void SetChatCallback(ChatCallback callback) override {
+        _chatCallback = callback;
     }
 };
 

@@ -24,9 +24,40 @@ LRESULT CALLBACK WindowsPlatform::WndProc(HWND hwnd, UINT msg, WPARAM wParam, LP
     if (platform) {
         switch(msg) {
             case WM_KEYDOWN:
+                // Console toggle: T or '/' opens console
+                if (State::state.console.IsOpen()) {
+                    if (wParam == VK_RETURN) {
+                        platform->keysPressed.set(VK_RETURN, 1);
+                    } else if (wParam == VK_BACK) {
+                        platform->keysPressed.set(VK_BACK, 1);
+                    } else if (wParam == VK_UP) {
+                        platform->keysPressed.set(VK_UP, 1);
+                    } else if (wParam == VK_DOWN) {
+                        platform->keysPressed.set(VK_DOWN, 1);
+                    } else if (wParam == VK_ESCAPE) {
+                        platform->keysPressed.set(VK_ESCAPE, 1);
+                    }
+                    return 0;
+                }
+                if (wParam == 0x54 || wParam == VK_OEM_2) { // 'T' or '/'
+                    char prefix = (wParam == VK_OEM_2) ? '/' : 0;
+                    State::state.console.Open(prefix);
+                    platform->consoleOpen = true;
+                    return 0;
+                }
                 platform->keysPressed.set((unsigned long)wParam, 1);
                 if (wParam == VK_ESCAPE) {
                     PostQuitMessage(0);
+                }
+                return 0;
+
+            case WM_CHAR:
+                if (State::state.console.IsOpen()) {
+                    if (wParam >= 32 && wParam < 127) {
+                        std::lock_guard<std::mutex> lock(platform->textInputMutex);
+                        platform->textInputQueue.push(static_cast<char>(wParam));
+                    }
+                    return 0;
                 }
                 return 0;
 

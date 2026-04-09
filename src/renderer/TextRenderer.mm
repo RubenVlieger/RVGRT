@@ -100,11 +100,6 @@ void TextRenderer::AddText(const std::string& text, float x, float y, float scal
                 gi.flags = depthTest ? 1u : 0u;
                 gi._pad = 0;
                 _glyphs.push_back(gi);
-
-                if (_glyphs.size() <= 5) {
-                    NSLog(@"AddText: char='%c' cursorX=%.1f screenPos=(%.1f,%.1f) advance=%.1f size=%.1fx%.1f",
-                          c, cursorX, gi.screenPos.x, gi.screenPos.y, metric.advance, glyphScreenW, glyphScreenH);
-                }
             }
         }
 
@@ -161,16 +156,6 @@ void TextRenderer::BuildTileCoverage() {
             }
         }
     }
-
-    // Debug: print tile 0
-    if (_tiles.size() > 0 && _tiles[0].count > 0) {
-        fprintf(stderr, "TileCoverage: tile[0] has %u glyphs:", _tiles[0].count);
-        for (uint32_t i = 0; i < _tiles[0].count; i++) {
-            uint32_t gIdx = _tiles[0].indices[i];
-            fprintf(stderr, " g%u@%.0f", gIdx, _glyphs[gIdx].screenPos.x);
-        }
-        fprintf(stderr, "\n");
-    }
 }
 
 void TextRenderer::UpdateBuffers(id<MTLDevice> device) {
@@ -186,10 +171,6 @@ void TextRenderer::UpdateBuffers(id<MTLDevice> device) {
     overlayData.screenHeight = _screenHeight;
     memcpy([_overlayDataBuffer contents], &overlayData, sizeof(TextOverlayData));
 
-    fprintf(stderr, "UpdateBuffers: numGlyphs=%u tiles=%ux%u screen=%ux%u\n",
-            overlayData.numGlyphs, overlayData.numTilesX, overlayData.numTilesY,
-            overlayData.screenWidth, overlayData.screenHeight);
-
     if (_glyphs.size() > 0) {
         NSUInteger requiredSize = sizeof(GlyphInstance) * _glyphs.size();
         if (_glyphBuffer.length < requiredSize) {
@@ -198,16 +179,6 @@ void TextRenderer::UpdateBuffers(id<MTLDevice> device) {
                                                options:MTLResourceStorageModeShared];
         }
         memcpy([_glyphBuffer contents], _glyphs.data(), requiredSize);
-
-        // Verify: read back first glyph to confirm GPU buffer has correct data
-        GlyphInstance* gpuData = (GlyphInstance*)[_glyphBuffer contents];
-        for (int j = 0; j < 5 && j < (int)_glyphs.size(); j++) {
-            fprintf(stderr, "GPU Buffer glyph[%d]: pos=(%.1f,%.1f) size=(%.1f,%.1f) uv=(%.3f,%.3f)-(%.3f,%.3f)\n",
-                    j, gpuData[j].screenPos.x, gpuData[j].screenPos.y,
-                    gpuData[j].screenSize.x, gpuData[j].screenSize.y,
-                    gpuData[j].atlasUVMin.x, gpuData[j].atlasUVMin.y,
-                    gpuData[j].atlasUVMax.x, gpuData[j].atlasUVMax.y);
-        }
     } else {
         // Clear the glyph buffer to prevent stale data
         if (_glyphBuffer.length > 0) {
@@ -223,13 +194,5 @@ void TextRenderer::UpdateBuffers(id<MTLDevice> device) {
     }
     if (_tiles.size() > 0) {
         memcpy([_tileBuffer contents], _tiles.data(), tileDataSize);
-
-        // Verify tile buffer
-        uint32_t* tileData = (uint32_t*)[_tileBuffer contents];
-        fprintf(stderr, "Tile Buffer verify: tile[0] count=%u indices=[", tileData[0]);
-        for (uint32_t i = 0; i < _tiles[0].count && i < 5; i++) {
-            fprintf(stderr, "%u ", tileData[1 + i]);
-        }
-        fprintf(stderr, "]\n");
     }
 }

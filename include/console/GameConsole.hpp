@@ -19,8 +19,8 @@ enum class SpecialKey {
     End
 };
 
-// Callback type for sending chat messages to the server
-using ChatSendCallback = std::function<void(const std::string& text)>;
+// Callback type for sending chat messages to the server: (senderName, text)
+using ChatSendCallback = std::function<void(const std::string& sender, const std::string& text)>;
 
 // Main coordinator for the in-game console.
 // Owns the message buffer, input state, and command registry.
