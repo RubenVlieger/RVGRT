@@ -2,10 +2,12 @@
 
 #import <Cocoa/Cocoa.h>
 #import <MetalKit/MetalKit.h>
+#import <Carbon/Carbon.h>
 #include <memory>
 
 #include "Character.hpp"
 #include "State.hpp"
+#include "console/GameConsole.hpp"
 #import "platform/GameView.h"
 #include "platform/MacOSPlatform.hpp"
 #include "platform/NetworkClient.hpp"
@@ -82,9 +84,18 @@
 
   State::state.networkClient = NetworkClient::Create();
   State::state.networkClient->Connect("wss://rvgrt.rubenvlieger.nl/ws");
+  State::state.networkClient->SetChatCallback([](int clientId, const std::string& sender, const std::string& text) {
+    State::state.console.OnChatReceived(clientId, sender, text);
+  });
+  State::state.console.SetChatSendCallback([](const std::string& sender, const std::string& text) {
+    State::state.networkClient->SendChat(sender, text);
+  });
 
   // 5. Create the compute-based Metal renderer.
   State::state.renderer = std::make_unique<MetalRenderer>(device);
+
+  // 6. Initialize the in-game console.
+  State::state.console.Initialize();
 
   _view.clearColor = MTLClearColorMake(0, 0, 0, 1);
 
@@ -121,7 +132,50 @@
 
   State::state.platform->deltaTime = frameTimeMs;
 
-  State::state.character.Update(globalFrameCount);
+  State::state.console.Update(frameTimeMs / 1000.0f);
+
+  // Drain console text input queue
+  if (State::state.console.IsOpen()) {
+    Platform* platform = State::state.platform.get();
+    if (platform) {
+      std::lock_guard<std::mutex> lock(platform->textInputMutex);
+      while (!platform->textInputQueue.empty()) {
+        char c = platform->textInputQueue.front();
+        platform->textInputQueue.pop();
+        State::state.console.OnCharInput(c);
+      }
+
+      // Handle special keys for console
+      if (platform->IsKeyDown(kVK_Return)) {
+        State::state.console.OnSpecialKey(SpecialKey::Enter);
+        platform->keysPressed.reset(kVK_Return);
+      }
+      if (platform->IsKeyDown(kVK_Delete)) {
+        State::state.console.OnSpecialKey(SpecialKey::Backspace);
+        platform->keysPressed.reset(kVK_Delete);
+      }
+      if (platform->IsKeyDown(kVK_UpArrow)) {
+        State::state.console.OnSpecialKey(SpecialKey::ArrowUp);
+        platform->keysPressed.reset(kVK_UpArrow);
+      }
+      if (platform->IsKeyDown(kVK_DownArrow)) {
+        State::state.console.OnSpecialKey(SpecialKey::ArrowDown);
+        platform->keysPressed.reset(kVK_DownArrow);
+      }
+      if (platform->IsKeyDown(kVK_Escape)) {
+        State::state.console.OnSpecialKey(SpecialKey::Escape);
+        platform->keysPressed.reset(kVK_Escape);
+        // Console was closed — re-lock mouse
+        [_view setMouseLock:YES];
+        platform->consoleOpen = false;
+      }
+    }
+  }
+
+  // Only update character movement when console is closed
+  if (!State::state.console.IsOpen()) {
+    State::state.character.Update(globalFrameCount);
+  }
 
   if (State::state.networkClient) {
     State::state.networkClient->SendState(State::state.character);

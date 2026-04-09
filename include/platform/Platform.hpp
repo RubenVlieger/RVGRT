@@ -3,6 +3,8 @@
 #include "util.hpp"
 #include <atomic>
 #include <bitset>
+#include <queue>
+#include <mutex>
 
 class Platform {
 public:
@@ -21,4 +23,9 @@ public:
   std::atomic<long> deltaYMouse{0};
   std::bitset<256> keysPressed;
   FrameTimeAverager frameTimeAverager;
+
+  // --- Console Input ---
+  std::queue<char> textInputQueue;
+  std::mutex textInputMutex;
+  std::atomic<bool> consoleOpen{false};
 };

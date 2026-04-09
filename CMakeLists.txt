@@ -45,6 +45,10 @@ if(WIN32)
         src/renderer/D3D12/D3D12Device.cpp
         src/renderer/TexturePack_impl.cu
         src/platform/Win32NetworkClient.cpp
+        src/console/ConsoleBuffer.cpp
+        src/console/ConsoleInput.cpp
+        src/console/CommandRegistry.cpp
+        src/console/GameConsole.cpp
     )
     
     # Core CUDA renderer files
@@ -164,6 +168,10 @@ elseif(APPLE)
         src/renderer/Metal/BrickPool_Metal.mm
         src/renderer/TextRenderer.mm
         src/platform/MacOSNetworkClient.mm
+        src/console/ConsoleBuffer.cpp
+        src/console/ConsoleInput.cpp
+        src/console/CommandRegistry.cpp
+        src/console/GameConsole.cpp
         ${MACOS_ICON}
     )
     

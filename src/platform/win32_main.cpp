@@ -6,6 +6,7 @@
 #include <iostream>
 
 #include "State.hpp"
+#include "console/GameConsole.hpp"
 #include "platform/NetworkClient.hpp"
 #include "platform/WindowsPlatform.hpp"
 #include "renderer/D3D12/D3D12Device.hpp"
@@ -52,7 +53,16 @@ int WINAPI Win32Main(HINSTANCE hInstance, HINSTANCE hPrevInstance,
     State::state.networkClient = NetworkClient::Create();
     if (State::state.networkClient) {
       State::state.networkClient->Connect("ws://rvgrt.rubenvlieger.nl/ws");
+      State::state.networkClient->SetChatCallback([](int clientId, const std::string& sender, const std::string& text) {
+        State::state.console.OnChatReceived(clientId, sender, text);
+      });
+      State::state.console.SetChatSendCallback([](const std::string& sender, const std::string& text) {
+        State::state.networkClient->SendChat(sender, text);
+      });
     }
+
+    // 5. Initialize console
+    State::state.console.Initialize();
 
     // 5. Start the render thread
     std::thread renderThread(renderLoop);
@@ -128,8 +138,48 @@ void renderLoop() {
     State::state.graphicsDevice->BeginFrame();
 
     // Update game state
-    State::state.character.Update(frameCount);
     State::state.platform->deltaTime = (float)frameTimeMs / 1000.f;
+
+    State::state.console.Update(State::state.platform->deltaTime);
+
+    // Drain console text input queue
+    if (State::state.console.IsOpen()) {
+      WindowsPlatform* winPlatform = static_cast<WindowsPlatform*>(State::state.platform.get());
+      if (winPlatform) {
+        std::lock_guard<std::mutex> lock(State::state.platform->textInputMutex);
+        while (!State::state.platform->textInputQueue.empty()) {
+          char c = State::state.platform->textInputQueue.front();
+          State::state.platform->textInputQueue.pop();
+          State::state.console.OnCharInput(c);
+        }
+        if (State::state.platform->IsKeyDown(VK_RETURN)) {
+          State::state.console.OnSpecialKey(SpecialKey::Enter);
+          State::state.platform->keysPressed.reset(VK_RETURN);
+        }
+        if (State::state.platform->IsKeyDown(VK_BACK)) {
+          State::state.console.OnSpecialKey(SpecialKey::Backspace);
+          State::state.platform->keysPressed.reset(VK_BACK);
+        }
+        if (State::state.platform->IsKeyDown(VK_UP)) {
+          State::state.console.OnSpecialKey(SpecialKey::ArrowUp);
+          State::state.platform->keysPressed.reset(VK_UP);
+        }
+        if (State::state.platform->IsKeyDown(VK_DOWN)) {
+          State::state.console.OnSpecialKey(SpecialKey::ArrowDown);
+          State::state.platform->keysPressed.reset(VK_DOWN);
+        }
+        if (State::state.platform->IsKeyDown(VK_ESCAPE)) {
+          State::state.console.OnSpecialKey(SpecialKey::Escape);
+          State::state.platform->keysPressed.reset(VK_ESCAPE);
+          State::state.platform->consoleOpen = false;
+        }
+      }
+    }
+
+    // Only update character movement when console is closed
+    if (!State::state.console.IsOpen()) {
+      State::state.character.Update(frameCount);
+    }
 
     // Network updates
     if (State::state.networkClient) {

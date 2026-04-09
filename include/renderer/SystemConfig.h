@@ -152,10 +152,31 @@
 #define TEXT_FONT_SIZE 32.0f
 #define TEXT_SDF_SPREAD 8
 #define TEXT_TILE_SIZE 64
-#define TEXT_MAX_GLYPHS 512
-#define TEXT_MAX_GLYPHS_PER_TILE 32
+#define TEXT_MAX_GLYPHS 2048
+#define TEXT_MAX_GLYPHS_PER_TILE 64
+
+// GlyphInstance flags (bit field)
+#define GLYPH_FLAG_DEPTH_TEST  1u   // Bit 0: enable depth test for 3D text occlusion
+#define GLYPH_FLAG_SOLID_RECT  2u   // Bit 1: solid rectangle, skip SDF sampling
 #define TEXT_FIRST_CHAR 32
 #define TEXT_NUM_CHARS 96
+
+// ============================================================================
+// CONSOLE SETTINGS
+// ============================================================================
+#define CONSOLE_MAX_LINES 200
+#define CONSOLE_VISIBLE_LINES 20
+#define CONSOLE_INPUT_MAX_LENGTH 256
+#define CONSOLE_HISTORY_SIZE 50
+#define CONSOLE_FADE_TIME 5.0f
+#define CONSOLE_LINE_HEIGHT 22.0f
+#define CONSOLE_FONT_SCALE 0.9f
+#define CONSOLE_MARGIN_X 12.0f
+#define CONSOLE_MARGIN_BOTTOM 30.0f
+#define CONSOLE_BG_ALPHA 0.5f
+#define CONSOLE_TEXT_ALPHA 0.9f
+#define CONSOLE_TEXT_ALPHA_FADED 0.4f
+#define CONSOLE_CURSOR_BLINK_INTERVAL 0.5f
 
 // ============================================================================
 // POST-PROCESSING

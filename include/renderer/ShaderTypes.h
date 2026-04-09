@@ -113,7 +113,7 @@ struct GlyphInstance {
     simd_float4 color;          // RGBA tint (premultiplied alpha)
     float softness;             // SDF edge softness for anti-aliasing
     float sceneDepth;           // Depth for 3D text occlusion (FLT_MAX for HUD)
-    uint32_t flags;             // Bit 0: depth test enable
+    uint32_t flags;             // Bit 0: depth test enable, Bit 1: solid rect (no SDF)
     uint32_t _pad;
 };
 

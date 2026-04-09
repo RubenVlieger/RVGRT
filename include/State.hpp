@@ -4,6 +4,7 @@
 #include "Character.hpp"
 #include "hitInfo.hpp"
 #include "Timer.hpp"
+#include "console/GameConsole.hpp"
 #include <memory>
 
 // Forward-declare the abstract interfaces
@@ -29,6 +30,9 @@ public:
     // --- 3D World ---
     Character character = Character();
     std::vector<Character> otherCharacters;
+
+    // --- In-Game Console ---
+    GameConsole console;
 
     // --- Singleton Instance ---
     static State state;
