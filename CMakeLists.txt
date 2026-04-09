@@ -71,6 +71,7 @@ if(WIN32)
         exposure.shader
         composite.shader
         material_gen.shader
+        text_overlay.shader
     )
     
     foreach(SHADER ${SHADER_FILES})
@@ -149,6 +150,7 @@ elseif(APPLE)
         src/Character.cpp
         src/Camera.cpp
         src/renderer/FrameDataManager.cpp
+        src/renderer/FontAtlas.cpp
         src/renderer/RendererBase.mm
         src/platform/macos_main.mm
         src/platform/MacOSPlatform.mm
@@ -160,6 +162,7 @@ elseif(APPLE)
         src/platform/GameView.mm
         src/renderer/MaterialMap.mm
         src/renderer/Metal/BrickPool_Metal.mm
+        src/renderer/TextRenderer.mm
         src/platform/MacOSNetworkClient.mm
         ${MACOS_ICON}
     )
@@ -179,6 +182,7 @@ elseif(APPLE)
         exposure.shader
         composite.shader
         material_gen.shader
+        text_overlay.shader
     )
     
     find_program(XCRUN_TOOL xcrun REQUIRED)

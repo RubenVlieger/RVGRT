@@ -50,6 +50,7 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   │   ├── BrickPool.hpp
 │   │   ├── BrickPoolTraits.hpp
 │   │   ├── Buffer.hpp
+│   │   ├── FontAtlas.hpp       # SDF font atlas generation (CPU)
 │   │   ├── FrameDataManager.hpp
 │   │   ├── GraphicsDevice.hpp
 │   │   ├── MaterialMap.hpp
@@ -59,6 +60,7 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   │   ├── RendererTraits.hpp
 │   │   ├── ShaderTypes.h       # CRITICAL: Memory layout bridge between C++ and Metal/CUDA.
 │   │   ├── SystemConfig.h
+│   │   ├── TextRenderer.hpp    # Text layout, tile culling, GPU buffer management
 │   │   ├── hitInfo.h
 │   │   ├── intersections.h     # Contains the core hierarchical DDA ray traversal maths (Metal C++).
 │   │   └── shader_settings.h
@@ -109,9 +111,11 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   │   │   ├── BrickPool_Metal.mm
 │   │   │   ├── MetalBuffer.mm
 │   │   │   ├── MetalDevice.mm
-│   │   │   ├── MetalRenderer.mm    # The orchestrator. Executes the 8-pass compute pipeline.
+│   │   │   ├── MetalRenderer.mm    # The orchestrator. Executes the 9-pass compute pipeline.
 │   │   │   └── MetalTraits.mm
+│   │   ├── TextRenderer.mm         # Text layout, tile coverage, GPU buffer management
 │   │   ├── FrameDataManager.cpp
+│   │   ├── FontAtlas.cpp           # SDF font atlas generation using stb_truetype
 │   │   ├── MaterialMap.mm          # Handles async terrain generation and toroidal LOD streaming.
 │   │   ├── RendererBase.mm
 │   │   ├── TexturePack_impl.cu
@@ -125,6 +129,7 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   │   │       ├── exposure.shader
 │   │   │       ├── indirect_bounce.shader
 │   │   │       ├── material_gen.shader (Procedural voxel generation)
+│   │   │       ├── text_overlay.shader  (SDF text rendering via compute)
 │   │   │       ├── tables.shader
 │   │   │       ├── temporal_acc.shader
 │   │   │       └── volumetric.shader
@@ -171,7 +176,12 @@ The `MetalRenderer::Draw()` loop executes an 8-Pass Deferred Compute Pipeline on
    - A compute shader that averages scene luminance and writes to a shared 1-element buffer to smoothly adapt camera exposure over time.
 8. **Pass 7: Composite (`Composite`)**
    - Combines Direct Light, Denoised Indirect Light, Albedo, Volumetrics, and Skybox into an HDR buffer, applying the Exposure modifier and tone-mapping.
-9. **Post-Process:** Apple `MetalFX` (Temporal Scaler/TAA) upscales to native resolution and provides anti-aliasing.
+9. **Pass 8: TextOverlay (`TextOverlay`)**
+   - Renders SDF (Signed Distance Field) text onto the composited image before upscaling.
+   - Uses tile-culled rendering: the screen is divided into 64x64 pixel tiles. CPU builds a per-tile glyph list each frame. GPU pixels only iterate over glyphs in their tile (typically 1-5), not all 200+.
+   - Each glyph is a screen-space quad. The SDF atlas is sampled for smooth, resolution-independent text.
+   - Supports depth-tested 3D text (player name tags) and screen-space text (chat, HUD).
+10. **Post-Process:** Apple `MetalFX` (Temporal Scaler/TAA) upscales to native resolution and provides anti-aliasing.
 
 ## 5. Raytracing Algorithms (`intersections.h`)
 The heart of the performance lies in `intersections.h` (included by `.metal` kernels).
@@ -180,12 +190,54 @@ The heart of the performance lies in `intersections.h` (included by `.metal` ker
 - **LOD Optimization:** If a region is empty or far away, it identifies the sparse bounds using `GetIsotropicLOD()` and skips vast empty spaces instantly by advancing the ray position to the cell boundary.
 - **Bitwise Magic:** Utilizes `popcnt64()` and bitmasking (`BitTestHalf64`) against a `RayMaskOptimizationLUT` to cheaply calculate intersection boundaries within an 8x8x8 or 4x4x4 cell without standard AABB testing.
 
-## 6. Guidelines & Constraints for LLMs
-1. **Never Break the GPU/CPU Boundary:** If you alter a struct in `ShaderTypes.h` (e.g., adding a float to `CameraData` or `FrameData`), be extremely mindful of alignment and padding (16-byte boundaries) since Metal and C++ must interpret the raw bytes identically.
-2. **Minimize Divergence in Shaders:** In `.metal` files, keep thread divergence low.
-3. **Performance is King:** Because path tracing is inherently slow, if you suggest a feature (e.g., glass refraction), implement it as cheaply as possible (single extra trace) rather than exploding the ray count.
+## 6. Text Rendering System
 
-## 7. Include Path Reference
+The engine uses a GPU compute-based SDF (Signed Distance Field) text rendering system that integrates cleanly into the existing compute pipeline without requiring a rasterization stage.
+
+### Architecture
+- **FontAtlas** (`FontAtlas.hpp/.cpp`): Generates SDF font atlas on CPU at startup using `stb_truetype.h`. Produces a 512x256 R8 texture with proper distance fields for all printable ASCII characters. Stores per-glyph metrics (UV coordinates, advance, bearing).
+- **TextRenderer** (`TextRenderer.hpp/.mm`): Manages text layout, tile coverage, and GPU buffer updates. Each frame:
+  1. `BeginFrame()` clears glyph list
+  2. `AddText(text, x, y, scale, color)` lays out characters using font metrics, supports world-space projection for player names
+  3. `EndFrame()` builds tile coverage: divides screen into 64x64 tiles, assigns each glyph to overlapping tiles
+  4. `UpdateBuffers()` uploads glyph instances and tile data to GPU
+- **text_overlay.shader**: GPU compute kernel (Pass 8). Each pixel:
+  1. Looks up which tile it belongs to (O(1))
+  2. Reads the tile's glyph list (typically 1-5 entries)
+  3. For each glyph, checks AABB, samples SDF atlas, alpha-blends onto composite
+
+### Key Design Decisions
+- **Tile-culled rendering**: Instead of O(pixels × glyphs), each pixel only checks glyphs in its tile. With 200 glyphs spread across 510 tiles, average glyphs-per-tile is ~2-3. Total GPU work is negligible.
+- **SDF over bitmap**: SDF provides resolution-independent, crisp text at any scale. The SDF atlas is 32KB (R8, 512x256) vs a bitmap atlas which would need multiple sizes.
+- **Runs before MetalFX upscale**: Text is composited at render resolution, then upscaled with the rest of the scene. This ensures text benefits from TAA and upscaling.
+- **Cross-platform**: Uses only compute shaders, no rasterization. Works identically on Metal, CUDA, and future WebGL backends.
+
+### Adding Text in Code
+```cpp
+// In MetalRenderer::Draw(), before pipeline execution:
+if (_fontAtlas.IsValid()) {
+    _textRenderer.BeginFrame(State::dispWIDTH, State::dispHEIGHT);
+    
+    // Screen-space text (chat, HUD)
+    _textRenderer.AddText("Hello World", 20.0f, 20.0f, 1.0f,
+                          simd_make_float4(1,1,1,1), 0.005f);
+    
+    // World-space text (player names) - projected from 3D
+    float4 clipPos = camera.viewProjection * float4(playerPos, 1.0f);
+    float2 screenPos = (clipPos.xy / clipPos.w + 1.0f) * 0.5f * float2(width, height);
+    _textRenderer.AddText(playerName, screenPos.x, screenPos.y, scale, color);
+    
+    _textRenderer.EndFrame();
+    _textRenderer.UpdateBuffers(device);
+}
+```
+
+## 7. Guidelines & Constraints for LLMs
+1. **Never Break the GPU/CPU Boundary:** If you alter a struct in `ShaderTypes.h` (e.g., adding a float to `CameraData` or `FrameData`), be extremely mindful of alignment and padding (16-byte boundaries) since Metal and C++ must interpret the raw bytes identically. This applies to `GlyphInstance` and `TextOverlayData` as well.
+3. **Performance is King:** Because path tracing is inherently slow, if you suggest a feature (e.g., glass refraction), implement it as cheaply as possible (single extra trace) rather than exploding the ray count.
+4. **Text Rendering:** The text system uses tile-culled SDF rendering. When adding text features, use `TextRenderer::AddText()`. For world-space text (player names), project 3D positions to screen space using the camera's view-projection matrix before calling AddText.
+
+## 8. Include Path Reference
 
 When adding new files, use these include patterns:
 
@@ -208,9 +260,11 @@ When adding new files, use these include patterns:
 #include "renderer/Renderer.hpp"
 #include "renderer/ShaderTypes.h"
 #include "renderer/BrickPool.hpp"
+#include "renderer/FontAtlas.hpp"
+#include "renderer/TextRenderer.hpp"
 ```
 
-## 8. Build System Notes
+## 9. Build System Notes
 
 The project uses CMake with platform-specific configuration:
 - **macOS**: Metal shaders compiled at build time, Objective-C++ sources
@@ -219,5 +273,6 @@ The project uses CMake with platform-specific configuration:
 Key files in `CMakeLists.txt`:
 - `src/renderer/Metal/` sources for macOS builds
 - `src/renderer/CUDA/` and `src/renderer/D3D12/` sources for Windows builds
+- `src/renderer/FontAtlas.cpp` and `src/renderer/TextRenderer.mm` for text rendering
 
-Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`.
+Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`. Adding text or HUD elements uses the `TextRenderer` system described in Section 6.

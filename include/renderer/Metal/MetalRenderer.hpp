@@ -3,6 +3,8 @@
 #include "renderer/RendererBase.hpp"
 #include "renderer/RendererTraits.hpp"
 #include "renderer/MaterialMap.hpp"
+#include "renderer/FontAtlas.hpp"
+#include "renderer/TextRenderer.hpp"
 #include "Texturepack.h"
 
 #ifdef __OBJC__
@@ -74,6 +76,11 @@ private:
     id _counterSampleBuffer;
     id _timestampBuffer;
     bool _supportsTimestamps;
+    
+    // Text rendering
+    FontAtlas _fontAtlas;
+    TextRenderer _textRenderer;
+    id _psoTextOverlay;
     
     // Helper methods
     void SetupTimestampSupport();

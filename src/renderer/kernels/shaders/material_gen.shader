@@ -86,7 +86,7 @@ inline uint GetSectorIndex(uint3 pos, uint sx, uint sy) {
 // Kernel: Analyze sectors for initial generation
 KERNEL(XMap_AnalyzeSectors)(
     PARAM_BUFFER(uint64_t, resultBuffer, 0),
-    DECLARE_GID()
+    DECLARE_GID_3D()
 )
 {
 #if defined(PLATFORM_METAL)
@@ -147,12 +147,15 @@ KERNEL(XMap_AnalyzeStreaming)(
     DECLARE_GID()
 )
 {
+    uint gid_val;
 #if !defined(PLATFORM_METAL)
-    uint gid = blockIdx.x * blockDim.x + threadIdx.x;
+    gid_val = blockIdx.x * blockDim.x + threadIdx.x;
+#else
+    gid_val = GET_GID_X();
 #endif
-    if (gid >= totalItems) return;
+    if (gid_val >= totalItems) return;
 
-    SectorWorkItem item = workItems[gid];
+    SectorWorkItem item = workItems[gid_val];
 #if defined(PLATFORM_METAL)
     float3 sectorWorldPos = float3(item.worldX, item.worldY, item.worldZ) * 32.0f;
 #else
@@ -186,7 +189,7 @@ KERNEL(XMap_AnalyzeStreaming)(
         
         if (active) activeBricksMask |= (1UL << i);
     }
-    resultBuffer[gid] = activeBricksMask;
+    resultBuffer[gid_val] = activeBricksMask;
 }
 
 // Kernel: Fill brick data
@@ -200,9 +203,11 @@ KERNEL(XMap_FillBricks)(
 )
 {
 #if defined(PLATFORM_METAL)
-    uint workItemIndex = groupID / 8;
-    uint subBrickIndex = groupID % 8;
-    uint threadID_local = threadID;
+    uint gid_val = GET_GID_X();
+    uint threadgroupID = gid_val / 64;
+    uint workItemIndex = threadgroupID / 8;
+    uint subBrickIndex = threadgroupID % 8;
+    uint threadID_local = gid_val % 64;
 #else
     uint workItemIndex = blockIdx.x / 8;
     uint subBrickIndex = blockIdx.x % 8;
@@ -351,7 +356,7 @@ KERNEL(FillDynamicAtlases)(
     PARAM_TEXTURE_READ(tex3d_u32, indirection, 0),
     PARAM_BUFFER(uint, geoPool, 0),
     PARAM_BUFFER(uchar, matPool, 1),
-    DECLARE_GID()
+    DECLARE_GID_3D()
 )
 {
 #if !defined(PLATFORM_METAL)

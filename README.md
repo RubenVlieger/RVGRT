@@ -22,6 +22,8 @@ This is an attempt at creating a **Minecraft-like voxel world engine**, built mo
 - A-Trous edge aware denoising of noisy volumetric lighting data
 - Usage of the orignial Minecraft texturepack
 - Animated character model
+- SDF (Signed Distance Field) text rendering via compute shader overlay
+- GPU-accelerated text with tile-culled rendering for performance
 
 
 ## To-do list:
