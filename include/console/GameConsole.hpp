@@ -58,6 +58,8 @@ public:
                         const std::string& text);
     // Set the callback that sends text to the server
     void SetChatSendCallback(ChatSendCallback cb) { _chatCallback = cb; }
+    // Get the chat send callback (used by /me command)
+    ChatSendCallback GetChatSendCallback() const { return _chatCallback; }
 
     // --- Rendering data ---
     // Fills `outMessages` with pointers to the currently visible lines
@@ -93,9 +95,6 @@ private:
     int _clientId;
 
     ChatSendCallback _chatCallback;
-
-    // Register built-in commands like /help and /name
-    void RegisterBuiltInCommands();
 
     // Process the current input line (Enter key)
     void SubmitInput();

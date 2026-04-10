@@ -1,4 +1,5 @@
 #include "console/GameConsole.hpp"
+#include "console/RegisterCommands.hpp"
 
 #ifdef _DEBUG
 #include <cstdio>
@@ -18,7 +19,7 @@ GameConsole::GameConsole()
 }
 
 void GameConsole::Initialize() {
-    RegisterBuiltInCommands();
+    RegisterAllCommands(*this);
 
     _buffer.AddMessage("Welcome to RVGRT!", ConsoleMsgType::System);
     _buffer.AddMessage("Type /help to see all possible commands", ConsoleMsgType::System);
@@ -160,45 +161,6 @@ size_t GameConsole::GetDisplayCursorPos() const {
 void GameConsole::SetPlayerName(const std::string& name) {
     _playerName = name;
     CONSOLE_LOG("Player name set to: %s", name.c_str());
-}
-
-void GameConsole::RegisterBuiltInCommands() {
-    // /help — lists all commands
-    _registry.Register("help",
-        "Show all available commands",
-        [](const std::vector<std::string>& args, GameConsole& console) {
-            (void)args;
-
-            auto commands = console.GetRegistry().GetAllCommands();
-            console.GetBuffer().AddMessage("--- Available commands ---",
-                                           ConsoleMsgType::System);
-            for (const auto& [name, desc] : commands) {
-                console.GetBuffer().AddMessage("/" + name + " - " + desc,
-                                              ConsoleMsgType::Command);
-            }
-        });
-
-    // /name — set your display name
-    _registry.Register("name",
-        "Set your display name",
-        [](const std::vector<std::string>& args, GameConsole& console) {
-            if (args.empty()) {
-                console.GetBuffer().AddMessage("Usage: /name <your_name>",
-                                              ConsoleMsgType::Error);
-                return;
-            }
-
-            // Join all arguments into one name (allows spaces)
-            std::string newName;
-            for (size_t i = 0; i < args.size(); ++i) {
-                if (i > 0) newName += " ";
-                newName += args[i];
-            }
-
-            console.SetPlayerName(newName);
-            console.GetBuffer().AddMessage("Name set to: " + newName,
-                                          ConsoleMsgType::System);
-        });
 }
 
 void GameConsole::SubmitInput() {

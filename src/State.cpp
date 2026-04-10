@@ -17,6 +17,9 @@ State::State()
     // The constructor can be empty if initialization is done in the main function.
     Character npc;
     otherCharacters.push_back(npc);
+
+    // Default home is world spawn
+    homePosition = glm::vec3(508.0f, 156.0f, 408.0f);
 }
 
 // DEFINE the destructor here. 

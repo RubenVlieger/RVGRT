@@ -16,23 +16,28 @@ This is an attempt at creating a **Minecraft-like voxel world engine**, built mo
 - 3 Level grid sparse data structure chosen for storing material ID's and accelerated rendering
 - Lower resolution estimation of primary ray distance.
 - Path tracing approach for with indirect lighting with multiple samples per pixel, which produces global illumination and realistic results
-- Procedurally generated world, where new sections are swapped in memory as you fly around 
+- Procedurally generated world, where new sections are swapped in memory as you fly around
 - Deferred rendering pipeline consisting of multiple kernels
-- A-Trous edge aware denoising of the noisy indirect lighting 
+- A-Trous edge aware denoising of the noisy indirect lighting
 - A-Trous edge aware denoising of noisy volumetric lighting data
 - Usage of the orignial Minecraft texturepack
 - Animated character model
 - SDF (Signed Distance Field) text rendering via compute shader overlay
 - GPU-accelerated text with tile-culled rendering for performance
+- **In-game console with 20 commands** — press `T` to chat or `/` for commands
+  - Navigation: `/spawn`, `/home`, `/sethome`, `/tp <x> <y> <z>`, `/jump <dx> <dy> <dz>`
+  - Settings: `/speed`, `/gravity`, `/fly`, `/noclip`, `/fov`, `/sensitivity`, `/reset`
+  - Info: `/pos`, `/fps`, `/players`, `/me`, `/time`, `/clear`
+  - Adding commands: see `src/console/RegisterCommands.cpp`
 
 
 ## To-do list:
-- Multiplayer support
 - Clouds
 - Realistic lens effects
 - A plane to fly around in
 - Ability to upload voxel scenes to render
 - Ability to walk around and possibly interact with the world
+- Full fly / noclip mode
 
 
 

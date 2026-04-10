@@ -240,6 +240,11 @@ void renderLoop() {
              State::state.platform->frameTimeAverager.getAverage());
     SetWindowTextA(static_cast<HWND>(State::state.platform->GetWindowHandle()),
                    title);
+
+    // Update fpsInfo for /fps command
+    State::state.fpsInfo = "Frame: " + std::to_string(frameTimeMs) + "ms | Avg: " +
+                           std::to_string(State::state.platform->frameTimeAverager.getAverage()) + "ms";
+
     frameCount++;
   }
 }

@@ -49,6 +49,7 @@ if(WIN32)
         src/console/ConsoleInput.cpp
         src/console/CommandRegistry.cpp
         src/console/GameConsole.cpp
+        src/console/RegisterCommands.cpp
     )
     
     # Core CUDA renderer files
@@ -172,6 +173,7 @@ elseif(APPLE)
         src/console/ConsoleInput.cpp
         src/console/CommandRegistry.cpp
         src/console/GameConsole.cpp
+        src/console/RegisterCommands.cpp
         ${MACOS_ICON}
     )
     
