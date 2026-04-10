@@ -4,6 +4,7 @@
 #import <MetalKit/MetalKit.h>
 #import <Carbon/Carbon.h>
 #include <memory>
+#include <string>
 
 #include "Character.hpp"
 #include "State.hpp"
@@ -297,6 +298,10 @@
                         msDenoise, msFog, msExpos, msComp, msFX, totalMs];
 
       [self->_window setTitle:title];
+
+      // Update fpsInfo for /fps command
+      State::state.fpsInfo = "Approx: " + std::to_string(msApprox) + "ms | Total: " +
+                             std::to_string(totalMs) + "ms";
     });
   }];
 

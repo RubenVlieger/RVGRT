@@ -67,6 +67,12 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   ├── Character.hpp
 │   ├── CudaD3D12Texture.cuh
 │   ├── State.hpp
+│   ├── console/        # Console/chat system headers
+│   │   ├── ConsoleBuffer.hpp
+│   │   ├── ConsoleInput.hpp
+│   │   ├── CommandRegistry.hpp
+│   │   ├── GameConsole.hpp
+│   │   └── RegisterCommands.hpp
 │   ├── TerrainGeneration.h
 │   ├── Texturepack.h
 │   ├── basewin.h
@@ -88,6 +94,12 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   ├── State.cpp
 │   ├── TerrainGeneration.cu
 │   ├── main.cpp
+│   ├── console/        # In-game console/chat system
+│   │   ├── RegisterCommands.cpp  # ALL command handlers live here
+│   │   ├── ConsoleBuffer.cpp
+│   │   ├── ConsoleInput.cpp
+│   │   ├── CommandRegistry.cpp
+│   │   └── GameConsole.cpp
 │   ├── platform/       # Platform-specific source
 │   │   ├── GameView.mm
 │   │   ├── MacOSNetworkClient.mm
@@ -237,7 +249,71 @@ if (_fontAtlas.IsValid()) {
 3. **Performance is King:** Because path tracing is inherently slow, if you suggest a feature (e.g., glass refraction), implement it as cheaply as possible (single extra trace) rather than exploding the ray count.
 4. **Text Rendering:** The text system uses tile-culled SDF rendering. When adding text features, use `TextRenderer::AddText()`. For world-space text (player names), project 3D positions to screen space using the camera's view-projection matrix before calling AddText.
 
-## 8. Include Path Reference
+## 8. Console / Chat System
+
+The in-game console provides a Minecraft-style chat and command interface backed by the GPU
+text rendering pipeline (Pass 8, `text_overlay.shader`).
+
+### Architecture
+
+```
+GameConsole            — coordinator: owns buffer, input, registry, open/close state
+├── ConsoleBuffer      — ring buffer of messages, scrolling, GetVisibleLines()
+├── ConsoleInput       — text input state machine, cursor, command history
+├── CommandRegistry    — extensible command dispatch
+└── RegisterCommands  — ALL command handlers live here (see below)
+```
+
+**Message types** (`ConsoleMsgType`):
+- `System`  (white)  — informational output from commands
+- `Command` (gray)   — echoed command lines
+- `Chat`   (yellow)  — player chat / emotes
+- `Error`  (red)     — invalid usage, unknown commands
+
+**Console commands** (20 total, registered in `src/console/RegisterCommands.cpp`):
+
+| Category | Commands |
+|----------|----------|
+| Essential | `/help`, `/name` |
+| Navigation | `/spawn`, `/home`, `/sethome`, `/tp`, `/jump` |
+| Settings | `/speed`, `/gravity`, `/fly`, `/noclip`, `/fov`, `/sensitivity`, `/reset` |
+| Info | `/pos`, `/fps`, `/players`, `/me`, `/time`, `/clear` |
+
+**Key `State` fields for commands**:
+- `State::state.character` — position, speed, FOV, sensitivity, gravity, etc.
+- `State::state.homePosition` — saved home for `/sethome` + `/home`
+- `State::state.flyMode` — stub field for future fly implementation
+- `State::state.sunDirectionOverride` — stub for future `/time`
+- `State::state.fpsInfo` — populated each frame by the render loop
+
+**Input routing** (`Platform.hpp` adds):
+- `textInputQueue` + `textInputMutex` — thread-safe queue for printable characters
+- `consoleOpen` atomic — suppresses character movement while console is open
+
+**Opening the console**: Press `T` (blank chat) or `/` (command prefix). `Escape` closes it.
+Pressing `Enter` submits the input: `/` prefix → command dispatch; otherwise → chat sent via WebSocket.
+
+### Adding a New Command
+
+In `src/console/RegisterCommands.cpp`:
+
+```cpp
+// 1. Write the handler
+static void cmd_mycmd(const std::vector<std::string>& args, GameConsole& console) {
+    if (args.empty()) {
+        console.GetBuffer().AddMessage("Usage: /mycmd <arg>", ConsoleMsgType::Error);
+        return;
+    }
+    console.GetBuffer().AddMessage("It worked!", ConsoleMsgType::System);
+}
+
+// 2. Register it (alphabetically in the appropriate category block)
+reg.Register("mycmd", "Does something useful", cmd_mycmd);
+```
+
+The `CommandRegistry::Execute()` handles parsing, echo, and "unknown command" errors automatically.
+
+## 9. Include Path Reference
 
 When adding new files, use these include patterns:
 
@@ -264,7 +340,7 @@ When adding new files, use these include patterns:
 #include "renderer/TextRenderer.hpp"
 ```
 
-## 9. Build System Notes
+## 10. Build System Notes
 
 The project uses CMake with platform-specific configuration:
 - **macOS**: Metal shaders compiled at build time, Objective-C++ sources
@@ -275,4 +351,4 @@ Key files in `CMakeLists.txt`:
 - `src/renderer/CUDA/` and `src/renderer/D3D12/` sources for Windows builds
 - `src/renderer/FontAtlas.cpp` and `src/renderer/TextRenderer.mm` for text rendering
 
-Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`. Adding text or HUD elements uses the `TextRenderer` system described in Section 6.
+Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`. Adding text or HUD elements uses the `TextRenderer` system described in Section 6. Adding console commands is documented in Section 8.
