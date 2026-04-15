@@ -929,6 +929,16 @@ bool MaterialMap::RemoveVoxel(int32_t wx, int32_t wy, int32_t wz) {
     uint64_t dataOffset = (uint64_t)brickPoolIndex * 512 + (subIdx * 64) + vIdx;
     dataPtr[dataOffset] = 0; // MAT_AIR
 
+    // Step 11b: Synchronize so GPU sees the CPU-written changes
+    id<MTLCommandQueue> syncQueue = (id<MTLCommandQueue>)_commandQueue;
+    id<MTLCommandBuffer> syncCmd = [syncQueue commandBuffer];
+    id<MTLBlitCommandEncoder> syncEnc = [syncCmd blitCommandEncoder];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)occBuffer];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)dataBuffer];
+    [syncEnc endEncoding];
+    [syncCmd commit];
+    [syncCmd waitUntilCompleted];
+
     // Step 12: Update the block-edit overlay map
     SetBlockEdit(wx, wy, wz, 0);
 
@@ -1008,6 +1018,16 @@ bool MaterialMap::PlaceVoxel(int32_t wx, int32_t wy, int32_t wz, uint8_t matID) 
         uint64_t dataOffset = (uint64_t)brickPoolIndex * 512 + (subIdx * 64) + vIdx;
         dataPtr[dataOffset] = matID;
 
+        // Synchronize so GPU sees the CPU-written changes
+        id<MTLCommandQueue> syncQueue = (id<MTLCommandQueue>)_commandQueue;
+        id<MTLCommandBuffer> syncCmd = [syncQueue commandBuffer];
+        id<MTLBlitCommandEncoder> syncEnc = [syncCmd blitCommandEncoder];
+        [syncEnc synchronizeResource:(id<MTLBuffer>)occBuffer];
+        [syncEnc synchronizeResource:(id<MTLBuffer>)dataBuffer];
+        [syncEnc endEncoding];
+        [syncCmd commit];
+        [syncCmd waitUntilCompleted];
+
         SetBlockEdit(wx, wy, wz, matID);
         return true;
     }
@@ -1082,6 +1102,16 @@ bool MaterialMap::PlaceVoxel(int32_t wx, int32_t wy, int32_t wz, uint8_t matID) 
             newBrickIdx++;
         }
     }
+
+    // Synchronize so GPU sees the CPU-written changes (memcpy for existing bricks + init of new brick)
+    id<MTLCommandQueue> syncQueue = (id<MTLCommandQueue>)_commandQueue;
+    id<MTLCommandBuffer> syncCmd = [syncQueue commandBuffer];
+    id<MTLBlitCommandEncoder> syncEnc = [syncCmd blitCommandEncoder];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)occBuffer];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)dataBuffer];
+    [syncEnc endEncoding];
+    [syncCmd commit];
+    [syncCmd waitUntilCompleted];
 
     // Free old brick pool allocation
     if (oldBrickCount > 0) {
