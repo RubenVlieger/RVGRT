@@ -60,6 +60,11 @@ public:
     float sensitivity;
     float gravityAmount;
 
+    // Collision state (used when noclipMode = false)
+    bool onGround;
+    float playerHeight;
+    float playerRadius;
+
     bool IsKeyDown(char key);
     void Update(unsigned int frameCount);
     void UpdateTestNPC(float time, float deltaTime);

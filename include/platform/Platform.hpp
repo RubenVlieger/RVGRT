@@ -28,4 +28,9 @@ public:
   std::queue<char> textInputQueue;
   std::mutex textInputMutex;
   std::atomic<bool> consoleOpen{false};
+
+  // --- Block Interaction (Phase 2) ---
+  // Edge-triggered: set true on mouse down, consumed and reset in game loop
+  std::atomic<bool> leftMouseJustPressed{false};
+  std::atomic<bool> rightMouseJustPressed{false};
 };

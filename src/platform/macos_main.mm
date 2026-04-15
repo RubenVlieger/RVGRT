@@ -8,12 +8,16 @@
 
 #include "Character.hpp"
 #include "State.hpp"
+#include "VoxelQuery.hpp"
 #include "console/GameConsole.hpp"
 #import "platform/GameView.h"
 #include "platform/MacOSPlatform.hpp"
 #include "platform/NetworkClient.hpp"
 #include "renderer/Metal/MetalDevice.hpp"
 #include "renderer/Metal/MetalRenderer.hpp"
+
+// Global block edit overlay map (defined in VoxelQuery.hpp as extern)
+std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
 
 /**
  * @file macos_main.mm
@@ -176,6 +180,54 @@
   // Only update character movement when console is closed
   if (!State::state.console.IsOpen()) {
     State::state.character.Update(globalFrameCount);
+  }
+
+  // ── Block Interaction (Phase 2) ──────────────────────────────────────────
+  // Left click removes block, right click places block at crosshair.
+  // Only process clicks when console is closed and mouse is locked.
+  if (!State::state.console.IsOpen()) {
+    Platform* platform = State::state.platform.get();
+    if (platform) {
+      if (platform->leftMouseJustPressed.exchange(false)) {
+        auto& c = State::state.character;
+        glm::vec3 eyePos(c.position.x, c.position.y, c.position.z);
+        glm::vec3 dir(static_cast<float>(c.direction.x),
+                      static_cast<float>(c.direction.y),
+                      static_cast<float>(c.direction.z));
+        RaycastResult hit = RaycastDDA(eyePos, dir, 8.0f);
+        if (hit.hit) {
+          auto& mm = static_cast<MetalRenderer*>(State::state.renderer.get())->GetMaterialMap();
+          if (mm.RemoveVoxel(hit.voxelX, hit.voxelY, hit.voxelZ)) {
+            State::state.localBlockEdits.push_back({hit.voxelX, hit.voxelY, hit.voxelZ, 0});
+          }
+        }
+      }
+      if (platform->rightMouseJustPressed.exchange(false)) {
+        auto& c = State::state.character;
+        glm::vec3 eyePos(c.position.x, c.position.y, c.position.z);
+        glm::vec3 dir(static_cast<float>(c.direction.x),
+                      static_cast<float>(c.direction.y),
+                      static_cast<float>(c.direction.z));
+        RaycastResult hit = RaycastDDA(eyePos, dir, 8.0f);
+        if (hit.hit) {
+          auto& mm = static_cast<MetalRenderer*>(State::state.renderer.get())->GetMaterialMap();
+          if (mm.PlaceVoxel(hit.adjacentX, hit.adjacentY, hit.adjacentZ,
+                             State::state.selectedMaterialID)) {
+            State::state.localBlockEdits.push_back(
+                {hit.adjacentX, hit.adjacentY, hit.adjacentZ,
+                 State::state.selectedMaterialID});
+          }
+        }
+      }
+    }
+  }
+
+  // ── Block Reset Handling ──────────────────────────────────────────────
+  // Processed here because MaterialMap is only accessible from platform code.
+  if (State::state.blockResetRequested) {
+    auto& mm = static_cast<MetalRenderer*>(State::state.renderer.get())->GetMaterialMap();
+    mm.ResetBlockEdits();
+    State::state.blockResetRequested = false;
   }
 
   if (State::state.networkClient) {

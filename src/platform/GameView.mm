@@ -109,6 +109,19 @@
 - (void)rightMouseDragged:(NSEvent *)event { [self mouseMoved:event]; }
 - (void)otherMouseDragged:(NSEvent *)event { [self mouseMoved:event]; }
 
+// Block interaction: left click removes block, right click places block
+- (void)mouseDown:(NSEvent *)event {
+    Platform* platform = State::state.platform.get();
+    if (!platform) return;
+    platform->leftMouseJustPressed.store(true, std::memory_order_relaxed);
+}
+
+- (void)rightMouseDown:(NSEvent *)event {
+    Platform* platform = State::state.platform.get();
+    if (!platform) return;
+    platform->rightMouseJustPressed.store(true, std::memory_order_relaxed);
+}
+
 
 // A helper function to control the cursor's visibility and behavior
 - (void)setMouseLock:(BOOL)locked {

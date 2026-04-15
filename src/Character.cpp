@@ -2,6 +2,7 @@
 #include "Camera.hpp"
 #include "State.hpp"
 #include "platform/Platform.hpp"
+#include "VoxelQuery.hpp"
 #include "util.hpp"
 #include <cmath>
 #include <numbers>
@@ -31,7 +32,8 @@ Character::Character()
       velocity(0.0f), direction(0.0f, 0.0f, -1.0f),
       yaw(std::numbers::pi_v<float> * -0.5f), pitch(-std::numbers::pi_v<float>),
       speed(0.05f), speedDropoff(0.92f), jumpSpeed(2.0f), sensitivity(0.00003f),
-      gravityAmount(0.0f) {
+      gravityAmount(0.0f),
+      onGround(false), playerHeight(1.62f), playerRadius(0.3f) {
   lastRenderedViewProjectionMatrix = glm::mat4(1.0f);
 }
 
@@ -85,17 +87,7 @@ void Character::Update(unsigned int frameCount) {
   prevViewProjectionMatrix = viewProjectionMatrix;
   prevUnjitteredViewProjectionMatrix = unjitteredViewProjectionMatrix;
 
-  vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) +
-                         (platform->IsKeyDown('A') ? -1.0f : 0.0f),
-                     (platform->IsKeyDown(' ') ? 1.0f : 0.0f) +
-                         (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
-                     (platform->IsKeyDown('W') ? 1.0f : 0.0f) +
-                         (platform->IsKeyDown('S') ? -1.0f : 0.0f)) *
-                speed;
-
-  if (platform->IsKeyDown(0x38)) { // Shift modifier
-    inputs *= 0.3f;
-  }
+  float dt = platform->deltaTime / 1000.0f;
 
   if (!lockMouse) {
     float deltayaw = platform->deltaXMouse.exchange(0) * sensitivity *
@@ -103,7 +95,7 @@ void Character::Update(unsigned int frameCount) {
     float deltapitch = platform->deltaYMouse.exchange(0) * sensitivity *
                        platform->deltaTime * FOV;
 
-    if (platform->IsKeyDown(0x38)) {
+    if (platform->IsKeyDown(0x38)) { // Shift modifier
       deltayaw *= 0.4f;
       deltapitch *= 0.4f;
     }
@@ -116,17 +108,284 @@ void Character::Update(unsigned int frameCount) {
     direction = calcDirfromSphere(pitch, yaw);
   }
 
-  // Calculate movement
-  velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) +
-              inputs.z * (vec3)direction;
-  velocity *= speedDropoff;
+  if (State::state.noclipMode) {
+    // ─────────────────────────────────────────────────────────────────
+    // NOCLIP MODE: Free flight, no terrain collision
+    // ─────────────────────────────────────────────────────────────────
+    vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) +
+                           (platform->IsKeyDown('A') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown(' ') ? 1.0f : 0.0f) +
+                           (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown('W') ? 1.0f : 0.0f) +
+                           (platform->IsKeyDown('S') ? -1.0f : 0.0f)) *
+                  speed;
 
-  vec3 jump = vec3(0.0f, 1.0f, 0.0f) * inputs.y * jumpSpeed;
-  vec3 gravity = vec3(0.0f, 1.0f, 0.0f) * gravityAmount;
+    if (platform->IsKeyDown(0x38)) { // Shift modifier
+      inputs *= 0.3f;
+    }
 
-  vec3 addVector = (velocity + jump + gravity) * platform->deltaTime;
+    velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) +
+                inputs.z * (vec3)direction;
+    velocity *= speedDropoff;
 
-  position = glm::mix(position, position + addVector, 0.5f);
+    vec3 addVector = velocity * platform->deltaTime;
+    position = glm::mix(position, position + addVector, 0.5f);
+
+  } else {
+    // ─────────────────────────────────────────────────────────────────
+    // CLIPPED MODE: Full terrain collision with gravity and jumping
+    // ─────────────────────────────────────────────────────────────────
+    constexpr float walkSpeed = 4.3f;  // blocks per second
+    constexpr float sprintSpeed = 6.5f;
+    constexpr float terminalVelocity = -50.0f;
+    constexpr float stepHeight = 0.6f; // max step up height
+
+    // Horizontal movement — direct velocity control, not accumulation
+    float hSpeed = platform->IsKeyDown(0x38) ? sprintSpeed : walkSpeed;
+
+    vec3 moveDir(0.0f, 0.0f, 0.0f);
+    if (platform->IsKeyDown('W')) moveDir.z -= 1.0f;
+    if (platform->IsKeyDown('S')) moveDir.z += 1.0f;
+    if (platform->IsKeyDown('A')) moveDir.x -= 1.0f;
+    if (platform->IsKeyDown('D')) moveDir.x += 1.0f;
+
+    float moveLen = sqrt(moveDir.x * moveDir.x + moveDir.z * moveDir.z);
+    if (moveLen > 0.01f) {
+      moveDir.x /= moveLen;
+      moveDir.z /= moveLen;
+    }
+
+    // Convert moveDir from camera-relative to world XZ
+    vec3 dirRight = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f)));
+    velocity.x = moveDir.x * dirRight.x * hSpeed + moveDir.z * (-direction.x) * hSpeed;
+    velocity.z = moveDir.x * dirRight.z * hSpeed + moveDir.z * (-direction.z) * hSpeed;
+
+    // Jump impulse
+    if (platform->IsKeyDown(' ') && onGround) {
+      velocity.y = jumpSpeed;
+      onGround = false;
+    }
+
+    // Gravity
+    velocity.y += gravityAmount * dt;
+
+    // Terminal velocity clamp
+    velocity.y = glm::min(velocity.y, terminalVelocity);
+
+    // Propose new position
+    glm::vec3 proposedPos = position + velocity * dt;
+
+    // ── AABB Collision Resolution ──────────────────────────────────
+    //
+    // Player AABB: feet at position.y - playerHeight, head at position.y + 0.18f
+    //              half-width = playerRadius on X and Z
+    //
+    // Algorithm: resolve each axis independently (Y → X → Z) to allow
+    // wall-sliding and prevent corner-sticking.
+
+    float feetY = position.y - playerHeight;
+    float headRoom = 0.18f; // eye-to-head clearance
+
+    // Helper: check if a voxel at (mx, my, mz) is inside the player's AABB
+    // at given Y (for Y checks) or at proposed Y (for XZ checks)
+    auto overlapsAABB = [&](int mx, int my, int mz,
+                             float aabbMinY, float aabbMaxY,
+                             float aabbMinX, float aabbMaxX,
+                             float aabbMinZ, float aabbMaxZ) -> bool {
+      return (mx + 1 > aabbMinX && mx < aabbMaxX &&
+              my + 1 > aabbMinY && my < aabbMaxY &&
+              mz + 1 > aabbMinZ && mz < aabbMaxZ);
+    };
+
+    // ── Y-Axis Collision (ground + ceiling) ────────────────────────
+    {
+      float resolvedFeetY = proposedPos.y - playerHeight;
+      bool hitGround = false;
+      bool hitCeiling = false;
+
+      // Check voxels the player would occupy at proposed Y
+      int minIX = int(floor(proposedPos.x - playerRadius));
+      int maxIX = int(floor(proposedPos.x + playerRadius));
+      int minIZ = int(floor(proposedPos.z - playerRadius));
+      int maxIZ = int(floor(proposedPos.z + playerRadius));
+
+      // Ground check: look for solid voxels directly under feet
+      int groundY = int(floor(resolvedFeetY));
+      for (int ix = minIX; ix <= maxIX; ++ix) {
+        for (int iz = minIZ; iz <= maxIZ; ++iz) {
+          if (IsVoxelSolid(ix, groundY, iz)) {
+            hitGround = true;
+            break;
+          }
+        }
+        if (hitGround) break;
+      }
+
+      if (hitGround) {
+        // Snap feet to top of solid voxel
+        position.y = float(groundY + 1) + playerHeight;
+        velocity.y = 0.0f;
+        onGround = true;
+      } else {
+        // Ceiling check: look for solid voxels above head at proposed Y
+        position.y = proposedPos.y;
+        onGround = false;
+
+        int headY = int(floor(proposedPos.y + headRoom));
+        for (int ix = minIX; ix <= maxIX; ++ix) {
+          for (int iz = minIZ; iz <= maxIZ; ++iz) {
+            if (IsVoxelSolid(ix, headY, iz)) {
+              hitCeiling = true;
+              break;
+            }
+          }
+          if (hitCeiling) break;
+        }
+        if (hitCeiling) {
+          int ceilingY = int(floor(proposedPos.y + headRoom));
+          position.y = float(ceilingY) - headRoom;
+          velocity.y = 0.0f;
+        }
+      }
+    }
+
+    // ── X-Axis Collision ─────────────────────────────────────────────
+    {
+      float resolvedY = position.y;
+      float aabbMinY = resolvedY - playerHeight;
+      float aabbMaxY = resolvedY + headRoom;
+      float aabbMinZ = position.z - playerRadius;
+      float aabbMaxZ = position.z + playerRadius;
+
+      int minIX = int(floor(proposedPos.x - playerRadius));
+      int maxIX = int(floor(proposedPos.x + playerRadius));
+      int minIY = int(floor(aabbMinY));
+      int maxIY = int(floor(aabbMaxY));
+      int minIZ = int(floor(aabbMinZ));
+      int maxIZ = int(floor(aabbMaxZ));
+
+      bool hitX = false;
+      int hitVoxelX = 0;
+
+      if (proposedPos.x > position.x) {
+        // Moving positive X — check voxels on the +X face
+        int checkX = int(floor(proposedPos.x + playerRadius));
+        for (int iy = minIY; iy <= maxIY; ++iy) {
+          for (int iz = minIZ; iz <= maxIZ; ++iz) {
+            if (IsVoxelSolid(checkX, iy, iz)) {
+              hitX = true;
+              hitVoxelX = checkX;
+              break;
+            }
+          }
+          if (hitX) break;
+        }
+        if (hitX) {
+          position.x = float(hitVoxelX) - playerRadius;
+          velocity.x = 0.0f;
+        } else {
+          position.x = proposedPos.x;
+        }
+      } else if (proposedPos.x < position.x) {
+        // Moving negative X — check voxels on the -X face
+        int checkX = int(floor(proposedPos.x - playerRadius));
+        for (int iy = minIY; iy <= maxIY; ++iy) {
+          for (int iz = minIZ; iz <= maxIZ; ++iz) {
+            if (IsVoxelSolid(checkX, iy, iz)) {
+              hitX = true;
+              hitVoxelX = checkX;
+              break;
+            }
+          }
+          if (hitX) break;
+        }
+        if (hitX) {
+          position.x = float(hitVoxelX + 1) + playerRadius;
+          velocity.x = 0.0f;
+        } else {
+          position.x = proposedPos.x;
+        }
+      }
+    }
+
+    // ── Z-Axis Collision ─────────────────────────────────────────────
+    {
+      float aabbMinY = position.y - playerHeight;
+      float aabbMaxY = position.y + headRoom;
+      float aabbMinX = position.x - playerRadius;
+      float aabbMaxX = position.x + playerRadius;
+
+      int minIZ = int(floor(proposedPos.z - playerRadius));
+      int maxIZ = int(floor(proposedPos.z + playerRadius));
+      int minIY = int(floor(aabbMinY));
+      int maxIY = int(floor(aabbMaxY));
+      int minIX = int(floor(aabbMinX));
+      int maxIX = int(floor(aabbMaxX));
+
+      bool hitZ = false;
+      int hitVoxelZ = 0;
+
+      if (proposedPos.z > position.z) {
+        // Moving positive Z — check voxels on the +Z face
+        int checkZ = int(floor(proposedPos.z + playerRadius));
+        for (int iy = minIY; iy <= maxIY; ++iy) {
+          for (int ix = minIX; ix <= maxIX; ++ix) {
+            if (IsVoxelSolid(ix, iy, checkZ)) {
+              hitZ = true;
+              hitVoxelZ = checkZ;
+              break;
+            }
+          }
+          if (hitZ) break;
+        }
+        if (hitZ) {
+          position.z = float(hitVoxelZ) - playerRadius;
+          velocity.z = 0.0f;
+        } else {
+          position.z = proposedPos.z;
+        }
+      } else if (proposedPos.z < position.z) {
+        // Moving negative Z — check voxels on the -Z face
+        int checkZ = int(floor(proposedPos.z - playerRadius));
+        for (int iy = minIY; iy <= maxIY; ++iy) {
+          for (int ix = minIX; ix <= maxIX; ++ix) {
+            if (IsVoxelSolid(ix, iy, checkZ)) {
+              hitZ = true;
+              hitVoxelZ = checkZ;
+              break;
+            }
+          }
+          if (hitZ) break;
+        }
+        if (hitZ) {
+          position.z = float(hitVoxelZ + 1) + playerRadius;
+          velocity.z = 0.0f;
+        } else {
+          position.z = proposedPos.z;
+        }
+      }
+    }
+
+    // Re-check onGround: if Y resolution placed player on ground
+    {
+      int groundY = int(floor(position.y - playerHeight));
+      int minIX = int(floor(position.x - playerRadius));
+      int maxIX = int(floor(position.x + playerRadius));
+      int minIZ = int(floor(position.z - playerRadius));
+      int maxIZ = int(floor(position.z + playerRadius));
+      for (int ix = minIX; ix <= maxIX; ++ix) {
+        for (int iz = minIZ; iz <= maxIZ; ++iz) {
+          if (IsVoxelSolid(ix, groundY, iz)) {
+            onGround = true;
+            break;
+          }
+        }
+        if (onGround) break;
+      }
+    }
+  }
+
+  // ── Camera & View Matrices (shared by both modes) ──────────────────
   vec3 dirright = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f)));
   vec3 dirup = normalize(cross((vec3)direction, dirright));
 
@@ -158,25 +417,17 @@ void Character::Update(unsigned int frameCount) {
   platform->deltaXMouse.store(0);
   platform->deltaYMouse.store(0);
 
-  // Update Walk Animation Phase
+  // ── Walk Animation Phase ────────────────────────────────────────────
   vec2 horizontalVelocity = vec2(velocity.x, velocity.z);
   float currentSpeed = length(horizontalVelocity);
 
-  // A typical moving speed gives currentSpeed ~ 0.3 to 0.6
   float targetSwing = glm::clamp(currentSpeed * 2.0f, 0.0f, 1.0f);
-
-  // Smoothly interpolate walkSwingAmount
   walkSwingAmount =
       glm::mix(walkSwingAmount, targetSwing, platform->deltaTime * 10.0f);
 
-  // Advance the walk phase based on how fast the character is moving
-  walkPhase += currentSpeed * platform->deltaTime *
-               25.0f; // Multiplier tuned for visual cadence
-
-  // Keep the phase bounded to avoid floating point precision issues over time
+  walkPhase += currentSpeed * platform->deltaTime * 25.0f;
   walkPhase = fmod(walkPhase, std::numbers::pi_v<float> * 2.0f);
 
-  // Re-build all the body part matrices for the animation frame
   UpdateTransformations();
 }
 

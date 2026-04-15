@@ -5,8 +5,11 @@
 #include "hitInfo.hpp"
 #include "Timer.hpp"
 #include "console/GameConsole.hpp"
+#include "BlockInteraction.hpp"
 #include <memory>
+#include <mutex>
 #include <string>
+#include <vector>
 
 // Forward-declare the abstract interfaces
 class Platform;
@@ -41,11 +44,24 @@ public:
     // Fly mode state (not yet functional)
     bool flyMode = false;
 
+    // Noclip mode: free flight with no terrain collision (default: true)
+    // When set to false, full terrain collision is enabled with gravity and jumping
+    bool noclipMode = true;
+
     // Sun direction override (0,0,0 = use default)
     glm::vec3 sunDirectionOverride = glm::vec3(0.0f, 0.0f, 0.0f);
 
     // Last-frame FPS string for /fps command
     std::string fpsInfo = "0.0 ms";
+
+    // --- Block Interaction (Phase 2) ---
+    uint8_t selectedMaterialID = 2; // MAT_GRASS
+    std::vector<BlockEdit> localBlockEdits;
+
+    // Thread-safe queue for remote block edits (Phase 4 network)
+    std::mutex blockEditsMutex;
+    std::vector<BlockEdit> pendingRemoteEdits;
+    bool blockResetRequested = false;
 
     // --- Singleton Instance ---
     static State state;
