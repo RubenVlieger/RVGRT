@@ -17,6 +17,9 @@ private:
     std::vector<std::vector<float>> latestForeignStates;
     std::string savedUrl;
     ChatCallback _chatCallback;
+    BlockEditCallback _blockEditCallback;
+    BlockSyncCallback _blockSyncCallback;
+    BlockResetCallback _blockResetCallback;
     
     void ReadLoop() {
         if (!webSocketTask) return;
@@ -85,6 +88,38 @@ private:
                             std::string sender = senderName ? [senderName UTF8String] : "Unknown";
                             std::string txt = chatText ? [chatText UTF8String] : "";
                             weakThis->_chatCallback(senderId, sender, txt);
+                        }
+                    }
+                    else if ([type isEqualToString:@"block"]) {
+                        int32_t bx = [json[@"x"] intValue];
+                        int32_t by = [json[@"y"] intValue];
+                        int32_t bz = [json[@"z"] intValue];
+                        uint8_t matID = (uint8_t)[json[@"mat_id"] intValue];
+                        if (weakThis->_blockEditCallback) {
+                            weakThis->_blockEditCallback(bx, by, bz, matID);
+                        }
+                    }
+                    else if ([type isEqualToString:@"block_sync"]) {
+                        NSArray* changes = json[@"changes"];
+                        if (changes && [changes isKindOfClass:[NSArray class]]) {
+                            std::vector<BlockEdit> edits;
+                            edits.reserve([changes count]);
+                            for (NSDictionary* change in changes) {
+                                BlockEdit edit;
+                                edit.x = [change[@"x"] intValue];
+                                edit.y = [change[@"y"] intValue];
+                                edit.z = [change[@"z"] intValue];
+                                edit.matID = (uint8_t)[change[@"mat_id"] intValue];
+                                edits.push_back(edit);
+                            }
+                            if (weakThis->_blockSyncCallback) {
+                                weakThis->_blockSyncCallback(edits);
+                            }
+                        }
+                    }
+                    else if ([type isEqualToString:@"block_reset"]) {
+                        if (weakThis->_blockResetCallback) {
+                            weakThis->_blockResetCallback();
                         }
                     }
                 }
@@ -237,6 +272,45 @@ public:
 
     void SetChatCallback(ChatCallback callback) override {
         _chatCallback = callback;
+    }
+
+    void SendBlockEdit(int32_t x, int32_t y, int32_t z, uint8_t matID) override {
+        if (!webSocketTask || webSocketTask.state != NSURLSessionTaskStateRunning) {
+            return;
+        }
+
+        NSDictionary* payload = @{
+            @"type": @"block",
+            @"x": @(x),
+            @"y": @(y),
+            @"z": @(z),
+            @"mat_id": @(matID)
+        };
+
+        NSError* error = nil;
+        NSData* jsonData = [NSJSONSerialization dataWithJSONObject:payload options:0 error:&error];
+        if (!error && jsonData) {
+            NSString* jsonStr = [[NSString alloc] initWithData:jsonData encoding:NSUTF8StringEncoding];
+            NSURLSessionWebSocketMessage* msg = [[NSURLSessionWebSocketMessage alloc] initWithString:jsonStr];
+
+            [webSocketTask sendMessage:msg completionHandler:^(NSError * _Nullable sendError) {
+                if (sendError) {
+                    NSLog(@"Error sending block edit message: %@", sendError);
+                }
+            }];
+        }
+    }
+
+    void SetBlockEditCallback(BlockEditCallback callback) override {
+        _blockEditCallback = callback;
+    }
+
+    void SetBlockSyncCallback(BlockSyncCallback callback) override {
+        _blockSyncCallback = callback;
+    }
+
+    void SetBlockResetCallback(BlockResetCallback callback) override {
+        _blockResetCallback = callback;
     }
 };
 

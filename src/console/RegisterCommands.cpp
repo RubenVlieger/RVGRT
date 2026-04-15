@@ -255,6 +255,13 @@ static void cmd_reset(const std::vector<std::string>&, GameConsole& console) {
     State::state.blockResetRequested = true;
     State::state.localBlockEdits.clear();
 
+    // Notify the server so it resets its authority store and broadcasts
+    // the reset to all other clients.
+    auto cb = console.GetChatSendCallback();
+    if (cb) {
+        cb(console.GetPlayerName(), "/reset");
+    }
+
     Print(console, "All settings and block changes reset to defaults.");
 }
 

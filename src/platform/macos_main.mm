@@ -96,6 +96,21 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
     State::state.networkClient->SendChat(sender, text);
   });
 
+  // ── Block Network Sync Callbacks (Phase 4) ─────────────────────────────────
+  // Remote block edits from other players are queued on the WebSocket thread
+  // and applied on the main thread during game loop.
+  State::state.networkClient->SetBlockEditCallback([](int32_t x, int32_t y, int32_t z, uint8_t matID) {
+    std::lock_guard<std::mutex> lock(State::state.blockEditsMutex);
+    State::state.pendingRemoteEdits.push_back({x, y, z, matID});
+  });
+  State::state.networkClient->SetBlockSyncCallback([](const std::vector<BlockEdit>& edits) {
+    std::lock_guard<std::mutex> lock(State::state.blockEditsMutex);
+    State::state.pendingRemoteEdits = edits;
+  });
+  State::state.networkClient->SetBlockResetCallback([]() {
+    State::state.blockResetRequested = true;
+  });
+
   // 5. Create the compute-based Metal renderer.
   State::state.renderer = std::make_unique<MetalRenderer>(device);
 
@@ -199,6 +214,7 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
           auto& mm = static_cast<MetalRenderer*>(State::state.renderer.get())->GetMaterialMap();
           if (mm.RemoveVoxel(hit.voxelX, hit.voxelY, hit.voxelZ)) {
             State::state.localBlockEdits.push_back({hit.voxelX, hit.voxelY, hit.voxelZ, 0});
+            State::state.networkClient->SendBlockEdit(hit.voxelX, hit.voxelY, hit.voxelZ, 0);
           }
         }
       }
@@ -216,9 +232,30 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
             State::state.localBlockEdits.push_back(
                 {hit.adjacentX, hit.adjacentY, hit.adjacentZ,
                  State::state.selectedMaterialID});
+            State::state.networkClient->SendBlockEdit(hit.adjacentX, hit.adjacentY, hit.adjacentZ,
+                                                       State::state.selectedMaterialID);
           }
         }
       }
+    }
+  }
+
+  // ── Remote Block Edit Queue (Phase 4) ────────────────────────────────
+  // Drain block edits received from other players via the network.
+  // These are queued on the WebSocket thread and applied here on the main
+  // thread where MaterialMap is accessible.
+  {
+    std::lock_guard<std::mutex> lock(State::state.blockEditsMutex);
+    if (!State::state.pendingRemoteEdits.empty()) {
+      auto& mm = static_cast<MetalRenderer*>(State::state.renderer.get())->GetMaterialMap();
+      for (auto& edit : State::state.pendingRemoteEdits) {
+        if (edit.matID == 0)
+          mm.RemoveVoxel(edit.x, edit.y, edit.z);
+        else
+          mm.PlaceVoxel(edit.x, edit.y, edit.z, edit.matID);
+        SetBlockEdit(edit.x, edit.y, edit.z, edit.matID);
+      }
+      State::state.pendingRemoteEdits.clear();
     }
   }
 
@@ -227,6 +264,7 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
   if (State::state.blockResetRequested) {
     auto& mm = static_cast<MetalRenderer*>(State::state.renderer.get())->GetMaterialMap();
     mm.ResetBlockEdits();
+    State::state.localBlockEdits.clear();
     State::state.blockResetRequested = false;
   }
 
