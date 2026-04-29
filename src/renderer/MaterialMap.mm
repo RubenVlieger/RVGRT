@@ -4,6 +4,8 @@
 #import "VoxelQuery.hpp"
 #import "cumath.h"
 #import "renderer/Metal/MetalDevice.hpp"
+#include "renderer/ShaderGlobalParams.hpp"
+#include "ShaderBindings.generated.hpp"
 #include <algorithm>
 #include <cmath>
 #include <vector>
@@ -625,9 +627,15 @@ bool MaterialMap::UpdateStreaming(simd_float3 cameraPos)
     id<MTLCommandBuffer> cmd = [queue commandBuffer];
     id<MTLComputeCommandEncoder> enc = [cmd computeCommandEncoder];
 
-    [enc setComputePipelineState:_psoAnalyzeStreaming];[enc setBuffer:inBuf offset:0 atIndex:0];[enc setBuffer:outBuf offset:0 atIndex:1];
-
-    uint32_t totalItems = (uint32_t)numReq;[enc setBytes:&totalItems length:sizeof(uint32_t) atIndex:2];
+    [enc setComputePipelineState:_psoAnalyzeStreaming];
+    {
+        MaterialGenParams gp = {};
+        gp.worldOrigin = _worldOrigin;
+        gp.totalItems = (uint32_t)numReq;
+        [enc setBytes:&gp length:sizeof(MaterialGenParams) atIndex:ShaderBindings::XMap_AnalyzeStreaming::buffer::globalParams];
+    }
+    [enc setBuffer:inBuf offset:0 atIndex:ShaderBindings::XMap_AnalyzeStreaming::buffer::workItems];
+    [enc setBuffer:outBuf offset:0 atIndex:ShaderBindings::XMap_AnalyzeStreaming::buffer::resultBufferStreaming];
 
     MTLSize gridSize = MTLSizeMake(numReq, 1, 1);
     MTLSize groupSize =
@@ -689,17 +697,19 @@ bool MaterialMap::UpdateStreaming(simd_float3 cameraPos)
 
       [fenc setComputePipelineState:_psoFill];
 
-      [fenc setBuffer:workListBuffer offset:0 atIndex:0];
-      [fenc setBuffer:(id<MTLBuffer>)_sectorBuffer offset:0 atIndex:1];
+      {
+          MaterialGenParams gp = {};
+          gp.worldOrigin = _worldOrigin;
+          gp.totalItems = 0; // unused by FillBricks but part of the packed struct
+          [fenc setBytes:&gp length:sizeof(MaterialGenParams) atIndex:ShaderBindings::XMap_FillBricks::buffer::globalParams];
+      }
+      [fenc setBuffer:workListBuffer offset:0 atIndex:ShaderBindings::XMap_FillBricks::buffer::workList];
       [fenc setBuffer:(id<MTLBuffer>)_brickPool.GetOccupancyBuffer()
                offset:0
-              atIndex:2];
+              atIndex:ShaderBindings::XMap_FillBricks::buffer::occupancyBuffer];
       [fenc setBuffer:(id<MTLBuffer>)_brickPool.GetDataBuffer()
                offset:0
-              atIndex:3];
-
-      simd_int3 wo = _worldOrigin;
-      [fenc setBytes:&wo length:sizeof(simd_int3) atIndex:4];
+              atIndex:ShaderBindings::XMap_FillBricks::buffer::dataBuffer];
 
       NSUInteger totalSubBricks = workList.size() * 8;
       MTLSize fgridSize = MTLSizeMake(totalSubBricks, 1, 1);

@@ -287,6 +287,7 @@ elseif(APPLE)
     list(LENGTH KERNEL_SOURCES KERNEL_COUNT)
     math(EXPR KERNEL_LAST "${KERNEL_COUNT} - 1")
 
+    set(SLANG_GENERATED_METAL_FILES "")
     set(SLANG_GENERATED_AIR_FILES "")
 
     foreach(IDX RANGE 0 ${KERNEL_LAST})
@@ -295,6 +296,7 @@ elseif(APPLE)
 
         set(GENERATED_METAL_FILE "${SLANG_GENERATED_DIR}/${KERNEL_ENTRY_POINT}.metal")
         set(GENERATED_AIR_FILE "${SLANG_GENERATED_DIR}/${KERNEL_ENTRY_POINT}.air")
+        list(APPEND SLANG_GENERATED_METAL_FILES "${GENERATED_METAL_FILE}")
         list(APPEND SLANG_GENERATED_AIR_FILES "${GENERATED_AIR_FILE}")
 
         add_custom_command(
@@ -334,6 +336,16 @@ elseif(APPLE)
         COMMENT "Linking AIR files to metallib..."
     )
 
+    # --- Generate shader binding constants header from compiled .metal files ---
+    set(SHADER_BINDINGS_HEADER "${CMAKE_CURRENT_BINARY_DIR}/ShaderBindings.generated.hpp")
+    add_custom_command(
+        OUTPUT "${SHADER_BINDINGS_HEADER}"
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/gen_shader_bindings.py" "${SLANG_GENERATED_DIR}" "${SHADER_BINDINGS_HEADER}"
+        DEPENDS ${SLANG_GENERATED_METAL_FILES}
+        COMMENT "Generating shader binding constants..."
+    )
+    add_custom_target(GenerateShaderBindings DEPENDS "${SHADER_BINDINGS_HEADER}")
+
     add_custom_target(BuildMetalShaders DEPENDS "${MAC_METAL_LIBRARY_SRC}")
     
     file(WRITE "${CMAKE_CURRENT_SOURCE_DIR}/src/renderer/CudaRenderer_mac_stub.cpp"
@@ -360,7 +372,8 @@ elseif(APPLE)
     COMMENT "Stripping extended attributes to prevent CodeSign detritus error"
 )
 
-    add_dependencies(${APP_NAME} BuildMetalShaders)
+    add_dependencies(${APP_NAME} BuildMetalShaders GenerateShaderBindings)
+    target_include_directories(${APP_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
     #set_target_properties(${APP_NAME} PROPERTIES UNITY_BUILD ON)
     target_compile_options(${APP_NAME} PRIVATE -fobjc-arc)

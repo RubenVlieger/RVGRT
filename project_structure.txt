@@ -2,17 +2,19 @@
 
 This document is the master architectural blueprint for RVGRT, an advanced, cross-platform (Metal/CUDA) Minecraft-like path-traced voxel engine. It is specifically designed to provide LLMs with maximum context, accelerating debugging, feature implementation, and optimization.
 
-## Recent Changes (April 2026) — Rendering Pipeline Enhancements
+## Recent Changes (April 2026) — Slang Migration & Rendering Pipeline Enhancements
 
 The rendering pipeline was significantly enhanced with new passes, optimizations, and robustness fixes:
 
-- **Bilateral Upsample (`bilateral_upsample.shader`)**: New Pass 2.5 that upsamples half-resolution indirect light to full resolution using edge-aware bilateral filtering, improving GI quality.
-- **Fallback Blit (`FallbackBlit` kernel in `composite.shader`)**: Compute-based upscale/format-conversion fallback used when MetalFX Temporal Scaler is unavailable or disabled.
-- **LOD-only tracing in `dist_approx.shader`**: Distance approximation now uses sparse LOD traversal for faster empty-space skipping.
-- **Exposure luminance floor (`exposure.shader`)**: Minimum luminance clamp (`0.05`) prevents the exposure system from converging to pure black.
-- **Temporal Accumulation robustness (`temporal_acc.shader`)**: Added NaN checks and improved blend weights for more stable reprojection.
-- **Indirect Bounce sampling (`indirect_bounce.shader`)**: Now correctly samples full-resolution depth and normal textures.
-- **Sky motion vectors restored (`direct_light.shader`)**: Reverted to proper camera-rotation motion vectors for sky pixels (zero vectors caused black-screen artifacts with temporal upscaling).
+- **Slang Shader Migration (April 2026)**: All `.shader` files have been migrated to `.slang` files using the Slang shader language. The shader system now uses `.slang` files in `src/renderer/kernels/slang/` which are transpiled by Slang to Metal (`.metal` → `.air`) or CUDA (`.cu`) at build time. This replaces the previous custom preprocessor-based system that generated `.metal` and `.cuda` files.
+
+- **Bilateral Upsample (`bilateral_upsample.slang`)**: New Pass 2.5 that upsamples half-resolution indirect light to full resolution using edge-aware bilateral filtering, improving GI quality.
+- **Fallback Blit (`FallbackBlit` kernel in `composite.slang`)**: Compute-based upscale/format-conversion fallback used when MetalFX Temporal Scaler is unavailable or disabled.
+- **LOD-only tracing in `dist_approx.slang`**: Distance approximation now uses sparse LOD traversal for faster empty-space skipping.
+- **Exposure luminance floor (`exposure.slang`)**: Minimum luminance clamp (`0.05`) prevents the exposure system from converging to pure black.
+- **Temporal Accumulation robustness (`temporal_acc.slang`)**: Added NaN checks and improved blend weights for more stable reprojection.
+- **Indirect Bounce sampling (`indirect_bounce.slang`)**: Now correctly samples full-resolution depth and normal textures.
+- **Sky motion vectors restored (`direct_light.slang`)**: Reverted to proper camera-rotation motion vectors for sky pixels (zero vectors caused black-screen artifacts with temporal upscaling).
 - **Dynamic resize support**: `RendererBase::OnResize()` added to properly recreate render targets, output textures, and the MetalFX scaler on window resize.
 - **Benchmark logging**: `benchmark.log` tracks per-pass GPU timings and CPU overhead across sampled frames.
 
@@ -149,20 +151,26 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   │   ├── RendererBase.mm
 │   │   ├── TexturePack_impl.cu
 │   │   ├── TexturePack_impl.mm
-    │   │   ├── kernels/   # Shader kernels
-    │   │   │   └── shaders/   # Compute shader files
-    │   │   │       ├── bilateral_upsample.shader  (Edge-aware upsample of half-res indirect)
-    │   │   │       ├── composite.shader
-    │   │   │       ├── denoise.shader
-    │   │   │       ├── direct_light.shader
-    │   │   │       ├── dist_approx.shader
-    │   │   │       ├── exposure.shader
-    │   │   │       ├── indirect_bounce.shader
-    │   │   │       ├── material_gen.shader (Procedural voxel generation)
-    │   │   │       ├── text_overlay.shader  (SDF text rendering via compute)
-    │   │   │       ├── tables.shader
-    │   │   │       ├── temporal_acc.shader
-    │   │   │       └── volumetric.shader
+    │   └── kernels/
+│       └── slang/             # Slang shader source files (transpiled to Metal/CUDA)
+│           ├── ShaderTypes.slang     # Shared type definitions (matches ShaderTypes.h)
+│           ├── Settings.slang        # Feature toggles, material IDs, texture atlas indices
+│           ├── Math.slang            # Math helpers, constants, sky color
+│           ├── Tables.slang          # Ray mask optimization LUT (4096 bytes)
+│           ├── TerrainGen.slang      # Procedural terrain generation (FBM, simplex noise)
+│           ├── Intersection.slang    # Core ray-voxel intersection, trace(), traceShadow()
+│           ├── Raytracing.slang      # Texture sampling, hash functions, sampleSky()
+│           ├── dist_approx.slang     # Pass 0: Half-res LOD distance approximation
+│           ├── direct_light.slang   # Pass 1: GBuffer + Direct light + water reflections
+│           ├── indirect_bounce.slang # Pass 2: 1-bounce global illumination
+│           ├── bilateral_upsample.slang  # Pass 2.5: Edge-aware bilateral upsample
+│           ├── temporal_acc.slang     # Pass 3: Temporal reprojection + accumulation
+│           ├── denoise.slang         # Pass 4: A-Trous edge-avoiding denoiser
+│           ├── volumetric.slang      # Pass 5: Volumetric raymarch fog
+│           ├── exposure.slang         # Pass 6: Auto-exposure computation
+│           ├── composite.slang       # Pass 7: Final composite + tone mapping
+│           ├── material_gen.slang    # Passes 9-11: Sector analysis, brick filling, atlas filling
+│           └── text_overlay.slang    # Pass 12: SDF text rendering
 │   │   └── raytracing_functions_impl.cu
 │   └── exports.def
 └── vendor/            # Third-party dependencies
@@ -181,48 +189,48 @@ To render millions of voxels smoothly, the world is broken down into a 3-level h
 **Toroidal Streaming:** `MaterialMap::UpdateStreaming(cameraPos)` fires every frame. As the player moves across sector boundaries, old sectors at the trailing edge of the 3D texture are unloaded, and new sectors at the leading edge are queued for async GPU procedural generation (`psoAnalyze`, `psoFill`).
 
 ## 4. The Rendering Pipeline (Deep Dive)
-The `MetalRenderer::Draw()` loop executes a 9-Pass (plus post-process) Deferred Compute Pipeline on the GPU.
+The `MetalRenderer::Draw()` loop executes a 12-Pass (plus post-process) Deferred Compute Pipeline on the GPU, implemented as Slang shaders transpiled to Metal at build time.
 
-1. **Pass 0: DistApprox (`distApproximationKernel`)**
+1. **Pass 0: DistApprox (`distApproximationKernel` in `dist_approx.slang`)**
    - Renders a half-resolution depth map using LOD-only sparse traversal to optimize ray starting points for the main passes.
-2. **Pass 1: GBuffer & Direct Light (`GBufferAndDirectLight`)**
+2. **Pass 1: GBuffer & Direct Light (`GBufferAndDirectLight` in `direct_light.slang`)**
    - Full resolution. Shoots primary rays (`hitInfo = trace()`).
    - Computes Water logic (surface noise, reflections, specularity, refractions).
    - Trace shadow rays to the sun. Outputs Albedo, Normal, Motion Vectors (including sky), and Direct Lighting.
-3. **Pass 2: Indirect Bounce (`IndirectBounce`)**
+3. **Pass 2: Indirect Bounce (`IndirectBounce` in `indirect_bounce.slang`)**
    - Hemisphere sampling via cosine-weighted random rays based on the `normal`.
    - Bounces rays to calculate Global Illumination (GI). Traces short shadow rays for the bounced light.
    - Samples full-resolution depth and normal textures for improved accuracy.
    - Output is extremely noisy (half-resolution).
-4. **Pass 2.5: Bilateral Upsample (`BilateralUpsample`)**
+4. **Pass 2.5: Bilateral Upsample (`BilateralUpsample` in `bilateral_upsample.slang`)**
    - Edge-aware upsample of half-resolution raw indirect light to full resolution using depth similarity weights.
-5. **Pass 3: Temporal Accumulation (`TemporalAccumulation`)**
+5. **Pass 3: Temporal Accumulation (`TemporalAccumulation` in `temporal_acc.slang`)**
    - Uses Motion Vectors from Pass 1 to reproject the previous frame's Indirect Light.
    - Exponential moving average with NaN checks and improved blend weights for stable convergence.
-6. **Pass 4: Denoise (`BilateralDenoise`)**
+6. **Pass 4: Denoise (`BilateralDenoise` in `denoise.slang`)**
    - An *A-Trous Edge-Avoiding Spatial Filter* executing in 3 iterations (Step widths: 1, 2, and 4).
    - Preserves geometry edges using Normal and Depth strictness weights while smoothing out the accumulated GI noise.
-7. **Pass 5: Volumetric (`VolumetricFog`)**
+7. **Pass 5: Volumetric (`VolumetricFog` in `volumetric.slang`)**
    - Half-resolution raymarching through the SVO.
    - Samples shadow maps incrementally to compute realistic god-rays and scattering in empty air.
-8. **Pass 6: Exposure (`ComputeExposure`)**
+8. **Pass 6: Exposure (`ComputeExposure` in `exposure.slang`)**
    - A compute shader that averages scene luminance and writes to a shared 1-element buffer to smoothly adapt camera exposure over time.
    - Enforces a minimum luminance floor (`0.05`) to prevent convergence to pure black.
-9. **Pass 7: Composite (`Composite`)**
+9. **Pass 7: Composite (`Composite` in `composite.slang`)**
    - Combines Direct Light, Denoised Indirect Light, Albedo, Volumetrics, and Skybox into an HDR buffer, applying the Exposure modifier and tone-mapping.
-10. **Pass 8: TextOverlay (`TextOverlay`)**
+10. **Pass 8: TextOverlay (`TextOverlay` in `text_overlay.slang`)**
     - Renders SDF (Signed Distance Field) text onto the composited image before upscaling.
     - Uses tile-culled rendering: the screen is divided into 64x64 pixel tiles. CPU builds a per-tile glyph list each frame. GPU pixels only iterate over glyphs in their tile (typically 1-5), not all 200+.
     - Each glyph is a screen-space quad. The SDF atlas is sampled for smooth, resolution-independent text.
     - Supports depth-tested 3D text (player name tags) and screen-space text (chat, HUD).
 11. **Post-Process:**
     - **MetalFX Temporal Scaler** (when available): Upsamples from render resolution to screen resolution using motion vectors, depth, and jitter offsets for TAA-quality anti-aliasing.
-    - **Fallback Blit** (`FallbackBlit`): A compute-based upscale and format-conversion kernel used when MetalFX is disabled or unavailable.
+    - **Fallback Blit** (`FallbackBlit` in `composite.slang`): A compute-based upscale and format-conversion kernel used when MetalFX is disabled or unavailable.
 
-## 5. Raytracing Algorithms (`intersections.h`)
-The heart of the performance lies in `intersections.h` (included by `.metal` kernels).
+## 5. Raytracing Algorithms (`Intersection.slang`)
+The heart of the performance lies in `Intersection.slang` (included by `.slang` kernels).
 - **Character AABB Intersections:** Before voxel traversal, rays evaluate O(1) intersections against `CharacterGPUData` bounding boxes and 6 local body part AABBs (`[-0.5, 0.5]^3`). Ray collisions return Grass (`matID = 255`) and resolve local face normals accurately via inverse-transpose mapping. Primary rays skip self-intersections inside the player bounding box.
-- **`GetStepPos()`**: Evaluates the hierarchy. Checks Level 1 (Indirection), then Level 2 (Sector Mask), then Level 3 (Occupancy). 
+- **`GetStepPos()`**: Evaluates the hierarchy. Checks Level 1 (Indirection), then Level 2 (Sector Mask), then Level 3 (Occupancy).
 - **LOD Optimization:** If a region is empty or far away, it identifies the sparse bounds using `GetIsotropicLOD()` and skips vast empty spaces instantly by advancing the ray position to the cell boundary.
 - **Bitwise Magic:** Utilizes `popcnt64()` and bitmasking (`BitTestHalf64`) against a `RayMaskOptimizationLUT` to cheaply calculate intersection boundaries within an 8x8x8 or 4x4x4 cell without standard AABB testing.
 
@@ -371,15 +379,43 @@ When adding new files, use these include patterns:
 ## 10. Build System Notes
 
 The project uses CMake with platform-specific configuration:
-- **macOS**: Metal shaders compiled at build time, Objective-C++ sources
-- **Windows**: CUDA kernels preprocessed from .shader files, compiled with nvcc
+- **macOS**: Slang shaders (`*.slang`) compiled at build time via `slangc` → MSL → AIR → metallib
+- **Windows**: Slang shaders transpiled to CUDA (`.cu`) via `slangc -target cuda`
+
+### Slang Shader Compilation Pipeline
+
+The build system uses **Slang** (shader languagecompiler, `slangc`) to transpile `.slang` files to platform-specific code:
+
+**macOS (Metal):**
+1. `slangc -target metal` transpiles `.slang` → `.metal` (Metal Shading Language)
+2. `xcrun metal -c` compiles `.metal` → `.air` (AIR bytecode)
+3. `xcrun metallib` links all `.air` files → `default.metallib`
+
+**Windows (CUDA):**
+1. `slangc -target cuda` generates `.cu` files from `.slang` sources
+
+### Kernel Entry Points
+
+| Kernel File | Entry Point | Purpose |
+|-------------|-------------|---------|
+| `dist_approx.slang` | `distApproximationKernel` | Half-res LOD distance approximation |
+| `direct_light.slang` | `GBufferAndDirectLight` | Primary rays + direct lighting + water |
+| `indirect_bounce.slang` | `IndirectBounce` | 1-bounce global illumination |
+| `bilateral_upsample.slang` | `BilateralUpsample` | Edge-aware half→full upsample |
+| `temporal_acc.slang` | `TemporalAccumulation` | Temporal reprojection + accumulation |
+| `denoise.slang` | `BilateralDenoise` | A-Trous edge-avoiding filter |
+| `volumetric.slang` | `VolumetricFog` | Volumetric raymarch fog |
+| `exposure.slang` | `ComputeExposure` | Auto-exposure adaptation |
+| `composite.slang` | `Composite`, `FallbackBlit` | Final composite + fallback upscale |
+| `material_gen.slang` | `XMap_AnalyzeSectors`, `XMap_AnalyzeStreaming`, `XMap_FillBricks`, `FillDynamicAtlases` | Terrain generation |
+| `text_overlay.slang` | `TextOverlay` | SDF text rendering |
 
 Key files in `CMakeLists.txt`:
-- `src/renderer/Metal/` sources for macOS builds
-- `src/renderer/CUDA/` and `src/renderer/D3D12/` sources for Windows builds
-- `src/renderer/FontAtlas.cpp` and `src/renderer/TextRenderer.mm` for text rendering
+- `src/renderer/kernels/slang/*.slang` — all shader sources
+- `slang_binary` FetchContent — downloads and builds Slang compiler
+- Platform-specific compilation via `slangc` and `xcrun toolchain`
 
-Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`. Adding text or HUD elements uses the `TextRenderer` system described in Section 6. Adding console commands is documented in Section 8.
+Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `Intersection.slang`. Adding text or HUD elements uses the `TextRenderer` system described in Section 6. Adding console commands is documented in Section 8.
 
 ## 11. Multiplayer Server (`RVGRT-server/`)
 
