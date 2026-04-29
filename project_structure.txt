@@ -2,6 +2,20 @@
 
 This document is the master architectural blueprint for RVGRT, an advanced, cross-platform (Metal/CUDA) Minecraft-like path-traced voxel engine. It is specifically designed to provide LLMs with maximum context, accelerating debugging, feature implementation, and optimization.
 
+## Recent Changes (April 2026) — Rendering Pipeline Enhancements
+
+The rendering pipeline was significantly enhanced with new passes, optimizations, and robustness fixes:
+
+- **Bilateral Upsample (`bilateral_upsample.shader`)**: New Pass 2.5 that upsamples half-resolution indirect light to full resolution using edge-aware bilateral filtering, improving GI quality.
+- **Fallback Blit (`FallbackBlit` kernel in `composite.shader`)**: Compute-based upscale/format-conversion fallback used when MetalFX Temporal Scaler is unavailable or disabled.
+- **LOD-only tracing in `dist_approx.shader`**: Distance approximation now uses sparse LOD traversal for faster empty-space skipping.
+- **Exposure luminance floor (`exposure.shader`)**: Minimum luminance clamp (`0.05`) prevents the exposure system from converging to pure black.
+- **Temporal Accumulation robustness (`temporal_acc.shader`)**: Added NaN checks and improved blend weights for more stable reprojection.
+- **Indirect Bounce sampling (`indirect_bounce.shader`)**: Now correctly samples full-resolution depth and normal textures.
+- **Sky motion vectors restored (`direct_light.shader`)**: Reverted to proper camera-rotation motion vectors for sky pixels (zero vectors caused black-screen artifacts with temporal upscaling).
+- **Dynamic resize support**: `RendererBase::OnResize()` added to properly recreate render targets, output textures, and the MetalFX scaler on window resize.
+- **Benchmark logging**: `benchmark.log` tracks per-pass GPU timings and CPU overhead across sampled frames.
+
 ## Recent Restructuring (March 2025) & Multiplayer Block Sync (Phase 2-4)
 
 The codebase was recently reorganized to improve maintainability and provide clearer separation of platform-specific code:

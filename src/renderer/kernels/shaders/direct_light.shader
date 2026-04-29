@@ -166,14 +166,24 @@ KERNEL(GBufferAndDirectLight)(
             irradiance = HALF3_FROM_FLOAT3(c_sunColor) * NdotL * (isShadowed ? HALF_LITERAL(0.02f) : HALF_LITERAL(1.0f));
         }
     } else {
-        // Sky - zero motion for sky pixels
+        // Sky
         irradiance = sampleSky(dir, frame.sunDirection);
         albedo = HALF3(1.0f, 1.0f, 1.0f);
         
+        float3 fakePos = camera.position + dir * 1000.0f;
+        float4 currentClipPos = camera.unjitteredViewProjection * float4(fakePos, 1.0f);
+        float4 previousClipPos = camera.prevUnjitteredViewProjection * float4(fakePos, 1.0f);
+        float2 mv = make_float2(0.0f, 0.0f);
+        if (previousClipPos.w > 0.0f && currentClipPos.w > 0.0f) {
+            float2 prevNDC = make_float2(previousClipPos.x / previousClipPos.w, previousClipPos.y / previousClipPos.w);
+            float2 currNDC = make_float2(currentClipPos.x / currentClipPos.w, currentClipPos.y / currentClipPos.w);
+            mv = make_float2(0.5f * (currNDC.x - prevNDC.x), 0.5f * (currNDC.y - prevNDC.y));
+            mv.y = -mv.y;
+        }
 #if defined(PLATFORM_METAL)
-        TEX_WRITE_2D(texMotion, float4(0.0f, 0.0f, 0.0f, 0.0f), gid);
+        TEX_WRITE_2D(texMotion, float4(mv.x, mv.y, 0.0f, 0.0f), gid);
 #else
-        TEX_WRITE_2D(texMotion, make_float4(0.0f, 0.0f, 0.0f, 0.0f), gid);
+        TEX_WRITE_2D(texMotion, make_float4(mv.x, mv.y, 0.0f, 0.0f), gid);
 #endif
     }
 
