@@ -9,12 +9,12 @@
 // FEATURE TOGGLES
 // ---------------------------------------------------------------------------------
 #define VOLUMETRIC_FOG 1
-#define INDIRECT_LIGHTING 0
+#define INDIRECT_LIGHTING 1
 #define REFLECTIONS 1
-#define SHADOWS 0
+#define SHADOWS 1
 
 #define CHARACTER_MODELS 1
-#define USE_METALFX 1
+#define USE_METALFX 0
 
 // ---------------------------------------------------------------------------------
 // SHADOW CASTING SETTINGS (Distance & Quality)
