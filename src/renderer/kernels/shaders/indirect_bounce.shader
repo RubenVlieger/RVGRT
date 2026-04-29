@@ -53,13 +53,21 @@ KERNEL(IndirectBounce)(
     return;
 #endif
 
-    float depth = TEX_READ_2D(texDepth, gid).r;
+    // texDepth and texNormal are full-resolution, but this pass dispatches at half-res.
+    // Scale gid by 2 to sample the correct full-res pixel.
+#if defined(PLATFORM_METAL)
+    uint2 fullResGid = gid * 2;
+#else
+    int2 fullResGid = make_int2(gid.x * 2, gid.y * 2);
+#endif
+
+    float depth = TEX_READ_2D(texDepth, fullResGid).r;
     if (depth > 50000.0f) {
         TEX_WRITE_2D(texRawIndirect, float4(0,0,0,0), gid);
         return;
     }
 
-    half3 normal = HALF3_FROM_FLOAT3(TEX_READ_2D(texNormal, gid).rgb);
+    half3 normal = HALF3_FROM_FLOAT3(TEX_READ_2D(texNormal, fullResGid).rgb);
     float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);
     float3 pos = reconstructPos(depth, uv, camera);
 
@@ -88,7 +96,8 @@ KERNEL(IndirectBounce)(
 
     // Bounce Trace
     hitInfo hit = trace(pos + (float3)normal * 0.01f, rayDir, indirection, sectorBuffer,
-                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                        occupancyBuffer, dataBuffer, sectorMaskBuffer, frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData,
+                        INDIRECT_BOUNCE_MAX_ITERS);
     
     half3 incomingLight = HALF3(0.0f, 0.0f, 0.0f);
 

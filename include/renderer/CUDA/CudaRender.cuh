@@ -32,7 +32,7 @@ public:
     
     // Matching MetalRenderer interface
     void GenerateWorld();
-    void OnResize(uint32_t newWidth, uint32_t newHeight);
+    void OnResize(uint32_t renderW, uint32_t renderH, uint32_t screenW, uint32_t screenH);
     void ResetScaler();
     
     // DLSS Support

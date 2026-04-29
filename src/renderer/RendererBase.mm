@@ -15,6 +15,8 @@ template<typename Traits>
 void RendererBase<Traits>::Initialize(uint32_t width, uint32_t height) {
     _width = width;
     _height = height;
+    _outputWidth = width;
+    _outputHeight = height;
     
     // Create render targets
     _renderTargetManager.CreateTargets(width, height);
@@ -25,6 +27,21 @@ void RendererBase<Traits>::Initialize(uint32_t width, uint32_t height) {
     
     // Create pipeline states (implemented by derived class)
     CreatePipelineStates();
+}
+
+template<typename Traits>
+void RendererBase<Traits>::OnResize(uint32_t renderW, uint32_t renderH, uint32_t screenW, uint32_t screenH) {
+    State::dispWIDTH = renderW;
+    State::dispHEIGHT = renderH;
+    State::screenWIDTH = screenW;
+    State::screenHEIGHT = screenH;
+    
+    _renderTargetManager.Resize(renderW, renderH);
+    _width = renderW;
+    _height = renderH;
+    _outputWidth = screenW;
+    _outputHeight = screenH;
+    _scalerNeedsReset = true;
 }
 
 template<typename Traits>
@@ -43,19 +60,6 @@ void RendererBase<Traits>::Shutdown() {
     }
     
     // Render targets are automatically destroyed by the manager's destructor
-}
-
-template<typename Traits>
-void RendererBase<Traits>::OnResize(uint32_t newWidth, uint32_t newHeight) {
-    State::dispWIDTH = newWidth;
-    State::dispHEIGHT = newHeight;
-    State::screenWIDTH = newWidth;
-    State::screenHEIGHT = newHeight;
-    
-    _renderTargetManager.Resize(newWidth, newHeight);
-    _width = newWidth;
-    _height = newHeight;
-    _scalerNeedsReset = true;
 }
 
 template<typename Traits>

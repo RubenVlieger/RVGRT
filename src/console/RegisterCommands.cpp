@@ -1,11 +1,9 @@
 #include "console/RegisterCommands.hpp"
 #include "console/GameConsole.hpp"
 #include "State.hpp"
+#include "VoxelQuery.hpp"
 #include <sstream>
 #include <cstdlib>
-
-// ============================================================================
-// RegisterCommands.cpp
 //
 // This file registers all in-game console commands. It is the single
 // canonical location for command definitions — DO NOT spread command
@@ -58,6 +56,7 @@
 #include "console/RegisterCommands.hpp"
 #include "console/GameConsole.hpp"
 #include "State.hpp"
+#include "VoxelQuery.hpp"
 #include <sstream>
 #include <cstdlib>
 
@@ -199,16 +198,40 @@ static void cmd_noclip(const std::vector<std::string>&, GameConsole& console) {
     State::state.noclipMode = newMode;
 
     if (newMode) {
-        // Enabling noclip: disable gravity, restore jump as vertical thrust
         State::state.character.gravityAmount = 0.0f;
-        State::state.character.jumpSpeed = 2.0f;
         State::state.character.onGround = false;
+        State::state.character.velocity = glm::vec3(0.0f);
         Print(console, "Noclip enabled — free flight active.", ConsoleMsgType::System);
     } else {
-        // Disabling noclip: enable gravity and set jump impulse
-        State::state.character.gravityAmount = -24.0f; // blocks/s² (Minecraft-like)
-        State::state.character.jumpSpeed = 7.5f;       // blocks/s impulse
-        Print(console, "Noclip disabled — collision enabled.", ConsoleMsgType::System);
+        State::state.character.gravityAmount = -24.0f;
+        State::state.character.jumpSpeed = 7.5f;
+        State::state.character.velocity.x = 0.0f;
+        State::state.character.velocity.z = 0.0f;
+        State::state.character.velocity.y = 0.0f;
+        State::state.character.onGround = false;
+
+        // Search downward for ground surface and snap player onto it
+        glm::vec3 pos = State::state.character.position;
+        float feetY = pos.y - State::state.character.playerHeight;
+        int startBlockY = int(floor(feetY));
+        int blockX = int(floor(pos.x));
+        int blockZ = int(floor(pos.z));
+
+        bool foundGround = false;
+        for (int y = startBlockY; y > startBlockY - 256; --y) {
+            if (IsVoxelSolid(blockX, y, blockZ)) {
+                State::state.character.position.y = float(y + 1) + State::state.character.playerHeight;
+                State::state.character.onGround = true;
+                foundGround = true;
+                break;
+            }
+        }
+
+        if (!foundGround) {
+            Print(console, "Noclip disabled — no ground found below! You will fall.", ConsoleMsgType::Error);
+        } else {
+            Print(console, "Noclip disabled — collision enabled.", ConsoleMsgType::System);
+        }
     }
 }
 

@@ -32,8 +32,6 @@ public:
     glm::mat4 prevUnjitteredViewProjectionMatrix;
     glm::mat4 inverseViewProjectionMatrix;
     glm::mat4 prevViewProjectionMatrix;
-
-    glm::mat4 lastRenderedViewProjectionMatrix; 
     
     // Camera params
     float nearPlane;

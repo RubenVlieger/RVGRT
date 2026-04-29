@@ -5,11 +5,13 @@
 #include "cumath.h"
 #include "renderer/MaterialMap.hpp"
 #include "renderer/ShaderTypes.h"
+#include "renderer/shader_settings.h"
 #include "console/GameConsole.hpp"
 #include "console/ConsoleBuffer.hpp"
 #include <MetalFX/MetalFX.h>
 #import <MetalKit/MetalKit.h>
 #include <cassert>
+#include <chrono>
 
 @protocol MTLFXTemporalScaler_Unlocked <NSObject>
 @property(readwrite, nonatomic) simd_float2 motionVectorScale;
@@ -23,6 +25,8 @@ MetalRenderer::MetalRenderer(Device device)
     , _library(nullptr)
     , _commandQueue(nullptr)
     , _temporalScaler(nullptr)
+    , _outputTexture(nullptr)
+    , _computeToMetalFXFence(nullptr)
     , _counterSampleBuffer(nullptr)
     , _timestampBuffer(nullptr)
     , _supportsTimestamps(false)
@@ -30,6 +34,10 @@ MetalRenderer::MetalRenderer(Device device)
 {
     // Create command queue
     _commandQueue = [device newCommandQueue];
+    
+    // Create synchronization fence for compute-to-MetalFX handoff
+    _computeToMetalFXFence = [(id<MTLDevice>)device newFence];
+    ((id<MTLFence>)_computeToMetalFXFence).label = @"ComputeToMetalFX";
     
     // Load Metal library
     NSError *error = nil;
@@ -46,11 +54,14 @@ MetalRenderer::MetalRenderer(Device device)
     CreateExposureBuffer();
     CreateCharacterBuffer();
     
-    // Initialize render targets
-    Initialize(State::dispWIDTH, State::dispHEIGHT);
-    
-    // Create MetalFX temporal scaler
-    CreateTemporalScaler(State::dispWIDTH, State::dispHEIGHT);
+// Initialize render targets
+  Initialize(State::dispWIDTH, State::dispHEIGHT);
+  
+  // Create output texture at screen resolution for MetalFX / presentation
+  CreateOutputTexture(State::screenWIDTH, State::screenHEIGHT);
+  
+  // Create MetalFX temporal scaler (input=render res, output=screen res)
+  CreateTemporalScaler(State::dispWIDTH, State::dispHEIGHT, State::screenWIDTH, State::screenHEIGHT);
     
     // Clear history buffers to avoid uninitialized memory artifacts
     ClearHistoryBuffers();
@@ -84,7 +95,7 @@ MetalRenderer::~MetalRenderer() {
 void MetalRenderer::CreatePipelineStates() {
     id<MTLDevice> device = (id<MTLDevice>)_device;
     NSError *error = nil;
-    
+
     _psoDistApprox = [device newComputePipelineStateWithFunction:
                        [_library newFunctionWithName:@"distApproximationKernel"]
                                                             error:&error];
@@ -106,15 +117,21 @@ void MetalRenderer::CreatePipelineStates() {
     _psoVolumetric = [device newComputePipelineStateWithFunction:
                        [_library newFunctionWithName:@"VolumetricFog"]
                                                             error:&error];
-_psoExposure = [device newComputePipelineStateWithFunction:
+    _psoExposure = [device newComputePipelineStateWithFunction:
                       [_library newFunctionWithName:@"ComputeExposure"]
                                                            error:&error];
     _psoTextOverlay = [device newComputePipelineStateWithFunction:
-                         [_library newFunctionWithName:@"TextOverlay"]
-                                                              error:&error];
+                          [_library newFunctionWithName:@"TextOverlay"]
+                                                               error:&error];
+    _psoBilateralUpsample = [device newComputePipelineStateWithFunction:
+                               [_library newFunctionWithName:@"BilateralUpsample"]
+                                                                    error:&error];
+    _psoFallbackBlit = [device newComputePipelineStateWithFunction:
+                               [_library newFunctionWithName:@"FallbackBlit"]
+                                                                    error:&error];
     
     if (!_psoDistApprox || !_psoGBuffer || !_psoIndirect || !_psoAccumulate ||
-        !_psoDenoise || !_psoComposite || !_psoVolumetric || !_psoExposure || !_psoTextOverlay) {
+        !_psoDenoise || !_psoComposite || !_psoVolumetric || !_psoExposure || !_psoTextOverlay || !_psoBilateralUpsample || !_psoFallbackBlit) {
         NSLog(@"FATAL: Failed to load kernels. Error: %@", error);
         abort();
     }
@@ -131,6 +148,8 @@ void MetalRenderer::DestroyPipelineStates() {
     _psoVolumetric = nullptr;
     _psoExposure = nullptr;
     _psoTextOverlay = nullptr;
+    _psoBilateralUpsample = nullptr;
+    _psoFallbackBlit = nullptr;
     _library = nullptr;
 }
 
@@ -167,23 +186,24 @@ void MetalRenderer::SetupTimestampSupport() {
             MTLCounterSampleBufferDescriptor *desc = [[MTLCounterSampleBufferDescriptor alloc] init];
             desc.counterSet = timestampSet;
             desc.label = @"TimestampCounter";
-            desc.sampleCount = 18;
+            desc.sampleCount = 20;
             desc.storageMode = MTLStorageModePrivate;
             _counterSampleBuffer = [device newCounterSampleBufferWithDescriptor:desc error:nil];
-            _timestampBuffer = [device newBufferWithLength:18 * sizeof(uint64_t)
+            _timestampBuffer = [device newBufferWithLength:20 * sizeof(uint64_t)
                                                     options:MTLResourceStorageModeShared];
         }
     }
 }
 
-void MetalRenderer::CreateTemporalScaler(uint32_t width, uint32_t height) {
+void MetalRenderer::CreateTemporalScaler(uint32_t renderWidth, uint32_t renderHeight, uint32_t outputWidth, uint32_t outputHeight) {
     id<MTLDevice> device = (id<MTLDevice>)_device;
     
+#if USE_METALFX
     MTLFXTemporalScalerDescriptor *scalerDesc = [[MTLFXTemporalScalerDescriptor alloc] init];
-    scalerDesc.inputWidth = width;
-    scalerDesc.inputHeight = height;
-    scalerDesc.outputWidth = width;
-    scalerDesc.outputHeight = height;
+    scalerDesc.inputWidth = renderWidth;
+    scalerDesc.inputHeight = renderHeight;
+    scalerDesc.outputWidth = outputWidth;
+    scalerDesc.outputHeight = outputHeight;
     scalerDesc.colorTextureFormat = MTLPixelFormatRGBA16Float;
     scalerDesc.depthTextureFormat = MTLPixelFormatR32Float;
     scalerDesc.motionTextureFormat = MTLPixelFormatRG16Float;
@@ -192,7 +212,29 @@ void MetalRenderer::CreateTemporalScaler(uint32_t width, uint32_t height) {
     _temporalScaler = [scalerDesc newTemporalScalerWithDevice:device];
     _scalerNeedsReset = true;
     
-    NSLog(@"MetalFX Temporal Scaler created: %dx%d -> %dx%d", width, height, width, height);
+    NSLog(@"MetalFX Temporal Scaler created: %dx%d -> %dx%d", renderWidth, renderHeight, outputWidth, outputHeight);
+#else
+    _temporalScaler = nullptr;
+    _scalerNeedsReset = false;
+    NSLog(@"MetalFX Temporal Scaler is DISABLED via USE_METALFX fallback");
+#endif
+}
+
+void MetalRenderer::CreateOutputTexture(uint32_t width, uint32_t height) {
+    id<MTLDevice> device = (id<MTLDevice>)_device;
+    
+    MTLTextureDescriptor *desc = [[MTLTextureDescriptor alloc] init];
+    desc.textureType = MTLTextureType2D;
+    desc.pixelFormat = MTLPixelFormatRGBA8Unorm;
+    desc.width = width;
+    desc.height = height;
+    desc.mipmapLevelCount = 1;
+    desc.sampleCount = 1;
+    desc.usage = MTLTextureUsageShaderRead | MTLTextureUsageShaderWrite | MTLTextureUsageRenderTarget;
+    desc.storageMode = MTLStorageModePrivate;
+    
+    _outputTexture = [device newTextureWithDescriptor:desc];
+    NSLog(@"Output texture created at %dx%d", width, height);
 }
 
 void MetalRenderer::ClearHistoryBuffers() {
@@ -228,6 +270,7 @@ void MetalRenderer::ClearHistoryBuffers() {
     // Clear other targets
     clearTexture((id<MTLTexture>)manager.GetCompositeResult().texture, MTLPixelFormatRGBA16Float);
     clearTexture((id<MTLTexture>)manager.GetRawIndirect().texture, MTLPixelFormatRGBA16Float);
+    clearTexture((id<MTLTexture>)manager.GetRawIndirectHalf().texture, MTLPixelFormatRGBA16Float);
     clearTexture((id<MTLTexture>)manager.GetDenoised().texture, MTLPixelFormatRGBA16Float);
     
     [commandBuffer commit];
@@ -258,30 +301,38 @@ void MetalRenderer::UploadConstantData(CommandBuffer cmdBuf,
 
 void MetalRenderer::Draw(CommandBuffer cmdBuf,
                          const Character& character, unsigned int frameCount) {
+    auto drawStartTime = std::chrono::high_resolution_clock::now();
+
     int currIdx = _frameIndex % 2;
     int prevIdx = (_frameIndex + 1) % 2;
-    
+
     // Prepare data using FrameDataManager
     simd_int3 worldOrigin = _materialMap.GetWorldOrigin();
     CameraData camData = _frameDataManager.PrepareCameraData(character);
     FrameData frameData = _frameDataManager.PrepareFrameData(_frameIndex, worldOrigin);
     CharacterGPUData charData = _frameDataManager.PrepareCharacterData(
         character, State::state.otherCharacters);
-    
+
     // Update material map streaming
+    auto streamingStart = std::chrono::high_resolution_clock::now();
     simd_float3 camPos = camData.position;
     bool sectorsChanged = _materialMap.UpdateStreaming(camPos);
     if (sectorsChanged) {
         _scalerNeedsReset = true;
     }
-    
+    auto streamingEnd = std::chrono::high_resolution_clock::now();
+    cpuStreamingMs = std::chrono::duration<double, std::milli>(streamingEnd - streamingStart).count();
+
     // Prepare text overlay (console rendering)
+    auto textPrepStart = std::chrono::high_resolution_clock::now();
     if (_fontAtlas.IsValid()) {
         _textRenderer.BeginFrame(State::dispWIDTH, State::dispHEIGHT);
         RenderConsole();
         _textRenderer.EndFrame();
         _textRenderer.UpdateBuffers((id<MTLDevice>)_device);
     }
+    auto textPrepEnd = std::chrono::high_resolution_clock::now();
+    cpuTextPrepMs = std::chrono::duration<double, std::milli>(textPrepEnd - textPrepStart).count();
     
     // Upload character data
     CharacterGPUData *charDataDest = (CharacterGPUData *)[(id<MTLBuffer>)_characterBuffer contents];
@@ -350,13 +401,16 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
         [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:3 withBarrier:YES];
     }
     
-    // Pass 2: Indirect
+    // Ensure GBuffer outputs (Normal, Depth) are visible to Pass 2
+    [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
+    
+    // Pass 2: Indirect (half-resolution)
     if (_supportsTimestamps) {
         [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:4 withBarrier:NO];
     }
     [encoder pushDebugGroup:@"Pass 2: Indirect"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoIndirect];
-    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirect().texture atIndex:0];
+    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirectHalf().texture atIndex:0];
     [encoder setTexture:(id<MTLTexture>)manager.GetNormal().texture atIndex:1];
     [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:2];
     [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
@@ -368,11 +422,24 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer() offset:0 atIndex:6];
     [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:7];
     [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:8];
-    [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
+    [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
         [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:5 withBarrier:YES];
     }
+    
+    // Pass 2.5: Bilateral Upsample (half-res indirect → full-res)
+    if (_supportsTimestamps) {
+        [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:5 withBarrier:NO];
+    }
+    [encoder pushDebugGroup:@"Pass 2.5: Upsample"];
+    [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoBilateralUpsample];
+    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirect().texture atIndex:0];
+    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirectHalf().texture atIndex:1];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:2];
+    [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
+    [encoder popDebugGroup];
+    [encoder memoryBarrierWithScope:MTLBarrierScopeTextures];
     
     // Pass 3: Accumulation
     if (_supportsTimestamps) {
@@ -489,6 +556,9 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     
     // Pass 8: Text Overlay
+    if (_supportsTimestamps) {
+        [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:16 withBarrier:NO];
+    }
     if (_fontAtlas.IsValid() && _textRenderer.GetNumGlyphs() > 0) {
         [encoder pushDebugGroup:@"Pass 8: TextOverlay"];
         [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoTextOverlay];
@@ -501,43 +571,67 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
         [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
         [encoder popDebugGroup];
     }
-    
+    if (_supportsTimestamps) {
+        [encoder sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:17 withBarrier:YES];
+    }
+
+    // Signal fence to mark completion of all compute work
+    [encoder updateFence:(id<MTLFence>)_computeToMetalFXFence];
     [encoder endEncoding];
-    
+
     // Timestamp before MetalFX
     if (_supportsTimestamps) {
         id<MTLBlitCommandEncoder> preFX = [cmdBuf blitCommandEncoder];
-        [preFX sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:16 withBarrier:NO];
+        [preFX sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:18 withBarrier:NO];
         [preFX endEncoding];
     }
-    
-    // MetalFX Temporal Scaler
-    id<MTLFXTemporalScaler_Unlocked> scaler = (id<MTLFXTemporalScaler_Unlocked>)_temporalScaler;
-    scaler.motionVectorScale = simd_make_float2(-(float)State::dispWIDTH, -(float)State::dispHEIGHT);
-    scaler.jitterOffset = simd_make_float2(-character.jitterX, -character.jitterY);
-    
-    ((id<MTLFXTemporalScaler>)_temporalScaler).colorTexture = (id<MTLTexture>)manager.GetCompositeResult().texture;
-    ((id<MTLFXTemporalScaler>)_temporalScaler).depthTexture = (id<MTLTexture>)manager.GetDepth(currIdx).texture;
-    ((id<MTLFXTemporalScaler>)_temporalScaler).motionTexture = (id<MTLTexture>)manager.GetMotion().texture;
-    ((id<MTLFXTemporalScaler>)_temporalScaler).outputTexture = (id<MTLTexture>)manager.GetFinal().texture;
-    ((id<MTLFXTemporalScaler>)_temporalScaler).reset = _scalerNeedsReset;
-    
+
+    // Wait for compute work to complete before MetalFX reads textures
+    id<MTLBlitCommandEncoder> fenceWaitEncoder = [cmdBuf blitCommandEncoder];
+    fenceWaitEncoder.label = @"Fence Wait";
+    [fenceWaitEncoder waitForFence:(id<MTLFence>)_computeToMetalFXFence];
+    [fenceWaitEncoder endEncoding];
+
     if (_temporalScaler) {
+        // MetalFX Temporal Scaler - feed current render as input, output to history buffer
+        id<MTLFXTemporalScaler_Unlocked> scaler = (id<MTLFXTemporalScaler_Unlocked>)_temporalScaler;
+        scaler.motionVectorScale = simd_make_float2(-(float)State::dispWIDTH, -(float)State::dispHEIGHT);
+        scaler.jitterOffset = simd_make_float2(-character.jitterX, -character.jitterY);
+
+        // MetalFX inputs/outputs
+        ((id<MTLFXTemporalScaler>)_temporalScaler).colorTexture = (id<MTLTexture>)manager.GetCompositeResult().texture;
+        ((id<MTLFXTemporalScaler>)_temporalScaler).depthTexture = (id<MTLTexture>)manager.GetDepth(currIdx).texture;
+        ((id<MTLFXTemporalScaler>)_temporalScaler).motionTexture = (id<MTLTexture>)manager.GetMotion().texture;
+        ((id<MTLFXTemporalScaler>)_temporalScaler).outputTexture = (id<MTLTexture>)_outputTexture;
+        ((id<MTLFXTemporalScaler>)_temporalScaler).reset = _scalerNeedsReset;
+
         [(id<MTLFXTemporalScaler>)_temporalScaler encodeToCommandBuffer:cmdBuf];
     } else {
-        NSLog(@"WARNING: No temporal scaler!");
+        // Fallback: upscale from render resolution to output resolution
+        id<MTLComputeCommandEncoder> fallbackEncoder = [cmdBuf computeCommandEncoder];
+        [fallbackEncoder pushDebugGroup:@"Fallback Blit"];
+        [fallbackEncoder setComputePipelineState:(id<MTLComputePipelineState>)_psoFallbackBlit];
+        [fallbackEncoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:0];
+        [fallbackEncoder setTexture:(id<MTLTexture>)_outputTexture atIndex:1];
+        MTLSize outputGrid = MTLSizeMake(State::screenWIDTH, State::screenHEIGHT, 1);
+        [fallbackEncoder dispatchThreads:outputGrid threadsPerThreadgroup:groupSize];
+        [fallbackEncoder popDebugGroup];
+        [fallbackEncoder endEncoding];
     }
-    
+
     // Timestamp after MetalFX
     if (_supportsTimestamps) {
         id<MTLBlitCommandEncoder> postFX = [cmdBuf blitCommandEncoder];
-        [postFX sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:17 withBarrier:YES];
+        [postFX sampleCountersInBuffer:_counterSampleBuffer atSampleIndex:19 withBarrier:YES];
         [postFX endEncoding];
     }
-    
+
     _frameIndex++;
-    const_cast<Character&>(character).lastRenderedViewProjectionMatrix = character.unjitteredViewProjectionMatrix;
     _scalerNeedsReset = false;
+
+    // Record total Draw() CPU time
+    auto drawEndTime = std::chrono::high_resolution_clock::now();
+    cpuDrawTotalMs = std::chrono::duration<double, std::milli>(drawEndTime - drawStartTime).count();
 }
 
 void MetalRenderer::Draw(const Character& character, unsigned int frameCount) {
@@ -545,7 +639,13 @@ void MetalRenderer::Draw(const Character& character, unsigned int frameCount) {
 }
 
 id MetalRenderer::GetOutputTexture() {
-    return _renderTargetManager.GetFinal().texture;
+    return _outputTexture;
+}
+
+void MetalRenderer::OnResize(uint32_t renderW, uint32_t renderH, uint32_t screenW, uint32_t screenH) {
+    RendererBase<RendererImpl::MetalRendererTraits>::OnResize(renderW, renderH, screenW, screenH);
+    CreateOutputTexture(screenW, screenH);
+    CreateTemporalScaler(renderW, renderH, screenW, screenH);
 }
 
 void MetalRenderer::GenerateWorld() {

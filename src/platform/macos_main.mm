@@ -5,6 +5,8 @@
 #import <Carbon/Carbon.h>
 #include <memory>
 #include <string>
+#include <ctime>
+#include <cmath>
 
 #include "Character.hpp"
 #include "State.hpp"
@@ -54,7 +56,8 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
 @implementation AppDelegate
 
 - (void)applicationDidFinishLaunching:(NSNotification *)aNotification {
-  NSRect frame = NSMakeRect(0, 0, State::screenWIDTH, State::screenHEIGHT);
+  CGFloat scaleFactor = [[NSScreen mainScreen] backingScaleFactor];
+  NSRect frame = NSMakeRect(0, 0, State::screenWIDTH / scaleFactor, State::screenHEIGHT / scaleFactor);
   NSUInteger style = NSWindowStyleMaskTitled | NSWindowStyleMaskClosable;
 
   _window = [[NSWindow alloc] initWithContentRect:frame
@@ -125,7 +128,7 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
   [_window makeKeyAndOrderFront:nil];
   _view.autoResizeDrawable = NO;
 
-  _view.drawableSize = CGSizeMake(State::dispWIDTH, State::dispHEIGHT);
+  _view.drawableSize = CGSizeMake(State::screenWIDTH, State::screenHEIGHT);
   _view.layer.contentsGravity = kCAGravityResizeAspectFill;
 
   [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -313,7 +316,7 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
     blit.label = @"ResolveTimestamps";
 
     [blit resolveCounters:counterBuf
-                  inRange:NSMakeRange(0, 18)
+                  inRange:NSMakeRange(0, 20)
         destinationBuffer:timestampBuf
         destinationOffset:0];
 
@@ -339,13 +342,22 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
 
   [blitEncoder endEncoding];
 
+  // Benchmark data collection - static to persist across frames
+  static struct {
+    int frameCount = 0;
+    double data[50][11]; // 50 frames, 11 timing values per frame
+    double cpuTextPrep[50];
+    double cpuStreaming[50];
+    double cpuDrawTotal[50];
+  } benchmark;
+
   [commandBuffer addCompletedHandler:^(id<MTLCommandBuffer> cb) {
     if (cb.status != MTLCommandBufferStatusCompleted)
       return;
 
     double msApprox = 0.0, msGBuffer = 0.0, msIndirect = 0.0;
     double msAccum = 0.0, msDenoise = 0.0, msComp = 0.0;
-    double msFX = 0.0, msFog = 0.0, msExpos = 0.0;
+    double msFX = 0.0, msFog = 0.0, msExpos = 0.0, msTextOverlay = 0.0;
 
     if (timestampBuf) {
       uint64_t *stamps = (uint64_t *)timestampBuf.contents;
@@ -364,7 +376,111 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
       msFog = calcMs(10, 11);
       msExpos = calcMs(12, 13);
       msComp = calcMs(14, 15);
-      msFX = calcMs(16, 17);
+      msTextOverlay = calcMs(16, 17);
+      msFX = calcMs(18, 19);
+    }
+
+    // Store frame data for benchmark
+    if (benchmark.frameCount < 50) {
+      benchmark.data[benchmark.frameCount][0] = msApprox;
+      benchmark.data[benchmark.frameCount][1] = msGBuffer;
+      benchmark.data[benchmark.frameCount][2] = msIndirect;
+      benchmark.data[benchmark.frameCount][3] = msAccum;
+      benchmark.data[benchmark.frameCount][4] = msDenoise;
+      benchmark.data[benchmark.frameCount][5] = msFog;
+      benchmark.data[benchmark.frameCount][6] = msExpos;
+      benchmark.data[benchmark.frameCount][7] = msComp;
+      benchmark.data[benchmark.frameCount][8] = msTextOverlay;
+      benchmark.data[benchmark.frameCount][9] = msFX;
+      benchmark.data[benchmark.frameCount][10] = msApprox + msGBuffer + msIndirect + msAccum + msDenoise + msFog + msExpos + msComp + msTextOverlay + msFX;
+      benchmark.cpuTextPrep[benchmark.frameCount] = renderer->cpuTextPrepMs;
+      benchmark.cpuStreaming[benchmark.frameCount] = renderer->cpuStreamingMs;
+      benchmark.cpuDrawTotal[benchmark.frameCount] = renderer->cpuDrawTotalMs;
+      benchmark.frameCount++;
+
+      // Write benchmark.log after 50 frames
+      if (benchmark.frameCount == 50) {
+        FILE* log = fopen("/Users/rubenvlieger/Documents/RVGRT/benchmark.log", "w");
+        if (log) {
+          // Header
+          time_t now = time(nullptr);
+          struct tm* timeinfo = localtime(&now);
+          char timestr[64];
+          strftime(timestr, sizeof(timestr), "%Y-%m-%d %H:%M:%S", timeinfo);
+
+          fprintf(log, "═══════════════════════════════════════════════════════════════\n");
+          fprintf(log, "RVGRT Benchmark Report — %s\n", timestr);
+          fprintf(log, "Resolution: %dx%d (render)  |  Device: Apple GPU\n", State::dispWIDTH, State::dispHEIGHT);
+          fprintf(log, "Frames sampled: 50\n");
+          fprintf(log, "═══════════════════════════════════════════════════════════════\n\n");
+
+          // Calculate statistics
+          const char* passNames[] = {"DistApprox", "GBuffer", "Indirect", "Accumulate", "Denoise", "Volumetric", "Exposure", "Composite", "TextOverlay", "MetalFX"};
+          double avgs[10], mins[10], maxs[10], stds[10];
+          for (int p = 0; p < 10; p++) {
+            avgs[p] = mins[p] = maxs[p] = benchmark.data[0][p];
+            for (int f = 1; f < 50; f++) {
+              avgs[p] += benchmark.data[f][p];
+              if (benchmark.data[f][p] < mins[p]) mins[p] = benchmark.data[f][p];
+              if (benchmark.data[f][p] > maxs[p]) maxs[p] = benchmark.data[f][p];
+            }
+            avgs[p] /= 50.0;
+            double variance = 0;
+            for (int f = 0; f < 50; f++) {
+              double diff = benchmark.data[f][p] - avgs[p];
+              variance += diff * diff;
+            }
+            stds[p] = sqrt(variance / 50.0);
+          }
+
+          // Find bottleneck (pass with highest average)
+          int bottleneckIdx = 2; // Indirect is typically heaviest
+          for (int p = 0; p < 10; p++) {
+            if (avgs[p] > avgs[bottleneckIdx]) bottleneckIdx = p;
+          }
+          double gpuTotal = avgs[0] + avgs[1] + avgs[2] + avgs[3] + avgs[4] + avgs[5] + avgs[6] + avgs[7] + avgs[8] + avgs[9];
+
+          // GPU Pass Timings
+          fprintf(log, "GPU Pass Timings (ms) — First 50 Frames Average:\n");
+          for (int p = 0; p < 10; p++) {
+            double pct = (avgs[p] / gpuTotal) * 100.0;
+            fprintf(log, "  Pass %d  %-12s %6.2f ±%.2f    [%5.1f%%]%s\n",
+                    p, passNames[p], avgs[p], stds[p], pct,
+                    (p == bottleneckIdx) ? "  ◀ BOTTLENECK" : "");
+          }
+          fprintf(log, "  ──────────────────────────────────────────────────\n");
+          fprintf(log, "  GPU Total              %6.2f\n\n", gpuTotal);
+
+          // CPU Timings
+          double cpuTextAvg = 0, cpuStreamAvg = 0, cpuDrawAvg = 0;
+          for (int f = 0; f < 50; f++) {
+            cpuTextAvg += benchmark.cpuTextPrep[f];
+            cpuStreamAvg += benchmark.cpuStreaming[f];
+            cpuDrawAvg += benchmark.cpuDrawTotal[f];
+          }
+          cpuTextAvg /= 50.0; cpuStreamAvg /= 50.0; cpuDrawAvg /= 50.0;
+          fprintf(log, "CPU Timings (ms):\n");
+          fprintf(log, "  Text Prep        %.2f\n", cpuTextAvg);
+          fprintf(log, "  Streaming        %.2f\n", cpuStreamAvg);
+          fprintf(log, "  Draw Total       %.2f\n\n", cpuDrawAvg);
+
+          // Per-frame breakdown table
+          fprintf(log, "Per-Frame Data:\n");
+          fprintf(log, "  Frame  Approx  GBuff   Ind    Acc   Den   Fog  Expos  Cmp   Txt   MFX   Total  CPU\n");
+          for (int f = 0; f < 50; f++) {
+            fprintf(log, "  %04d  %5.2f  %5.2f %6.2f  %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %5.2f %6.2f %5.2f\n",
+                    f + 1,
+                    benchmark.data[f][0], benchmark.data[f][1], benchmark.data[f][2],
+                    benchmark.data[f][3], benchmark.data[f][4], benchmark.data[f][5],
+                    benchmark.data[f][6], benchmark.data[f][7], benchmark.data[f][8],
+                    benchmark.data[f][9], benchmark.data[f][10],
+                    benchmark.cpuDrawTotal[f]);
+          }
+          fprintf(log, "\n═══════════════════════════════════════════════════════════════\n");
+          fclose(log);
+          NSLog(@"[Benchmark] Written benchmark.log with 50 frames of data");
+        }
+      }
     }
 
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -375,17 +491,18 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
       double seconds = (msApprox < 0.001 ? 0.001 : msApprox) / 1000.0;
       double gigaRays = (numPixels / seconds) / 1e9;
 
+      // Fixed: Now includes Expos and TextOverlay in total
       double totalMs = msApprox + msGBuffer + msIndirect + msAccum + msDenoise +
-                       msComp + msFX + msFog;
+                       msFog + msExpos + msComp + msTextOverlay + msFX;
 
-      // Update string to show MFX time
       NSString *title =
           [NSString stringWithFormat:
                         @"RVGRT | Approx: %.2fms (%.2f Grays/s) | GBuff: %.2f "
                         @"| Ind: %.2f | Acc: %.2f | Den: %.2f | Fog: %.2f | "
-                        @"Expos: %.2f | Cmp: %.2f | MFX: %.2f | Total: %.2fms",
+                        @"Expos: %.2f | Cmp: %.2f | Txt: %.2f | MFX: %.2f | Total: %.2fms | CPU: %.2fms",
                         msApprox, gigaRays, msGBuffer, msIndirect, msAccum,
-                        msDenoise, msFog, msExpos, msComp, msFX, totalMs];
+                        msDenoise, msFog, msExpos, msComp, msTextOverlay, msFX, totalMs,
+                        renderer->cpuDrawTotalMs];
 
       [self->_window setTitle:title];
 
@@ -404,7 +521,13 @@ std::unordered_map<glm::ivec3, uint8_t> g_blockEdits;
   MetalRenderer *renderer =
       static_cast<MetalRenderer *>(State::state.renderer.get());
   if (renderer) {
-    renderer->OnResize(size.width, size.height);
+    int newScreenW = static_cast<int>(size.width);
+    int newScreenH = static_cast<int>(size.height);
+    int newDispW = newScreenW / 2;
+    int newDispH = newScreenH / 2;
+    if (newDispW < 1) newDispW = 1;
+    if (newDispH < 1) newDispH = 1;
+    renderer->OnResize(newDispW, newDispH, newScreenW, newScreenH);
   }
 }
 

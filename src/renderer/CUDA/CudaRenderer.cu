@@ -289,15 +289,15 @@ void CudaRenderer::freeRenderTargets() {
     freeTarget(_halfDistTexture);
 }
 
-void CudaRenderer::OnResize(uint32_t newWidth, uint32_t newHeight) {
-    State::dispWIDTH = newWidth;
-    State::dispHEIGHT = newHeight;
-    State::screenHEIGHT = newHeight;
-    State::screenWIDTH = newWidth;
+void CudaRenderer::OnResize(uint32_t renderW, uint32_t renderH, uint32_t screenW, uint32_t screenH) {
+    State::dispWIDTH = renderW;
+    State::dispHEIGHT = renderH;
+    State::screenWIDTH = screenW;
+    State::screenHEIGHT = screenH;
     
-    if (_width != newWidth || _height != newHeight) {
+    if (_width != renderW || _height != renderH) {
         freeRenderTargets();
-        createRenderTarget(newWidth, newHeight);
+        createRenderTarget(renderW, renderH);
     }
 }
 
@@ -365,7 +365,7 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     memcpy(&camData.unjitteredViewProjection,
            &character.unjitteredViewProjectionMatrix, sizeof(simd_float4x4));
     memcpy(&camData.prevUnjitteredViewProjection,
-           &character.lastRenderedViewProjectionMatrix, sizeof(simd_float4x4));
+           &character.prevUnjitteredViewProjectionMatrix, sizeof(simd_float4x4));
     
     // Prepare FrameData
     FrameData frameData;
@@ -575,8 +575,6 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     
     // Update frame state
     _frameIndex++;
-    const_cast<Character&>(character).lastRenderedViewProjectionMatrix =
-        character.unjitteredViewProjectionMatrix;
 }
 
 // ============================================================================

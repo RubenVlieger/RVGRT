@@ -69,8 +69,8 @@ KERNEL(VolumetricFog)(
 #endif
 
     // Clamp to valid depth coord
-    if (fullResCoord.x >= width * 2) fullResCoord.x = width * 2 - 1;
-    if (fullResCoord.y >= height * 2) fullResCoord.y = height * 2 - 1;
+    if (fullResCoord.x >= (uint)(width * 2)) fullResCoord.x = (uint)(width * 2) - 1;
+    if (fullResCoord.y >= (uint)(height * 2)) fullResCoord.y = (uint)(height * 2) - 1;
 
     float depth = TEX_READ_2D(texDepth, fullResCoord).r;
     float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(width, height);

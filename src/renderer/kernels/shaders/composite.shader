@@ -160,3 +160,29 @@ KERNEL(Composite)(
     TEX_WRITE_2D(texFinal, finalVal, gid);
 #endif
 }
+
+// ============================================================================
+// KERNEL: Fallback Blit (Upscaling + Format Conversion)
+// Used when MetalFX is disabled to convert RGBA16Float to RGBA8Unorm
+// and upscale from render resolution to output resolution.
+// ============================================================================
+KERNEL(FallbackBlit)(
+    PARAM_TEXTURE_READ(tex2d_f32_s, texSrc, 0),
+    PARAM_TEXTURE_WRITE(tex2d_f32_w, texDst, 1),
+    DECLARE_GID()
+)
+{
+#if defined(PLATFORM_METAL)
+    CHECK_BOUNDS(texDst);
+    constexpr sampler sLinear(filter::linear, address::clamp_to_edge);
+    float2 uv = (AS_FLOAT2(gid) + 0.5f) / float2(texDst.get_width(), texDst.get_height());
+    float4 color = texSrc.sample(sLinear, uv);
+    texDst.write(color, gid);
+#else
+    CHECK_BOUNDS(_width, _height);
+    int2 gid = GET_GID();
+    float2 uv = (AS_FLOAT2(gid) + 0.5f) / make_float2(_width, _height);
+    float4 color = TEX_SAMPLE_2D(texSrc, uv);
+    TEX_WRITE_2D(texDst, color, gid);
+#endif
+}

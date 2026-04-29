@@ -52,25 +52,24 @@ KERNEL(TemporalAccumulation)(
     int height = _height;
 #endif
 
+#if !INDIRECT_LIGHTING
+#if defined(PLATFORM_METAL)
+    TEX_WRITE_2D(texAccum, float4(0.0f), gid);
+#else
+    TEX_WRITE_2D(texAccum, make_float4(0.0f, 0.0f, 0.0f, 0.0f), gid);
+#endif
+    return;
+#endif
+
     // Read current frame color
-    float3 currentDirect = TEX_READ_2D(texDirect, gid).rgb;
     float3 currentIndirect = TEX_READ_2D(texRawIndirect, gid).rgb;
-    float3 currentRGB = currentDirect + currentIndirect;
     
     // NaN check
-    if (ANY_ISNAN(currentDirect) || ANY_ISINF(currentDirect)) {
-#if defined(PLATFORM_METAL)
-        TEX_WRITE_2D(texAccum, float4(1.0, 0.0, 1.0, 1.0), gid);
-#else
-        TEX_WRITE_2D(texAccum, make_float4(1.0f, 0.0f, 1.0f, 1.0f), gid);
-#endif
-        return;
-    }
     if (ANY_ISNAN(currentIndirect) || ANY_ISINF(currentIndirect)) {
 #if defined(PLATFORM_METAL)
-        TEX_WRITE_2D(texAccum, float4(0.0, 1.0, 1.0, 1.0), gid);
+        TEX_WRITE_2D(texAccum, float4(0.0f), gid);
 #else
-        TEX_WRITE_2D(texAccum, make_float4(0.0f, 1.0f, 1.0f, 1.0f), gid);
+        TEX_WRITE_2D(texAccum, make_float4(0.0f, 0.0f, 0.0f, 0.0f), gid);
 #endif
         return;
     }
@@ -99,8 +98,7 @@ KERNEL(TemporalAccumulation)(
             tapCoord.y = max(0, min(tapCoord.y, height - 1));
 #endif
 
-            float3 neighborRGB = TEX_READ_2D(texDirect, tapCoord).rgb + 
-                                TEX_READ_2D(texRawIndirect, tapCoord).rgb;
+            float3 neighborRGB = TEX_READ_2D(texRawIndirect, tapCoord).rgb;
             float3 neighborYCoCg = RGBToYCoCg(neighborRGB);
 
             m1 += neighborYCoCg;
@@ -119,7 +117,7 @@ KERNEL(TemporalAccumulation)(
     DECLARE_SAMPLER(sLinear, linear, clamp_to_edge);
     float3 historyRGB = TEX_SAMPLE_2D(texHistory, prevUV).rgb;
     if (isnan(historyRGB.x) || isnan(historyRGB.y) || isnan(historyRGB.z))
-        historyRGB = currentRGB;
+        historyRGB = currentIndirect;
 
     float3 historyYCoCg = RGBToYCoCg(historyRGB);
     float3 clampedHistoryYCoCg = clamp(historyYCoCg, minColor, maxColor);
@@ -148,6 +146,6 @@ KERNEL(TemporalAccumulation)(
     }
 
     // Blend
-    float3 result = mix(currentRGB, clampedHistoryRGB, blendWeight);
+    float3 result = mix(currentIndirect, clampedHistoryRGB, blendWeight);
     TEX_WRITE_2D(texAccum, float4(result, 1.0f), gid);
 }

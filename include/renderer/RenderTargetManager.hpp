@@ -103,6 +103,9 @@ public:
         
         _halfDist = Traits::CreateRenderTarget(_device, halfWidth, halfHeight,
                                                 TextureFormat::R32Float, "HalfDist");
+        
+        _rawIndirectHalf = Traits::CreateRenderTarget(_device, halfWidth, halfHeight,
+                                                       TextureFormat::RGBA16Float, "RawIndirectHalf");
     }
     
     /**
@@ -116,6 +119,7 @@ public:
         Traits::DestroyRenderTarget(_device, _normal);
         Traits::DestroyRenderTarget(_device, _motion);
         Traits::DestroyRenderTarget(_device, _rawIndirect);
+        Traits::DestroyRenderTarget(_device, _rawIndirectHalf);
         Traits::DestroyRenderTarget(_device, _denoised);
         Traits::DestroyRenderTarget(_device, _final);
         Traits::DestroyRenderTarget(_device, _denoiseTemp);
@@ -150,6 +154,7 @@ public:
     RenderTarget& GetNormal() { return _normal; }
     RenderTarget& GetMotion() { return _motion; }
     RenderTarget& GetRawIndirect() { return _rawIndirect; }
+    RenderTarget& GetRawIndirectHalf() { return _rawIndirectHalf; }
     RenderTarget& GetDenoised() { return _denoised; }
     RenderTarget& GetFinal() { return _final; }
     RenderTarget& GetDenoiseTemp() { return _denoiseTemp; }
@@ -181,6 +186,7 @@ private:
     RenderTarget _normal;
     RenderTarget _motion;
     RenderTarget _rawIndirect;
+    RenderTarget _rawIndirectHalf;
     RenderTarget _denoised;
     RenderTarget _final;
     RenderTarget _denoiseTemp;
