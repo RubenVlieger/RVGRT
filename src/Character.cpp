@@ -2,6 +2,7 @@
 #include "Camera.hpp"
 #include "State.hpp"
 #include "platform/Platform.hpp"
+#include "VoxelQuery.hpp"
 #include "util.hpp"
 #include <cmath>
 #include <numbers>
@@ -31,8 +32,8 @@ Character::Character()
       velocity(0.0f), direction(0.0f, 0.0f, -1.0f),
       yaw(std::numbers::pi_v<float> * -0.5f), pitch(-std::numbers::pi_v<float>),
       speed(0.05f), speedDropoff(0.92f), jumpSpeed(2.0f), sensitivity(0.00003f),
-      gravityAmount(0.0f) {
-  lastRenderedViewProjectionMatrix = glm::mat4(1.0f);
+      gravityAmount(0.0f),
+      onGround(false), playerHeight(1.62f), playerRadius(0.3f) {
 }
 
 void Character::UpdateTestNPC(float time, float deltaTime) {
@@ -85,17 +86,7 @@ void Character::Update(unsigned int frameCount) {
   prevViewProjectionMatrix = viewProjectionMatrix;
   prevUnjitteredViewProjectionMatrix = unjitteredViewProjectionMatrix;
 
-  vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) +
-                         (platform->IsKeyDown('A') ? -1.0f : 0.0f),
-                     (platform->IsKeyDown(' ') ? 1.0f : 0.0f) +
-                         (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
-                     (platform->IsKeyDown('W') ? 1.0f : 0.0f) +
-                         (platform->IsKeyDown('S') ? -1.0f : 0.0f)) *
-                speed;
-
-  if (platform->IsKeyDown(0x38)) { // Shift modifier
-    inputs *= 0.3f;
-  }
+  float dt = platform->deltaTime / 1000.0f;
 
   if (!lockMouse) {
     float deltayaw = platform->deltaXMouse.exchange(0) * sensitivity *
@@ -103,7 +94,7 @@ void Character::Update(unsigned int frameCount) {
     float deltapitch = platform->deltaYMouse.exchange(0) * sensitivity *
                        platform->deltaTime * FOV;
 
-    if (platform->IsKeyDown(0x38)) {
+    if (platform->IsKeyDown(0x38)) { // Shift modifier
       deltayaw *= 0.4f;
       deltapitch *= 0.4f;
     }
@@ -116,17 +107,261 @@ void Character::Update(unsigned int frameCount) {
     direction = calcDirfromSphere(pitch, yaw);
   }
 
-  // Calculate movement
-  velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) +
-              inputs.z * (vec3)direction;
-  velocity *= speedDropoff;
+  if (State::state.noclipMode) {
+    // ─────────────────────────────────────────────────────────────────
+    // NOCLIP MODE: Free flight, no terrain collision
+    // ─────────────────────────────────────────────────────────────────
+    vec3 inputs = vec3((platform->IsKeyDown('D') ? 1.0f : 0.0f) +
+                           (platform->IsKeyDown('A') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown(' ') ? 1.0f : 0.0f) +
+                           (platform->IsKeyDown('Z') ? -1.0f : 0.0f),
+                       (platform->IsKeyDown('W') ? 1.0f : 0.0f) +
+                           (platform->IsKeyDown('S') ? -1.0f : 0.0f)) *
+                  speed;
 
-  vec3 jump = vec3(0.0f, 1.0f, 0.0f) * inputs.y * jumpSpeed;
-  vec3 gravity = vec3(0.0f, 1.0f, 0.0f) * gravityAmount;
+    if (platform->IsKeyDown(0x38)) { // Shift modifier
+      inputs *= 0.3f;
+    }
 
-  vec3 addVector = (velocity + jump + gravity) * platform->deltaTime;
+    velocity += inputs.x * glm::cross((vec3)direction, vec3(0.0f, 1.0f, 0.0f)) +
+                inputs.y * vec3(0.0f, 1.0f, 0.0f) +
+                inputs.z * (vec3)direction;
+    velocity *= speedDropoff;
 
-  position = glm::mix(position, position + addVector, 0.5f);
+    vec3 addVector = velocity * platform->deltaTime;
+    position = glm::mix(position, position + addVector, 0.5f);
+
+  } else {
+    // ─────────────────────────────────────────────────────────────────
+    // CLIPPED MODE: Full terrain collision with gravity and jumping
+    // ─────────────────────────────────────────────────────────────────
+    constexpr float walkSpeed = 4.3f;
+    constexpr float sprintSpeed = 6.5f;
+    constexpr float terminalVelocity = -10.0f;
+    constexpr float gravityAccel = -24.0f;
+    constexpr float jumpImpulse = 7.5f;
+    float halfHeight = playerHeight;
+    float headRoom = 0.18f;
+
+    // ── Stuck-in-terrain recovery ────────────────────────────────────
+    // If the player's body overlaps a solid block, push them upward
+    // until they find clear air. This handles noclip-exit-inside-wall
+    // and any edge case where collision resolution fails.
+    {
+      int eyeY = int(floor(position.y));
+      int footX = int(floor(position.x));
+      int footZ = int(floor(position.z));
+      if (IsVoxelSolid(footX, eyeY, footZ)) {
+        bool escaped = false;
+        for (int y = eyeY + 1; y < eyeY + 64 && !escaped; ++y) {
+          if (!IsVoxelSolid(footX, y, footZ) &&
+              !IsVoxelSolid(footX, y - 1, footZ)) {
+            position.y = float(y) - halfHeight + 0.5f;
+            velocity.y = 0.0f;
+            onGround = true;
+            escaped = true;
+          }
+        }
+      }
+    }
+
+    // ── Horizontal movement ─────────────────────────────────────────
+    float hSpeed = platform->IsKeyDown(0x38) ? sprintSpeed : walkSpeed;
+
+    vec3 moveDir(0.0f, 0.0f, 0.0f);
+    if (platform->IsKeyDown('W')) moveDir.z -= 1.0f;
+    if (platform->IsKeyDown('S')) moveDir.z += 1.0f;
+    if (platform->IsKeyDown('A')) moveDir.x -= 1.0f;
+    if (platform->IsKeyDown('D')) moveDir.x += 1.0f;
+
+    float moveLen = sqrt(moveDir.x * moveDir.x + moveDir.z * moveDir.z);
+    if (moveLen > 0.01f) {
+      moveDir.x /= moveLen;
+      moveDir.z /= moveLen;
+    }
+
+    vec3 dirRight = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f)));
+    velocity.x = moveDir.x * dirRight.x * hSpeed + moveDir.z * (-direction.x) * hSpeed;
+    velocity.z = moveDir.x * dirRight.z * hSpeed + moveDir.z * (-direction.z) * hSpeed;
+
+    // ── Jump (edge-triggered) ────────────────────────────────────────
+    bool spacePressed = platform->IsKeyDown(' ');
+    static bool prevSpacePressed = false;
+    if (spacePressed && !prevSpacePressed && onGround) {
+      velocity.y = jumpImpulse;
+      onGround = false;
+    }
+    prevSpacePressed = spacePressed;
+
+    // ── Gravity ──────────────────────────────────────────────────────
+    velocity.y += gravityAccel * dt;
+
+    // Clamp downward velocity to terminal velocity (prevent falling faster)
+    velocity.y = glm::max(velocity.y, terminalVelocity);
+
+    // ── Compute proposed position ────────────────────────────────────
+    glm::vec3 proposedPos = position + velocity * dt;
+
+    // XZ footprint used across all collision axes
+    int minIX = int(floor(position.x - playerRadius));
+    int maxIX = int(floor(position.x + playerRadius));
+    int minIZ = int(floor(position.z - playerRadius));
+    int maxIZ = int(floor(position.z + playerRadius));
+
+    // ── Y-Axis Collision (ground + ceiling) ────────────────────────
+    //
+    // Sweep all Y levels between current feet and proposed feet to
+    // prevent tunnelling through thin floors at high speed.
+    {
+      float currentFeetY = position.y - halfHeight;
+      float proposedFeetY = proposedPos.y - halfHeight;
+      float proposedHeadY = proposedPos.y + headRoom;
+
+      if (velocity.y <= 0.0f) {
+        // Falling or stationary — sweep downward for ground
+        int topY = int(floor(currentFeetY));
+        int bottomY = int(floor(proposedFeetY));
+
+        bool hitGround = false;
+        for (int checkY = topY; checkY >= bottomY && !hitGround; --checkY) {
+          for (int ix = minIX; ix <= maxIX && !hitGround; ++ix) {
+            for (int iz = minIZ; iz <= maxIZ; ++iz) {
+              if (IsVoxelSolid(ix, checkY, iz)) {
+                hitGround = true;
+                break;
+              }
+            }
+          }
+          if (hitGround) {
+            position.y = float(checkY + 1) + halfHeight;
+            velocity.y = 0.0f;
+            onGround = true;
+          }
+        }
+        if (!hitGround) {
+          position.y = proposedPos.y;
+          onGround = false;
+        }
+      } else {
+        // Moving upward — check ceiling
+        position.y = proposedPos.y;
+        onGround = false;
+
+        int headY = int(floor(proposedHeadY));
+        bool hitCeiling = false;
+        for (int ix = minIX; ix <= maxIX && !hitCeiling; ++ix) {
+          for (int iz = minIZ; iz <= minIZ; ++iz) {
+            if (IsVoxelSolid(ix, headY, iz)) {
+              hitCeiling = true;
+              break;
+            }
+          }
+        }
+        if (hitCeiling) {
+          position.y = float(headY) - headRoom;
+          velocity.y = 0.0f;
+        }
+      }
+    }
+
+    // ── X-Axis Collision ─────────────────────────────────────────────
+    {
+      float aabbMinY = position.y - halfHeight;
+      float aabbMaxY = position.y + headRoom;
+      float aabbMinZ = position.z - playerRadius;
+      float aabbMaxZ = position.z + playerRadius;
+
+      int minIY = int(floor(aabbMinY));
+      int maxIY = int(floor(aabbMaxY));
+
+      if (proposedPos.x > position.x) {
+        int checkX = int(floor(proposedPos.x + playerRadius));
+        bool hitX = false;
+        for (int iy = minIY; iy <= maxIY && !hitX; ++iy) {
+          for (int iz = minIZ; iz <= maxIZ; ++iz) {
+            if (IsVoxelSolid(checkX, iy, iz)) {
+              hitX = true;
+              break;
+            }
+          }
+        }
+        if (hitX) {
+          position.x = float(checkX) - playerRadius;
+          velocity.x = 0.0f;
+        } else {
+          position.x = proposedPos.x;
+        }
+      } else if (proposedPos.x < position.x) {
+        int checkX = int(floor(proposedPos.x - playerRadius));
+        bool hitX = false;
+        for (int iy = minIY; iy <= maxIY && !hitX; ++iy) {
+          for (int iz = minIZ; iz <= maxIZ; ++iz) {
+            if (IsVoxelSolid(checkX, iy, iz)) {
+              hitX = true;
+              break;
+            }
+          }
+        }
+        if (hitX) {
+          position.x = float(checkX + 1) + playerRadius;
+          velocity.x = 0.0f;
+        } else {
+          position.x = proposedPos.x;
+        }
+      }
+    }
+
+    // ── Z-Axis Collision ─────────────────────────────────────────────
+    {
+      float aabbMinY = position.y - halfHeight;
+      float aabbMaxY = position.y + headRoom;
+      float aabbMinX = position.x - playerRadius;
+      float aabbMaxX = position.x + playerRadius;
+
+      int minIY = int(floor(aabbMinY));
+      int maxIY = int(floor(aabbMaxY));
+      int minIX2 = int(floor(aabbMinX));
+      int maxIX2 = int(floor(aabbMaxX));
+
+      if (proposedPos.z > position.z) {
+        int checkZ = int(floor(proposedPos.z + playerRadius));
+        bool hitZ = false;
+        for (int iy = minIY; iy <= maxIY && !hitZ; ++iy) {
+          for (int ix = minIX2; ix <= maxIX2; ++ix) {
+            if (IsVoxelSolid(ix, iy, checkZ)) {
+              hitZ = true;
+              break;
+            }
+          }
+        }
+        if (hitZ) {
+          position.z = float(checkZ) - playerRadius;
+          velocity.z = 0.0f;
+        } else {
+          position.z = proposedPos.z;
+        }
+      } else if (proposedPos.z < position.z) {
+        int checkZ = int(floor(proposedPos.z - playerRadius));
+        bool hitZ = false;
+        for (int iy = minIY; iy <= maxIY && !hitZ; ++iy) {
+          for (int ix = minIX2; ix <= maxIX2; ++ix) {
+            if (IsVoxelSolid(ix, iy, checkZ)) {
+              hitZ = true;
+              break;
+            }
+          }
+        }
+        if (hitZ) {
+          position.z = float(checkZ + 1) + playerRadius;
+          velocity.z = 0.0f;
+        } else {
+          position.z = proposedPos.z;
+        }
+      }
+    }
+  }
+
+  // ── Camera & View Matrices (shared by both modes) ──────────────────
   vec3 dirright = normalize(cross((vec3)direction, vec3(0.f, 1.f, 0.f)));
   vec3 dirup = normalize(cross((vec3)direction, dirright));
 
@@ -158,25 +393,17 @@ void Character::Update(unsigned int frameCount) {
   platform->deltaXMouse.store(0);
   platform->deltaYMouse.store(0);
 
-  // Update Walk Animation Phase
+  // ── Walk Animation Phase ────────────────────────────────────────────
   vec2 horizontalVelocity = vec2(velocity.x, velocity.z);
   float currentSpeed = length(horizontalVelocity);
 
-  // A typical moving speed gives currentSpeed ~ 0.3 to 0.6
   float targetSwing = glm::clamp(currentSpeed * 2.0f, 0.0f, 1.0f);
-
-  // Smoothly interpolate walkSwingAmount
   walkSwingAmount =
       glm::mix(walkSwingAmount, targetSwing, platform->deltaTime * 10.0f);
 
-  // Advance the walk phase based on how fast the character is moving
-  walkPhase += currentSpeed * platform->deltaTime *
-               25.0f; // Multiplier tuned for visual cadence
-
-  // Keep the phase bounded to avoid floating point precision issues over time
+  walkPhase += currentSpeed * platform->deltaTime * 25.0f;
   walkPhase = fmod(walkPhase, std::numbers::pi_v<float> * 2.0f);
 
-  // Re-build all the body part matrices for the animation frame
   UpdateTransformations();
 }
 

@@ -9,26 +9,27 @@
 // FEATURE TOGGLES
 // ---------------------------------------------------------------------------------
 #define VOLUMETRIC_FOG 1
-#define INDIRECT_LIGHTING 1
+#define INDIRECT_LIGHTING 0
 #define REFLECTIONS 1
-#define SHADOWS 1
+#define SHADOWS 0
 
 #define CHARACTER_MODELS 1
+#define USE_METALFX 1
 
 // ---------------------------------------------------------------------------------
 // SHADOW CASTING SETTINGS (Distance & Quality)
 // ---------------------------------------------------------------------------------
 // Standard primary ray shadows
-#define SHADOW_MAXDIST 1000.0f
-#define SHADOW_STEPS 160
+#define SHADOW_MAXDIST 256.0f
+#define SHADOW_STEPS 64
 
 // Water specific shadows (often needs more steps due to reflection angles)
-#define WATER_SHADOW_MAXDIST 500.0f
-#define WATER_SHADOW_STEPS 64
+#define WATER_SHADOW_MAXDIST 128.0f
+#define WATER_SHADOW_STEPS 32
 
 // Reflection shadows (traced from the reflection hit point)
-#define REFLECTION_SHADOW_MAXDIST 1000.0f
-#define REFLECTION_SHADOW_STEPS 128
+#define REFLECTION_SHADOW_MAXDIST 64.0f
+#define REFLECTION_SHADOW_STEPS 16
 
 // Indirect illumination shadows (how far bounced light respects occlusion)
 #define INDIRECT_SHADOW_MAXDIST 100.0f
@@ -59,3 +60,14 @@
 #define COMPOSITE_FOG_START 60.0f
 #define COMPOSITE_FOG_DENSITY 0.0002f
 #define COMPOSITE_FOG_COLOR float3(0.5f, 0.7f, 0.9f)
+
+// Indirect bounce ray limits
+#define INDIRECT_BOUNCE_MAX_ITERS 256
+
+// Distance approximation ray limits and LOD mode
+#define DIST_APPROX_MAX_ITERS 256
+
+// Character model culling
+#define CHARACTER_MAX_TRACE_DIST 500.0f
+#define CHARACTER_MAX_TRACE_DIST_SQ                                            \
+  (CHARACTER_MAX_TRACE_DIST * CHARACTER_MAX_TRACE_DIST)

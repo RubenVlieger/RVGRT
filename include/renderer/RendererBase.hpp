@@ -50,6 +50,8 @@ public:
         , _frameIndex(0)
         , _width(0)
         , _height(0)
+        , _outputWidth(0)
+        , _outputHeight(0)
         , _scalerNeedsReset(true)
     {
     }
@@ -80,8 +82,10 @@ public:
     
     /**
      * Handle window resize
+     * renderW/renderH: internal render resolution
+     * screenW/screenH: output/native resolution
      */
-    void OnResize(uint32_t newWidth, uint32_t newHeight);
+    virtual void OnResize(uint32_t renderW, uint32_t renderH, uint32_t screenW, uint32_t screenH);
     
     /**
      * Reset the temporal scaler (call on teleport/scene change)
@@ -209,6 +213,7 @@ protected:
     PipelineState _psoDistApprox = nullptr;
     PipelineState _psoGBuffer = nullptr;
     PipelineState _psoIndirect = nullptr;
+    PipelineState _psoBilateralUpsample = nullptr;
     PipelineState _psoAccumulate = nullptr;
     PipelineState _psoDenoise = nullptr;
     PipelineState _psoComposite = nullptr;
@@ -223,6 +228,8 @@ protected:
     uint32_t _frameIndex;
     uint32_t _width;
     uint32_t _height;
+    uint32_t _outputWidth;
+    uint32_t _outputHeight;
     bool _scalerNeedsReset;
     
     // Upscaling jitter (for DLSS/MetalFX)

@@ -13,14 +13,14 @@ MetalBrickPoolTraits::DeviceHandle MetalBrickPoolTraits::GetDevice() {
 
 MetalBrickPoolTraits::OccupancyBuffer MetalBrickPoolTraits::AllocateOccupancy(DeviceHandle device, size_t size) {
     id<MTLBuffer> buffer = [(id<MTLDevice>)device newBufferWithLength:size 
-                                                              options:MTLResourceStorageModePrivate];
+                                                              options:MTLResourceStorageModeShared];
     buffer.label = @"BrickPool_Occupancy";
     return buffer;
 }
 
 MetalBrickPoolTraits::DataBuffer MetalBrickPoolTraits::AllocateData(DeviceHandle device, size_t size) {
     id<MTLBuffer> buffer = [(id<MTLDevice>)device newBufferWithLength:size 
-                                                              options:MTLResourceStorageModePrivate];
+                                                              options:MTLResourceStorageModeShared];
     buffer.label = @"BrickPool_Data";
     return buffer;
 }

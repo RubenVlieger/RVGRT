@@ -52,8 +52,8 @@ struct CameraData {
 struct CharacterGPUData {
   int numCharacters;
   int padding[3];
+  simd_float4 characterCenters[MAX_CHARACTERS];
   simd_float4x4 invBoundingBoxes[MAX_CHARACTERS];
-  // 6 body parts (head, trunk, left/right arm, left/right leg) per character
   simd_float4x4 invBodyParts[MAX_CHARACTERS * 6]; 
 };
 

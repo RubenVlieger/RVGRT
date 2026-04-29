@@ -32,8 +32,6 @@ public:
     glm::mat4 prevUnjitteredViewProjectionMatrix;
     glm::mat4 inverseViewProjectionMatrix;
     glm::mat4 prevViewProjectionMatrix;
-
-    glm::mat4 lastRenderedViewProjectionMatrix; 
     
     // Camera params
     float nearPlane;
@@ -59,6 +57,11 @@ public:
     float jumpSpeed;
     float sensitivity;
     float gravityAmount;
+
+    // Collision state (used when noclipMode = false)
+    bool onGround;
+    float playerHeight;
+    float playerRadius;
 
     bool IsKeyDown(char key);
     void Update(unsigned int frameCount);

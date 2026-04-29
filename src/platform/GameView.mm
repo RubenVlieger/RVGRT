@@ -109,6 +109,29 @@
 - (void)rightMouseDragged:(NSEvent *)event { [self mouseMoved:event]; }
 - (void)otherMouseDragged:(NSEvent *)event { [self mouseMoved:event]; }
 
+// Block interaction: left click removes block, right click places block
+- (void)mouseDown:(NSEvent *)event {
+    Platform* platform = State::state.platform.get();
+    if (!platform) return;
+    
+    // Only handle left mouse button (buttonNumber 0)
+    // This prevents trackpad gestures and other buttons from triggering block removal
+    if (event.buttonNumber == 0) {
+        platform->leftMouseJustPressed.store(true, std::memory_order_relaxed);
+    }
+}
+
+- (void)rightMouseDown:(NSEvent *)event {
+    Platform* platform = State::state.platform.get();
+    if (!platform) return;
+    
+    // Only handle right mouse button (buttonNumber 1)
+    // This ensures only proper right-clicks place blocks
+    if (event.buttonNumber == 1) {
+        platform->rightMouseJustPressed.store(true, std::memory_order_relaxed);
+    }
+}
+
 
 // A helper function to control the cursor's visibility and behavior
 - (void)setMouseLock:(BOOL)locked {

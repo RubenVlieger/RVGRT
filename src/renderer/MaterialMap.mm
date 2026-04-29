@@ -1,6 +1,7 @@
 #import "renderer/MaterialMap.hpp"
 #import "State.hpp"
 #import "TerrainGeneration.h"
+#import "VoxelQuery.hpp"
 #import "cumath.h"
 #import "renderer/Metal/MetalDevice.hpp"
 #include <algorithm>
@@ -794,3 +795,366 @@ id MaterialMap::GetSectorBuffer() { return _sectorBuffer; }
 id MaterialMap::GetOccupancyBuffer() { return _brickPool.GetOccupancyBuffer(); }
 id MaterialMap::GetDataBuffer() { return _brickPool.GetDataBuffer(); }
 id MaterialMap::GetSectorMaskBuffer() { return _sectorMaskBuffer; }
+
+// ============================================================================
+// Block Modification (Phase 2)
+// ============================================================================
+//
+// These methods modify voxel data directly in the GPU shared-memory brick pool
+// buffers, making edits immediately visible to the path tracer. They also
+// update the block-edit overlay map (g_blockEdits) for collision/raycasting.
+//
+// SVO Structure:
+//   L1: Indirection texture (3D) → sector handle (1-based, 0 = empty)
+//   L2: Sector buffer[handle] → SectorInfo { baseBrickIndex, flags, brickMask }
+//   L3: Brick pool occupancy → 8 x uint64_t per brick (8x8x8 voxels, 1 bit each)
+//   L4: Brick pool data    → 512 x uint8_t per brick (material IDs)
+//
+// Brick Mask Layout (64 bits = 4x4x4 bricks per sector):
+//   Bit index b maps to brick at (b & 3, (b >> 4) & 3, (b >> 2) & 3)
+//   This matches GetLinearIndex4 in intersections.h:
+//     GetLinearIndex4(p) = (p.x & 3) + ((p.z & 3) << 2) + ((p.y & 3) << 4)
+//
+// Sub-brick Occupancy Layout (512 bits = 8 x uint64_t per brick):
+//   Each 8x8x8 brick is subdivided into 2x2x2 = 8 sub-bricks of 4x4x4 voxels.
+//   Sub-brick index subIdx = localSubPos.x + localSubPos.z * 2 + localSubPos.y * 4
+//   where localSubPos = (localPos >> 2) & 1 for each axis.
+//   Each sub-brick has 64 voxel occupancy bits using GetLinearIndex4:
+//     vIdx = (vRel.x & 3) + ((vRel.z & 3) << 2) + ((vRel.y & 3) << 4)
+//   where vRel = localPos & 3 for each axis.
+//
+// Data Layout:
+//   Data byte index = (brickPoolIndex * 512) + (subIdx * 64) + vIdx
+// ============================================================================
+
+// Helper: Compute LinearIndex4 matching the GPU/cross-platform implementation
+static inline uint32_t GetLinearIndex4Local(uint32_t px, uint32_t py, uint32_t pz) {
+    return (px & 3) + ((pz & 3) << 2) + ((py & 3) << 4);
+}
+
+// Helper: Compute prefix population count of a 64-bit mask up to (not including) bit position
+static inline uint32_t PrefixPopcount64Local(uint64_t mask, uint32_t width) {
+    uint32_t count = 0;
+    for (uint32_t i = 0; i < width; ++i) {
+        count += (mask >> i) & 1;
+    }
+    return count;
+}
+
+bool MaterialMap::RemoveVoxel(int32_t wx, int32_t wy, int32_t wz) {
+    // Step 1: Convert world voxel coord to sector coord
+    int32_t sx = wx >> 5; // wx / 32
+    int32_t sy = wy >> 5;
+    int32_t sz = wz >> 5;
+
+    // Step 2: Find the sector state via toroidal wrapping
+    int32_t relX = sx - _worldOrigin.x;
+    int32_t relY = sy - _worldOrigin.y;
+    int32_t relZ = sz - _worldOrigin.z;
+
+    // Out of loaded region bounds
+    if (relX < 0 || relX >= _indW || relY < 0 || relY >= _indH ||
+        relZ < 0 || relZ >= _indD) {
+        return false;
+    }
+
+    uint32_t wx_wrapped = ((uint32_t)(sx % _indW) + _indW) % _indW;
+    uint32_t wy_wrapped = ((uint32_t)(sy % _indH) + _indH) % _indH;
+    uint32_t wz_wrapped = ((uint32_t)(sz % _indD) + _indD) % _indD;
+    int idx = WrappedToLinear(wx_wrapped, wy_wrapped, wz_wrapped);
+    const SectorState &state = _sectorStates[idx];
+
+    if (!state.isLoaded || state.sectorHandle == 0 || state.isLOD) {
+        return false;
+    }
+
+    // Step 3: Get sector info
+    uint32_t handle = state.sectorHandle;
+    SectorInfo sInfo = _sectorInfoCPU[handle];
+
+    // Step 4: Compute local position within the 32x32x32 sector
+    uint32_t lx = wx & 31;
+    uint32_t ly = wy & 31;
+    uint32_t lz = wz & 31;
+
+    // Step 5: Compute brick index within sector (4x4x4 bricks)
+    uint32_t bx = (lx >> 3) & 3;
+    uint32_t by = (ly >> 3) & 3;
+    uint32_t bz = (lz >> 3) & 3;
+    uint32_t brickLinearIdx = GetLinearIndex4Local(bx, by, bz);
+
+    // Step 6: Check if this brick exists in the brick mask
+    uint64_t brickMaskBit = 1ULL << brickLinearIdx;
+    if ((sInfo.brickMask & brickMaskBit) == 0) {
+        // This brick is already empty, voxel doesn't exist
+        return false;
+    }
+
+    // Step 7: Compute packed brick offset
+    uint32_t packedBrickOffset = PrefixPopcount64Local(sInfo.brickMask, brickLinearIdx);
+    uint32_t brickPoolIndex = sInfo.baseBrickIndex + packedBrickOffset;
+
+    // Step 8: Compute sub-brick index (2x2x2 within brick)
+    uint32_t subPx = (lx >> 2) & 1;
+    uint32_t subPy = (ly >> 2) & 1;
+    uint32_t subPz = (lz >> 2) & 1;
+    uint32_t subIdx = subPx + (subPz << 1) + (subPy << 2); // matches (subPos.x + subPos.z*2 + subPos.y*4)
+
+    // Step 9: Compute voxel index within 4x4x4 sub-brick
+    uint32_t vx = lx & 3;
+    uint32_t vy = ly & 3;
+    uint32_t vz = lz & 3;
+    uint32_t vIdx = GetLinearIndex4Local(vx, vy, vz);
+
+    // Step 10: Access occupancy data in the brick pool (shared-memory Metal buffer)
+    uint64_t occIndexBase = (uint64_t)brickPoolIndex * 8;
+    id<MTLBuffer> occBuffer = (id<MTLBuffer>)_brickPool.GetOccupancyBuffer();
+    uint64_t *occPtr = (uint64_t *)[occBuffer contents];
+
+    uint64_t &voxMask = occPtr[occIndexBase + subIdx];
+
+    // Check if this voxel is already empty
+    uint64_t voxelBit = 1ULL << vIdx;
+    if ((voxMask & voxelBit) == 0) {
+        // Voxel is already air
+        return false;
+    }
+
+    // Clear the voxel occupancy bit
+    voxMask &= ~voxelBit;
+
+    // Step 11: Clear the data byte (set to air)
+    id<MTLBuffer> dataBuffer = (id<MTLBuffer>)_brickPool.GetDataBuffer();
+    uint8_t *dataPtr = (uint8_t *)[dataBuffer contents];
+    uint64_t dataOffset = (uint64_t)brickPoolIndex * 512 + (subIdx * 64) + vIdx;
+    dataPtr[dataOffset] = 0; // MAT_AIR
+
+    // Step 11b: Synchronize so GPU sees the CPU-written changes
+    id<MTLCommandQueue> syncQueue = (id<MTLCommandQueue>)_commandQueue;
+    id<MTLCommandBuffer> syncCmd = [syncQueue commandBuffer];
+    id<MTLBlitCommandEncoder> syncEnc = [syncCmd blitCommandEncoder];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)occBuffer];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)dataBuffer];
+    [syncEnc endEncoding];
+    [syncCmd commit];
+    [syncCmd waitUntilCompleted];
+
+    // Step 12: Update the block-edit overlay map
+    SetBlockEdit(wx, wy, wz, 0);
+
+    return true;
+}
+
+bool MaterialMap::PlaceVoxel(int32_t wx, int32_t wy, int32_t wz, uint8_t matID) {
+    int32_t sx = wx >> 5;
+    int32_t sy = wy >> 5;
+    int32_t sz = wz >> 5;
+
+    int32_t relX = sx - _worldOrigin.x;
+    int32_t relY = sy - _worldOrigin.y;
+    int32_t relZ = sz - _worldOrigin.z;
+
+    if (relX < 0 || relX >= _indW || relY < 0 || relY >= _indH ||
+        relZ < 0 || relZ >= _indD) {
+        return false;
+    }
+
+    uint32_t wx_wrapped = ((uint32_t)(sx % _indW) + _indW) % _indW;
+    uint32_t wy_wrapped = ((uint32_t)(sy % _indH) + _indH) % _indH;
+    uint32_t wz_wrapped = ((uint32_t)(sz % _indD) + _indD) % _indD;
+    int idx = WrappedToLinear(wx_wrapped, wy_wrapped, wz_wrapped);
+    SectorState &state = _sectorStates[idx];
+
+    if (!state.isLoaded || state.sectorHandle == 0) {
+        // Sector not loaded — cannot place voxel
+        return false;
+    }
+
+    if (state.isLOD) {
+        // LOD sector — cannot place voxel (no brick data allocated)
+        return false;
+    }
+
+    uint32_t handle = state.sectorHandle;
+    SectorInfo sInfo = _sectorInfoCPU[handle];
+
+    uint32_t lx = wx & 31;
+    uint32_t ly = wy & 31;
+    uint32_t lz = wz & 31;
+
+    uint32_t bx = (lx >> 3) & 3;
+    uint32_t by = (ly >> 3) & 3;
+    uint32_t bz = (lz >> 3) & 3;
+    uint32_t brickLinearIdx = GetLinearIndex4Local(bx, by, bz);
+
+    uint64_t brickMaskBit = 1ULL << brickLinearIdx;
+
+    uint32_t subPx = (lx >> 2) & 1;
+    uint32_t subPy = (ly >> 2) & 1;
+    uint32_t subPz = (lz >> 2) & 1;
+    uint32_t subIdx = subPx + (subPz << 1) + (subPy << 2);
+
+    uint32_t vx = lx & 3;
+    uint32_t vy = ly & 3;
+    uint32_t vz = lz & 3;
+    uint32_t vIdx = GetLinearIndex4Local(vx, vy, vz);
+    uint64_t voxelBit = 1ULL << vIdx;
+
+    // ── Case A: Brick already exists in the mask ──
+    if (sInfo.brickMask & brickMaskBit) {
+        uint32_t packedOffset = PrefixPopcount64Local(sInfo.brickMask, brickLinearIdx);
+        uint32_t brickPoolIndex = sInfo.baseBrickIndex + packedOffset;
+
+        uint64_t occIndexBase = (uint64_t)brickPoolIndex * 8;
+        id<MTLBuffer> occBuffer = (id<MTLBuffer>)_brickPool.GetOccupancyBuffer();
+        uint64_t *occPtr = (uint64_t *)[occBuffer contents];
+
+        // Set the occupancy bit
+        occPtr[occIndexBase + subIdx] |= voxelBit;
+
+        // Write the material ID
+        id<MTLBuffer> dataBuffer = (id<MTLBuffer>)_brickPool.GetDataBuffer();
+        uint8_t *dataPtr = (uint8_t *)[dataBuffer contents];
+        uint64_t dataOffset = (uint64_t)brickPoolIndex * 512 + (subIdx * 64) + vIdx;
+        dataPtr[dataOffset] = matID;
+
+        // Synchronize so GPU sees the CPU-written changes
+        id<MTLCommandQueue> syncQueue = (id<MTLCommandQueue>)_commandQueue;
+        id<MTLCommandBuffer> syncCmd = [syncQueue commandBuffer];
+        id<MTLBlitCommandEncoder> syncEnc = [syncCmd blitCommandEncoder];
+        [syncEnc synchronizeResource:(id<MTLBuffer>)occBuffer];
+        [syncEnc synchronizeResource:(id<MTLBuffer>)dataBuffer];
+        [syncEnc endEncoding];
+        [syncCmd commit];
+        [syncCmd waitUntilCompleted];
+
+        SetBlockEdit(wx, wy, wz, matID);
+        return true;
+    }
+
+    // ── Case B: Brick doesn't exist — need to allocate and rebuild ──
+    //
+    // This requires:
+    // 1. Computing a new brickMask with the new brick bit set
+    // 2. Allocating new brick pool slots (popcount of new mask)
+    // 3. Copying existing brick data from old allocation to new, shifting
+    //    for the inserted brick
+    // 4. Initializing the new brick's occupancy and data for just this voxel
+    // 5. Freeing the old brick pool allocation
+    // 6. Updating SectorInfo and sector state
+
+    uint64_t newBrickMask = sInfo.brickMask | brickMaskBit;
+    uint32_t newBrickCount = __builtin_popcountll(newBrickMask);
+
+    // Allocate new brick pool slots
+    uint32_t newBase = _brickPool.Allocate(newBrickCount);
+    if (newBase == UINT32_MAX) {
+        NSLog(@"[MaterialMap] Brick pool full! Cannot place voxel at (%d,%d,%d)", wx, wy, wz);
+        return false;
+    }
+
+    uint32_t oldBase = sInfo.baseBrickIndex;
+    uint32_t oldBrickCount = __builtin_popcountll(sInfo.brickMask);
+
+    // Get buffer pointers
+    id<MTLBuffer> occBuffer = (id<MTLBuffer>)_brickPool.GetOccupancyBuffer();
+    uint64_t *occPtr = (uint64_t *)[occBuffer contents];
+    id<MTLBuffer> dataBuffer = (id<MTLBuffer>)_brickPool.GetDataBuffer();
+    uint8_t *dataPtr = (uint8_t *)[dataBuffer contents];
+
+    // Copy existing bricks to their new positions, inserting a blank for the new brick
+    uint32_t oldBrickIdx = 0;
+    uint32_t newBrickIdx = 0;
+    for (uint32_t b = 0; b < 64; ++b) {
+        if (newBrickMask & (1ULL << b)) {
+            if (sInfo.brickMask & (1ULL << b)) {
+                // Existing brick — copy from old allocation
+                uint32_t oldPoolIdx = oldBase + oldBrickIdx;
+                uint32_t newPoolIdx = newBase + newBrickIdx;
+
+                // Copy occupancy (8 x uint64_t per brick)
+                for (uint32_t s = 0; s < 8; ++s) {
+                    occPtr[(uint64_t)newPoolIdx * 8 + s] = occPtr[(uint64_t)oldPoolIdx * 8 + s];
+                }
+
+                // Copy data (512 bytes per brick)
+                memcpy(dataPtr + (uint64_t)newPoolIdx * 512,
+                       dataPtr + (uint64_t)oldPoolIdx * 512,
+                       512);
+
+                oldBrickIdx++;
+            } else {
+                // This is the newly inserted brick — initialize with just our voxel
+                uint32_t newPoolIdx = newBase + newBrickIdx;
+
+                // Zero all occupancy and data for the new brick
+                for (uint32_t s = 0; s < 8; ++s) {
+                    occPtr[(uint64_t)newPoolIdx * 8 + s] = 0;
+                }
+                memset(dataPtr + (uint64_t)newPoolIdx * 512, 0, 512);
+
+                // Set the single voxel occupancy bit
+                occPtr[(uint64_t)newPoolIdx * 8 + subIdx] |= voxelBit;
+
+                // Write the material ID
+                dataPtr[(uint64_t)newPoolIdx * 512 + (subIdx * 64) + vIdx] = matID;
+            }
+            newBrickIdx++;
+        }
+    }
+
+    // Synchronize so GPU sees the CPU-written changes (memcpy for existing bricks + init of new brick)
+    id<MTLCommandQueue> syncQueue = (id<MTLCommandQueue>)_commandQueue;
+    id<MTLCommandBuffer> syncCmd = [syncQueue commandBuffer];
+    id<MTLBlitCommandEncoder> syncEnc = [syncCmd blitCommandEncoder];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)occBuffer];
+    [syncEnc synchronizeResource:(id<MTLBuffer>)dataBuffer];
+    [syncEnc endEncoding];
+    [syncCmd commit];
+    [syncCmd waitUntilCompleted];
+
+    // Free old brick pool allocation
+    if (oldBrickCount > 0) {
+        _brickPool.Free(oldBase, oldBrickCount);
+    }
+
+    // Update sector info
+    sInfo.brickMask = newBrickMask;
+    sInfo.baseBrickIndex = newBase;
+    sInfo.flags = SECTOR_FLAG_DETAIL;
+    UploadSectorInfo(handle, sInfo);
+
+    // Update sector state
+    state.brickPoolBase = newBase;
+    state.brickCount = newBrickCount;
+
+    // Update the block-edit overlay map
+    SetBlockEdit(wx, wy, wz, matID);
+
+    return true;
+}
+
+void MaterialMap::ResetBlockEdits() {
+    // Iterate over all block edits and restore each voxel to procedural state
+    for (auto it = g_blockEdits.begin(); it != g_blockEdits.end(); ) {
+        int32_t x = it->first.x;
+        int32_t y = it->first.y;
+        int32_t z = it->first.z;
+        uint8_t overlayMatID = it->second;
+
+        // Determine what the procedural terrain says at this position
+        bool proceduralSolid = Evaluate(float(x) + 0.5f, float(y) + 0.5f, float(z) + 0.5f) > 0.0f;
+
+        if (overlayMatID == 0 && proceduralSolid) {
+            // Overlay says air, but procedural says solid → restore solid
+            PlaceVoxel(x, y, z, 1); // Use MAT_STONE as default
+        } else if (overlayMatID != 0 && !proceduralSolid) {
+            // Overlay says solid (placed), but procedural says air → remove
+            RemoveVoxel(x, y, z);
+        }
+        // If both agree (overlay solid + procedural solid, or overlay air + procedural air),
+        // no SVO change needed, but we still remove the overlay entry.
+
+        it = g_blockEdits.erase(it);
+    }
+}

@@ -78,7 +78,11 @@ KERNEL(ComputeExposure)(
             float3 albedo = make_float3(albedo4.x, albedo4.y, albedo4.z);
 #endif
             
+#if !INDIRECT_LIGHTING
+            float3 color = direct * albedo;
+#else
             float3 color = (direct + indirect) * albedo;
+#endif
             float lum = getLuminance(color);
             
             // Center weighting
@@ -128,6 +132,9 @@ KERNEL(ComputeExposure)(
                                (1.0f - exp(-frame.deltaTime * adaptationSpeed));
         
         if (isnan(interpolatedLum)) interpolatedLum = 0.5f;
+        
+        // Add minimum luminance floor as safety net against pure black convergence
+        interpolatedLum = max(interpolatedLum, 0.05f);
 
         exposure->sceneLuminance = interpolatedLum;
     }

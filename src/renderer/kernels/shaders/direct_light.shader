@@ -86,8 +86,11 @@ KERNEL(GBufferAndDirectLight)(
                 motionVector = 0.5f * (currNDC - prevNDC);
                 motionVector.y = -motionVector.y;
             }
+        } else {
+            // Sky pixels have zero motion
+            motionVector = float2(0.0f, 0.0f);
         }
-        TEX_WRITE_2D(texMotion, float4(motionVector.x, motionVector.y, 0, 0), gid);
+        TEX_WRITE_2D(texMotion, float4(motionVector.x, motionVector.y, 0.0f, 0.0f), gid);
 
         // Water Logic
         bool isWater = (hit.pos.y <= 3.001f && normal.y > HALF_LITERAL(0.8f));
@@ -178,7 +181,7 @@ KERNEL(GBufferAndDirectLight)(
             mv.y = -mv.y;
         }
 #if defined(PLATFORM_METAL)
-        TEX_WRITE_2D(texMotion, float4(mv.x, mv.y, 0, 0), gid);
+        TEX_WRITE_2D(texMotion, float4(mv.x, mv.y, 0.0f, 0.0f), gid);
 #else
         TEX_WRITE_2D(texMotion, make_float4(mv.x, mv.y, 0.0f, 0.0f), gid);
 #endif

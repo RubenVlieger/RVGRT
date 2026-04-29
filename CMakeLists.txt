@@ -70,6 +70,7 @@ if(WIN32)
         dist_approx.shader
         direct_light.shader
         indirect_bounce.shader
+        bilateral_upsample.shader
         temporal_acc.shader
         denoise.shader
         volumetric.shader
@@ -186,6 +187,7 @@ elseif(APPLE)
         dist_approx.shader
         direct_light.shader
         indirect_bounce.shader
+        bilateral_upsample.shader
         temporal_acc.shader
         denoise.shader
         volumetric.shader

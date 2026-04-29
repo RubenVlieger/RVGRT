@@ -6,6 +6,10 @@
 #include "renderer/hitInfo.h"
 class CoarseArray;
 
+#if defined(__clang__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wunused-function"
+#endif
 
 // Constants for Indirection
 #define BRICK_SIZE 8
@@ -385,4 +389,8 @@ inline half3 sampleSky(const float3 dir, const float3 sunDir)
     
     return skyColor;
 }
+#endif
+
+#if defined(__clang__)
+#pragma clang diagnostic pop
 #endif

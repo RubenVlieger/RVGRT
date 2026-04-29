@@ -9,6 +9,7 @@ using namespace metal;
 #include "raytracing_functions.h"
 #include "renderer/ShaderTypes.h"
 #include "TerrainGeneration.h"
+#include "renderer/shader_settings.h"
 
 // ============================================================================
 // KERNEL: Distance Approximation (Half-Resolution)
@@ -48,10 +49,11 @@ KERNEL(distApproximationKernel)(
     float2 ndc = uv * 2.0f - 1.0f;
     float3 dir = normalize(camera.forward + ndc.x * camera.right + ndc.y * camera.up);
 
-    // Trace ray through voxel data
+    // LOD-only trace: skip character tests and occupancy/data buffer reads
     hitInfo hit = trace(camera.position, dir, indirection, sectorBuffer, 
-                        occupancyBuffer, dataBuffer, sectorMaskBuffer, 
-                        frame.worldOrigin, IND_X, IND_Y, IND_Z, &charData);
+                        occupancyBuffer, nullptr, sectorMaskBuffer, 
+                        frame.worldOrigin, IND_X, IND_Y, IND_Z, nullptr,
+                        DIST_APPROX_MAX_ITERS, true);
     
     float dist = hit.hit ? length(hit.pos - camera.position) : 5000.0f;
     

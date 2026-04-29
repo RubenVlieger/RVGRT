@@ -47,10 +47,15 @@ public:
     id GetTemporalScaler() const override { return _temporalScaler; }
     void CreateExposureBuffer() override;
     void CreateCharacterBuffer() override;
-    void UploadConstantData(CommandBuffer cmdBuf, 
+    void UploadConstantData(CommandBuffer cmdBuf,
                            const CameraData& camera,
                            const FrameData& frame,
                            const CharacterGPUData& characters) override;
+
+    // CPU timing from last frame (ms) - public for main loop access
+    double cpuTextPrepMs = 0.0;
+    double cpuStreamingMs = 0.0;
+    double cpuDrawTotalMs = 0.0;
     
     // Additional Metal-specific methods
     void GenerateWorld();
@@ -59,9 +64,13 @@ public:
     id GetTimestampBuffer() { return _timestampBuffer; }
     bool SupportsTimestamps() const { return _supportsTimestamps; }
 
+    // Override OnResize to also recreate output texture and temporal scaler
+    void OnResize(uint32_t renderW, uint32_t renderH, uint32_t screenW, uint32_t screenH) override;
+
 private:
-    void CreateTemporalScaler(uint32_t width, uint32_t height);
+    void CreateTemporalScaler(uint32_t renderWidth, uint32_t renderHeight, uint32_t outputWidth, uint32_t outputHeight);
     void ClearHistoryBuffers();
+    void CreateOutputTexture(uint32_t width, uint32_t height);
     // Metal-specific members
     id _library;
     id _commandQueue;
@@ -72,6 +81,12 @@ private:
     
     // MetalFX temporal scaler
     id _temporalScaler;
+
+    // Output texture at screen/native resolution (MetalFX upscales to this)
+    id _outputTexture;
+    
+    // GPU fence for synchronizing compute work with MetalFX
+    id _computeToMetalFXFence;
     
     // Optional timestamp support
     id _counterSampleBuffer;
@@ -82,6 +97,8 @@ private:
     FontAtlas _fontAtlas;
     TextRenderer _textRenderer;
     id _psoTextOverlay;
+    id _psoBilateralUpsample;
+    id _psoFallbackBlit;
     
     // Console rendering helper
     void RenderConsole();

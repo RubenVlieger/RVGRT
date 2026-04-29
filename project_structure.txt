@@ -2,7 +2,21 @@
 
 This document is the master architectural blueprint for RVGRT, an advanced, cross-platform (Metal/CUDA) Minecraft-like path-traced voxel engine. It is specifically designed to provide LLMs with maximum context, accelerating debugging, feature implementation, and optimization.
 
-## Recent Restructuring (March 2025)
+## Recent Changes (April 2026) — Rendering Pipeline Enhancements
+
+The rendering pipeline was significantly enhanced with new passes, optimizations, and robustness fixes:
+
+- **Bilateral Upsample (`bilateral_upsample.shader`)**: New Pass 2.5 that upsamples half-resolution indirect light to full resolution using edge-aware bilateral filtering, improving GI quality.
+- **Fallback Blit (`FallbackBlit` kernel in `composite.shader`)**: Compute-based upscale/format-conversion fallback used when MetalFX Temporal Scaler is unavailable or disabled.
+- **LOD-only tracing in `dist_approx.shader`**: Distance approximation now uses sparse LOD traversal for faster empty-space skipping.
+- **Exposure luminance floor (`exposure.shader`)**: Minimum luminance clamp (`0.05`) prevents the exposure system from converging to pure black.
+- **Temporal Accumulation robustness (`temporal_acc.shader`)**: Added NaN checks and improved blend weights for more stable reprojection.
+- **Indirect Bounce sampling (`indirect_bounce.shader`)**: Now correctly samples full-resolution depth and normal textures.
+- **Sky motion vectors restored (`direct_light.shader`)**: Reverted to proper camera-rotation motion vectors for sky pixels (zero vectors caused black-screen artifacts with temporal upscaling).
+- **Dynamic resize support**: `RendererBase::OnResize()` added to properly recreate render targets, output textures, and the MetalFX scaler on window resize.
+- **Benchmark logging**: `benchmark.log` tracks per-pass GPU timings and CPU overhead across sampled frames.
+
+## Recent Restructuring (March 2025) & Multiplayer Block Sync (Phase 2-4)
 
 The codebase was recently reorganized to improve maintainability and provide clearer separation of platform-specific code:
 
@@ -31,7 +45,7 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   ├── platform/        # OS window/event interfaces.
 │   │   ├── GameView.h
 │   │   ├── MacOSPlatform.hpp
-│   │   ├── NetworkClient.hpp
+│   │   ├── NetworkClient.hpp   # Includes BlockEditCallback, BlockSyncCallback, BlockResetCallback; SendBlockEdit()
 │   │   ├── Platform.hpp
 │   │   └── WindowsPlatform.hpp
 │   ├── renderer/        # Renderer interfaces, struct definitions shared with shaders.
@@ -81,6 +95,8 @@ The codebase was recently reorganized to improve maintainability and provide cle
 │   ├── hitInfo.hpp
 │   ├── raytracing_functions.h
 │   ├── shader_macros.h
+│   ├── BlockInteraction.hpp    # RaycastResult, BlockEdit types; overlay map helpers
+│   ├── VoxelQuery.hpp          # IsVoxelSolid(), RaycastDDA() using Evaluate()
 │   ├── stb_image.h
 │   ├── tables.h
 │   ├── texturepackdata.h
@@ -273,10 +289,10 @@ GameConsole            — coordinator: owns buffer, input, registry, open/close
 **Console commands** (20 total, registered in `src/console/RegisterCommands.cpp`):
 
 | Category | Commands |
-|----------|----------|
+|----------|---------|
 | Essential | `/help`, `/name` |
 | Navigation | `/spawn`, `/home`, `/sethome`, `/tp`, `/jump` |
-| Settings | `/speed`, `/gravity`, `/fly`, `/noclip`, `/fov`, `/sensitivity`, `/reset` |
+| Settings | `/speed`, `/gravity`, `/fly`, `/noclip`, `/fov`, `/sensitivity`, `/reset`, `/mat` |
 | Info | `/pos`, `/fps`, `/players`, `/me`, `/time`, `/clear` |
 
 **Key `State` fields for commands**:
@@ -285,6 +301,10 @@ GameConsole            — coordinator: owns buffer, input, registry, open/close
 - `State::state.flyMode` — stub field for future fly implementation
 - `State::state.sunDirectionOverride` — stub for future `/time`
 - `State::state.fpsInfo` — populated each frame by the render loop
+- `State::state.noclipMode` — toggles free flight vs. collision physics
+- `State::state.selectedMaterialID` — block placement material (set by `/mat`)
+- `State::state.blockResetRequested` — signals game loop to call `MaterialMap::ResetBlockEdits()`
+- `State::state.pendingRemoteEdits` + `blockEditsMutex` — thread-safe queue for network block edits
 
 **Input routing** (`Platform.hpp` adds):
 - `textInputQueue` + `textInputMutex` — thread-safe queue for printable characters
@@ -352,3 +372,42 @@ Key files in `CMakeLists.txt`:
 - `src/renderer/FontAtlas.cpp` and `src/renderer/TextRenderer.mm` for text rendering
 
 Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `kernels/material_gen_kernel.metal`. Adding text or HUD elements uses the `TextRenderer` system described in Section 6. Adding console commands is documented in Section 8.
+
+## 11. Multiplayer Server (`RVGRT-server/`)
+
+A Python FastAPI WebSocket server manages player state, chat, and (Phase 3-4) authoritative block change tracking.
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/main.py` | FastAPI app: WebSocket endpoint, routes, block change tracking, `/reset` interception, `POST /internal/reset_blocks` |
+| `src/server.py` | `GameServer`: player state, 60Hz broadcast loop, `_block_changes` dict, `add_block_change()`, `reset_block_changes()` |
+| `src/models.py` | Pydantic message models: `PlayerStateMessage`, `ChatMessage`, `BlockUpdateMessage`, `BlockSyncMessage`, `BlockResetMessage` |
+| `test_client.py` | Async WebSocket test client for 2+ players |
+
+### Message Protocol
+
+**Client → Server:**
+- `{type: "state", data: {transforms: [112 floats]}}` — character matrices, 60Hz
+- `{type: "chat", sender, text}` — chat messages
+- `{type: "block", x, y, z, mat_id}` — block edits (mat_id=0 removes)
+
+**Server → Client:**
+- `{type: "init", client_id, max_players}` — on connect
+- `{type: "block_sync", changes: [{x,y,z,mat_id},...]}` — full change list on connect
+- `{type: "broadcast", players: {id: {transforms}}}` — 60Hz state broadcast
+- `{type: "chat", client_id, sender, text}` — relayed chat
+- `{type: "block", client_id, x, y, z, mat_id}` — relayed block edit
+- `{type: "block_reset"}` — all clients reset blocks to procedural state
+
+### Block Edit Flow (Phase 4)
+1. Player clicks → `MaterialMap.RemoveVoxel/PlaceVoxel()` updates SVO + overlay map
+2. `NetworkClient::SendBlockEdit()` sends `{type:"block",...}` to server
+3. Server calls `add_block_change()`, broadcasts to all *other* clients
+4. Receiving clients invoke `BlockEditCallback` → push to `pendingRemoteEdits`
+5. Game loop drains queue → applies to `MaterialMap` + `g_blockEdits` overlay
+6. New clients receive `block_sync` on connect with full accumulated list
+
+### Admin Panel (`src/logger_admin/`)
+Django app at `/admin/` provides a "Reset All Block Changes" button that POSTs to `/internal/reset_blocks`.

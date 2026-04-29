@@ -53,6 +53,25 @@ public:
   /// Get the world origin (world-space coordinate of indirection cell (0,0,0))
   simd_int3 GetWorldOrigin() const { return _worldOrigin; }
 
+  // ─── Block Modification (Phase 2) ────────────────────────────────────────
+  // These methods modify the SVO data directly in the GPU shared-memory
+  // buffers, making block edits immediately visible to the path tracer.
+  // They also update the block-edit overlay map for collision/raycasting.
+
+  /// Remove the voxel at world coordinate (wx, wy, wz).
+  /// Returns true if the voxel was actually removed (was solid).
+  bool RemoveVoxel(int32_t wx, int32_t wy, int32_t wz);
+
+  /// Place a voxel at world coordinate (wx, wy, wz) with the given matID.
+  /// Returns true if the voxel was successfully placed.
+  /// Handles brick allocation if the brick didn't previously exist.
+  bool PlaceVoxel(int32_t wx, int32_t wy, int32_t wz, uint8_t matID);
+
+  /// Restore all edited voxels to their procedural state.
+  /// Iterates through the block-edit overlay map, reclculates Evaluate()
+  /// for each position, and restores the correct occupancy/data in the SVO.
+  void ResetBlockEdits();
+
 private:
   id _device;
 

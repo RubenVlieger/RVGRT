@@ -41,7 +41,19 @@ static bool ExtractTransforms(const std::string& stateData, std::vector<float>& 
     return outFloats.size() == 112;
 }
 
-// Removed placeholder Create()
+// Extract integer value for a JSON key like "x":123 from a short string
+static int ExtractInt(const std::string& json, const std::string& key) {
+    std::string searchKey = "\"" + key + "\"";
+    size_t pos = json.find(searchKey);
+    if (pos == std::string::npos) return 0;
+    size_t colon = json.find(":", pos + searchKey.length());
+    if (colon == std::string::npos) return 0;
+    size_t valueStart = colon + 1;
+    while (valueStart < json.size() && (json[valueStart] == ' ' || json[valueStart] == '\t')) valueStart++;
+    size_t valueEnd = valueStart;
+    while (valueEnd < json.size() && (json[valueEnd] == '-' || (json[valueEnd] >= '0' && json[valueEnd] <= '9'))) valueEnd++;
+    try { return std::stoi(json.substr(valueStart, valueEnd - valueStart)); } catch (...) { return 0; }
+}
 
 class Win32NetworkClient : public NetworkClient {
 private:
@@ -57,6 +69,10 @@ private:
     std::vector<std::vector<float>> latestForeignStates;
     HANDLE hThread = NULL;
 
+    BlockEditCallback _blockEditCallback;
+    BlockSyncCallback _blockSyncCallback;
+    BlockResetCallback _blockResetCallback;
+
     static DWORD WINAPI ReceiveThread(LPVOID param) {
         Win32NetworkClient* client = (Win32NetworkClient*)param;
         client->ReadLoop();
@@ -64,7 +80,7 @@ private:
     }
     
     void ReadLoop() {
-        std::vector<char> buffer(65536);
+        std::vector<char> buffer(131072);
         DWORD bytesRead = 0;
         WINHTTP_WEB_SOCKET_BUFFER_TYPE bufferType;
         
@@ -77,17 +93,11 @@ private:
                     myClientID = ParseClientID(text);
                 }
                 else if (text.find("\"type\":\"broadcast\"") != std::string::npos || text.find("\"type\": \"broadcast\"") != std::string::npos) {
-                    // Quick and dirty manual split by player IDs
                     std::vector<std::vector<float>> newlyReceived;
                     size_t playersStart = text.find("\"players\"");
                     if (playersStart != std::string::npos) {
-                        // Very naive: find all "transforms": [ ... ] arrays
-                        // Since we just extract matrices, we'll scan chunks sequentially 
-                        // Wait, we need to skip our own ID.
-                        // Let's just find each "{...}" block under players.
                         size_t pos = playersStart;
                         while ((pos = text.find("\"transforms\"", pos)) != std::string::npos) {
-                            // Backtrack to find the key which is the client ID
                             size_t keyEnd = text.rfind("\":", pos);
                             size_t keyStart = text.rfind("\"", keyEnd - 1);
                             if (keyStart != std::string::npos && keyEnd != std::string::npos) {
@@ -99,12 +109,55 @@ private:
                                     newlyReceived.push_back(matrices);
                                 }
                             }
-                            pos += 12; // skip past this transforms instance
+                            pos += 12;
                         }
                     }
                     
                     std::lock_guard<std::mutex> lock(stateMutex);
                     latestForeignStates = std::move(newlyReceived);
+                }
+                else if (text.find("\"type\":\"block\"") != std::string::npos || text.find("\"type\": \"block\"") != std::string::npos) {
+                    if (_blockEditCallback) {
+                        int32_t bx = ExtractInt(text, "x");
+                        int32_t by = ExtractInt(text, "y");
+                        int32_t bz = ExtractInt(text, "z");
+                        uint8_t matID = (uint8_t)ExtractInt(text, "mat_id");
+                        _blockEditCallback(bx, by, bz, matID);
+                    }
+                }
+                else if (text.find("\"type\":\"block_sync\"") != std::string::npos || text.find("\"type\": \"block_sync\"") != std::string::npos) {
+                    if (_blockSyncCallback) {
+                        std::vector<BlockEdit> edits;
+                        size_t pos = text.find("\"changes\"");
+                        if (pos != std::string::npos) {
+                            pos = text.find("[", pos);
+                            if (pos != std::string::npos) {
+                                size_t endBracket = text.find("]", pos);
+                                if (endBracket != std::string::npos) {
+                                    std::string arr = text.substr(pos + 1, endBracket - pos - 1);
+                                    size_t objStart = 0;
+                                    while ((objStart = arr.find("{", objStart)) != std::string::npos) {
+                                        size_t objEnd = arr.find("}", objStart);
+                                        if (objEnd == std::string::npos) break;
+                                        std::string obj = arr.substr(objStart, objEnd - objStart + 1);
+                                        BlockEdit edit;
+                                        edit.x = ExtractInt(obj, "x");
+                                        edit.y = ExtractInt(obj, "y");
+                                        edit.z = ExtractInt(obj, "z");
+                                        edit.matID = (uint8_t)ExtractInt(obj, "mat_id");
+                                        edits.push_back(edit);
+                                        objStart = objEnd + 1;
+                                    }
+                                }
+                            }
+                        }
+                        _blockSyncCallback(edits);
+                    }
+                }
+                else if (text.find("\"type\":\"block_reset\"") != std::string::npos || text.find("\"type\": \"block_reset\"") != std::string::npos) {
+                    if (_blockResetCallback) {
+                        _blockResetCallback();
+                    }
                 }
             } else if (error != ERROR_SUCCESS || bufferType == WINHTTP_WEB_SOCKET_CLOSE_BUFFER_TYPE) {
                 break;
@@ -123,8 +176,6 @@ public:
         Disconnect();
         running = true;
         
-        // Parse URL roughly (assuming ws://127.0.0.1:8000/ws)
-        // Just hardcoding parsing for local URL or similar format for brevity in this <1MB constraint
         std::wstring wUrl(urlString.begin(), urlString.end());
         URL_COMPONENTS urlComp = {0};
         urlComp.dwStructSize = sizeof(urlComp);
@@ -137,7 +188,6 @@ public:
         hConnect = WinHttpConnect(hSession, hostName, urlComp.nPort, 0);
         hRequest = WinHttpOpenRequest(hConnect, L"GET", urlPath, NULL, WINHTTP_NO_REFERER, WINHTTP_DEFAULT_ACCEPT_TYPES, 0);
         
-        // Upgrade to websocket
         WinHttpSetOption(hRequest, WINHTTP_OPTION_UPGRADE_TO_WEB_SOCKET, NULL, 0);
         WinHttpSendRequest(hRequest, WINHTTP_NO_ADDITIONAL_HEADERS, 0, WINHTTP_NO_REQUEST_DATA, 0, 0, 0);
         WinHttpReceiveResponse(hRequest, NULL);
@@ -219,9 +269,28 @@ public:
         WinHttpWebSocketSend(hWebSocket, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)payload.data(), (DWORD)payload.size());
     }
 
+    void SendBlockEdit(int32_t x, int32_t y, int32_t z, uint8_t matID) override {
+        if (!hWebSocket || !running) return;
+        std::stringstream ss;
+        ss << "{\"type\":\"block\",\"x\":" << x << ",\"y\":" << y << ",\"z\":" << z << ",\"mat_id\":" << (int)matID << "}";
+        std::string payload = ss.str();
+        WinHttpWebSocketSend(hWebSocket, WINHTTP_WEB_SOCKET_UTF8_MESSAGE_BUFFER_TYPE, (PVOID)payload.data(), (DWORD)payload.size());
+    }
+
     void SetChatCallback(ChatCallback callback) override {
-        // Windows client does not currently support incoming chat callbacks
         (void)callback;
+    }
+
+    void SetBlockEditCallback(BlockEditCallback callback) override {
+        _blockEditCallback = callback;
+    }
+
+    void SetBlockSyncCallback(BlockSyncCallback callback) override {
+        _blockSyncCallback = callback;
+    }
+
+    void SetBlockResetCallback(BlockResetCallback callback) override {
+        _blockResetCallback = callback;
     }
 };
 

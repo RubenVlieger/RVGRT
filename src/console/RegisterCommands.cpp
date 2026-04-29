@@ -1,13 +1,11 @@
 #include "console/RegisterCommands.hpp"
 #include "console/GameConsole.hpp"
 #include "State.hpp"
+#include "VoxelQuery.hpp"
 #include <sstream>
 #include <cstdlib>
-
-// ============================================================================
-// RegisterCommands.cpp
 //
-// This file registers all 20 in-game console commands. It is the single
+// This file registers all in-game console commands. It is the single
 // canonical location for command definitions — DO NOT spread command
 // registration across multiple files.
 //
@@ -58,6 +56,7 @@
 #include "console/RegisterCommands.hpp"
 #include "console/GameConsole.hpp"
 #include "State.hpp"
+#include "VoxelQuery.hpp"
 #include <sstream>
 #include <cstdlib>
 
@@ -195,7 +194,45 @@ static void cmd_fly(const std::vector<std::string>&, GameConsole& console) {
 }
 
 static void cmd_noclip(const std::vector<std::string>&, GameConsole& console) {
-    Print(console, "Noclip is not yet implemented.", ConsoleMsgType::System);
+    bool newMode = !State::state.noclipMode;
+    State::state.noclipMode = newMode;
+
+    if (newMode) {
+        State::state.character.gravityAmount = 0.0f;
+        State::state.character.onGround = false;
+        State::state.character.velocity = glm::vec3(0.0f);
+        Print(console, "Noclip enabled — free flight active.", ConsoleMsgType::System);
+    } else {
+        State::state.character.gravityAmount = -24.0f;
+        State::state.character.jumpSpeed = 7.5f;
+        State::state.character.velocity.x = 0.0f;
+        State::state.character.velocity.z = 0.0f;
+        State::state.character.velocity.y = 0.0f;
+        State::state.character.onGround = false;
+
+        // Search downward for ground surface and snap player onto it
+        glm::vec3 pos = State::state.character.position;
+        float feetY = pos.y - State::state.character.playerHeight;
+        int startBlockY = int(floor(feetY));
+        int blockX = int(floor(pos.x));
+        int blockZ = int(floor(pos.z));
+
+        bool foundGround = false;
+        for (int y = startBlockY; y > startBlockY - 256; --y) {
+            if (IsVoxelSolid(blockX, y, blockZ)) {
+                State::state.character.position.y = float(y + 1) + State::state.character.playerHeight;
+                State::state.character.onGround = true;
+                foundGround = true;
+                break;
+            }
+        }
+
+        if (!foundGround) {
+            Print(console, "Noclip disabled — no ground found below! You will fall.", ConsoleMsgType::Error);
+        } else {
+            Print(console, "Noclip disabled — collision enabled.", ConsoleMsgType::System);
+        }
+    }
 }
 
 static void cmd_fov(const std::vector<std::string>& args, GameConsole& console) {
@@ -233,8 +270,22 @@ static void cmd_reset(const std::vector<std::string>&, GameConsole& console) {
     c.gravityAmount = 0.0f;
     c.FOV = 70.0f;
     c.jumpSpeed = 2.0f;
+    c.onGround = false;
     State::state.flyMode = false;
-    Print(console, "All settings reset to defaults.");
+    State::state.noclipMode = true;
+
+    // Signal that block changes should be reset (handled in game loop)
+    State::state.blockResetRequested = true;
+    State::state.localBlockEdits.clear();
+
+    // Notify the server so it resets its authority store and broadcasts
+    // the reset to all other clients.
+    auto cb = console.GetChatSendCallback();
+    if (cb) {
+        cb(console.GetPlayerName(), "/reset");
+    }
+
+    Print(console, "All settings and block changes reset to defaults.");
 }
 
 // ============================================================================
@@ -285,6 +336,21 @@ static void cmd_clear(const std::vector<std::string>&, GameConsole& console) {
     console.GetBuffer().Clear();
 }
 
+static void cmd_mat(const std::vector<std::string>& args, GameConsole& console) {
+    if (args.empty()) {
+        PrintF(console, "Current material: %d (use /mat <id> to change)", State::state.selectedMaterialID);
+        Print(console, "Common IDs: 1=stone 2=grass 3=dirt 4=cobble 5=planks 7=bedrock", ConsoleMsgType::System);
+        return;
+    }
+    int val = std::atoi(args[0].c_str());
+    if (val < 0 || val > 255) {
+        Print(console, "Material ID must be 0-255.", ConsoleMsgType::Error);
+        return;
+    }
+    State::state.selectedMaterialID = static_cast<uint8_t>(val);
+    PrintF(console, "Placement material set to %d.", val);
+}
+
 // ============================================================================
 // Register All Commands
 // ============================================================================
@@ -318,4 +384,5 @@ void RegisterAllCommands(GameConsole& console) {
     reg.Register("me",      "Send an emote message",                cmd_me);
     reg.Register("time",    "Set sun direction for time of day",    cmd_time);
     reg.Register("clear",   "Clear all console messages",            cmd_clear);
+    reg.Register("mat",     "Set placement material ID (default 2=grass)", cmd_mat);
 }
