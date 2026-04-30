@@ -67,6 +67,43 @@ set(SLANG_KERNEL_FILES
     ${SLANG_SOURCE_DIR}/text_overlay.slang
 )
 
+# Kernel-specific entry points and source files (shared between platforms)
+set(KERNEL_SOURCES
+    dist_approx.slang
+    direct_light.slang
+    indirect_bounce.slang
+    bilateral_upsample.slang
+    temporal_acc.slang
+    denoise.slang
+    volumetric.slang
+    exposure.slang
+    composite.slang
+    composite.slang
+    material_gen.slang
+    material_gen.slang
+    material_gen.slang
+    material_gen.slang
+    text_overlay.slang
+)
+
+set(KERNEL_ENTRY_POINTS
+    distApproximationKernel
+    GBufferAndDirectLight
+    IndirectBounce
+    BilateralUpsample
+    TemporalAccumulation
+    BilateralDenoise
+    VolumetricFog
+    ComputeExposure
+    Composite
+    FallbackBlit
+    XMap_AnalyzeSectors
+    XMap_AnalyzeStreaming
+    XMap_FillBricks
+    FillDynamicAtlases
+    TextOverlay
+)
+
 set(SLANG_ENTRY_POINTS
     -entry distApproximationKernel -stage compute
     -entry GBufferAndDirectLight -stage compute
@@ -134,26 +171,66 @@ if(WIN32)
         src/CudaD3D12Texture.cu
     )
     
-    # --- Slang shader compilation ---
-    set(SLANG_GENERATED_CUDA "${SLANG_GENERATED_DIR}/Generated.cu")
-    
+    # --- Slang shader compilation (per-kernel to avoid duplicate globals) ---
+    list(LENGTH KERNEL_SOURCES KERNEL_COUNT)
+    math(EXPR KERNEL_LAST "${KERNEL_COUNT} - 1")
+
+    set(SLANG_GENERATED_CUDA_FILES "")
+    foreach(IDX RANGE 0 ${KERNEL_LAST})
+        list(GET KERNEL_SOURCES ${IDX} KERNEL_SOURCE)
+        list(GET KERNEL_ENTRY_POINTS ${IDX} KERNEL_ENTRY_POINT)
+
+        set(GENERATED_CUDA_FILE "${SLANG_GENERATED_DIR}/${KERNEL_ENTRY_POINT}.cu")
+        list(APPEND SLANG_GENERATED_CUDA_FILES "${GENERATED_CUDA_FILE}")
+
+        add_custom_command(
+            OUTPUT "${GENERATED_CUDA_FILE}"
+            COMMAND ${SLANGC}
+                -target cuda
+                -entry ${KERNEL_ENTRY_POINT}
+                -stage compute
+                -I "${CMAKE_SOURCE_DIR}/include"
+                -I "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang"
+                -D__SLANG__
+                "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+                -o "${GENERATED_CUDA_FILE}"
+            DEPENDS "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+                   ${SLANG_LIB_FILES}
+            COMMENT "Transpiling ${KERNEL_ENTRY_POINT} to CUDA C++..."
+        )
+    endforeach()
+
+    # Post-process generated CUDA files and create launch wrappers
+    set(CUDA_POSTPROC_DIR "${SLANG_GENERATED_DIR}/cuda_postproc")
+    set(CUDA_WRAPPER_HEADER "${CMAKE_CURRENT_BINARY_DIR}/CudaShaderLaunchers.generated.cuh")
+
+    set(CUDA_WRAPPER_BYPRODUCTS "")
+    foreach(IDX RANGE 0 ${KERNEL_LAST})
+        list(GET KERNEL_ENTRY_POINTS ${IDX} KERNEL_ENTRY_POINT)
+        list(APPEND CUDA_WRAPPER_BYPRODUCTS "${CUDA_POSTPROC_DIR}/${KERNEL_ENTRY_POINT}.cu")
+    endforeach()
+
     add_custom_command(
-        OUTPUT "${SLANG_GENERATED_CUDA}"
-        COMMAND ${SLANGC}
-            -target cuda
-            ${SLANG_ENTRY_POINTS}
-            -I "${CMAKE_SOURCE_DIR}/include"
-            -I "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang"
-            -D__SLANG__
-            ${SLANG_KERNEL_FILES}
-            -o "${SLANG_GENERATED_CUDA}"
-        DEPENDS ${SLANG_LIB_FILES} ${SLANG_KERNEL_FILES}
-        COMMENT "Transpiling Slang shaders to CUDA C++..."
+        OUTPUT ${CUDA_WRAPPER_HEADER} ${CUDA_WRAPPER_BYPRODUCTS}
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/gen_cuda_wrappers.py"
+                "${SLANG_GENERATED_DIR}"
+                "${CUDA_POSTPROC_DIR}"
+                "${CUDA_WRAPPER_HEADER}"
+        DEPENDS ${SLANG_GENERATED_CUDA_FILES}
+        COMMENT "Generating CUDA kernel launch wrappers..."
     )
-    
-    list(APPEND WIN_CUDA_SOURCES "${SLANG_GENERATED_CUDA}")
-    set_source_files_properties("${SLANG_GENERATED_CUDA}" PROPERTIES LANGUAGE CUDA)
-    
+    add_custom_target(GenerateCUDAWrappers DEPENDS "${CUDA_WRAPPER_HEADER}")
+
+    # Collect all post-processed .cu files as CUDA sources
+    set(CUDA_WRAPPER_SOURCES "")
+    foreach(IDX RANGE 0 ${KERNEL_LAST})
+        list(GET KERNEL_ENTRY_POINTS ${IDX} KERNEL_ENTRY_POINT)
+        set(WRAPPER_CU "${CUDA_POSTPROC_DIR}/${KERNEL_ENTRY_POINT}.cu")
+        list(APPEND CUDA_WRAPPER_SOURCES "${WRAPPER_CU}")
+    endforeach()
+    list(APPEND WIN_CUDA_SOURCES ${CUDA_WRAPPER_SOURCES})
+    set_source_files_properties(${CUDA_WRAPPER_SOURCES} PROPERTIES LANGUAGE CUDA)
+
     message(STATUS "Using Slang shader sources: ${SLANG_KERNEL_FILES}")
 
     # --- Create the Windows Executable ---
@@ -161,7 +238,9 @@ if(WIN32)
         ${WIN_SOURCES}
         ${WIN_CUDA_SOURCES}
     )
-    
+    add_dependencies(${APP_NAME} GenerateCUDAWrappers)
+    target_include_directories(${APP_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
     target_sources(${APP_NAME} PRIVATE exports.def)
 
     # --- CUDA Properties ---
@@ -246,43 +325,6 @@ elseif(APPLE)
     message(STATUS "Found xcrun for Metal shader compilation")
 
     set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib")
-
-    # Kernel-specific entry points and source files
-    set(KERNEL_SOURCES
-        dist_approx.slang
-        direct_light.slang
-        indirect_bounce.slang
-        bilateral_upsample.slang
-        temporal_acc.slang
-        denoise.slang
-        volumetric.slang
-        exposure.slang
-        composite.slang
-        composite.slang
-        material_gen.slang
-        material_gen.slang
-        material_gen.slang
-        material_gen.slang
-        text_overlay.slang
-    )
-
-    set(KERNEL_ENTRY_POINTS
-        distApproximationKernel
-        GBufferAndDirectLight
-        IndirectBounce
-        BilateralUpsample
-        TemporalAccumulation
-        BilateralDenoise
-        VolumetricFog
-        ComputeExposure
-        Composite
-        FallbackBlit
-        XMap_AnalyzeSectors
-        XMap_AnalyzeStreaming
-        XMap_FillBricks
-        FillDynamicAtlases
-        TextOverlay
-    )
 
     list(LENGTH KERNEL_SOURCES KERNEL_COUNT)
     math(EXPR KERNEL_LAST "${KERNEL_COUNT} - 1")

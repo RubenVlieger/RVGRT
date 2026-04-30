@@ -273,12 +273,12 @@ inline hitInfo traceVoxels(float3 rayPos, float3 rayDir,
         nextVoxelPos.y = int(floor(startPos.y + tmin * safeDir.y));
         nextVoxelPos.z = int(floor(startPos.z + tmin * safeDir.z));
 
-        nextVoxelPos.x = (safeDir.x >= 0) ? max(nextVoxelPos.x, originalVoxelPos.x)
-                                          : min(nextVoxelPos.x, originalVoxelPos.x);
-        nextVoxelPos.y = (safeDir.y >= 0) ? max(nextVoxelPos.y, originalVoxelPos.y)
-                                          : min(nextVoxelPos.y, originalVoxelPos.y);
-        nextVoxelPos.z = (safeDir.z >= 0) ? max(nextVoxelPos.z, originalVoxelPos.z)
-                                          : min(nextVoxelPos.z, originalVoxelPos.z);
+        nextVoxelPos.x = (safeDir.x >= 0) ? max(nextVoxelPos.x, voxelPos.x)
+                                          : min(nextVoxelPos.x, voxelPos.x);
+        nextVoxelPos.y = (safeDir.y >= 0) ? max(nextVoxelPos.y, voxelPos.y)
+                                          : min(nextVoxelPos.y, voxelPos.y);
+        nextVoxelPos.z = (safeDir.z >= 0) ? max(nextVoxelPos.z, voxelPos.z)
+                                          : min(nextVoxelPos.z, voxelPos.z);
 
         if (tMax.x <= tMax.y && tMax.x <= tMax.z) {
             nextVoxelPos.x = voxelPos.x + (safeDir.x >= 0 ? 1 : -1);
@@ -500,12 +500,12 @@ inline bool traceShadow(float3 rayPos, float3 rayDir, float maxDist,
         nextVoxelPos.y = int(floor(startPos.y + tmin * safeDir.y));
         nextVoxelPos.z = int(floor(startPos.z + tmin * safeDir.z));
 
-        nextVoxelPos.x = (safeDir.x >= 0) ? max(nextVoxelPos.x, originalVoxelPos.x)
-                                          : min(nextVoxelPos.x, originalVoxelPos.x);
-        nextVoxelPos.y = (safeDir.y >= 0) ? max(nextVoxelPos.y, originalVoxelPos.y)
-                                          : min(nextVoxelPos.y, originalVoxelPos.y);
-        nextVoxelPos.z = (safeDir.z >= 0) ? max(nextVoxelPos.z, originalVoxelPos.z)
-                                          : min(nextVoxelPos.z, originalVoxelPos.z);
+        nextVoxelPos.x = (safeDir.x >= 0) ? max(nextVoxelPos.x, voxelPos.x)
+                                          : min(nextVoxelPos.x, voxelPos.x);
+        nextVoxelPos.y = (safeDir.y >= 0) ? max(nextVoxelPos.y, voxelPos.y)
+                                          : min(nextVoxelPos.y, voxelPos.y);
+        nextVoxelPos.z = (safeDir.z >= 0) ? max(nextVoxelPos.z, voxelPos.z)
+                                          : min(nextVoxelPos.z, voxelPos.z);
 
         if (tMax.x <= tMax.y && tMax.x <= tMax.z) {
             nextVoxelPos.x = voxelPos.x + (safeDir.x >= 0 ? 1 : -1);

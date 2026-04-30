@@ -62,8 +62,8 @@ MetalRenderer::MetalRenderer(Device device)
         samplerDesc.minFilter = MTLSamplerMinMagFilterLinear;
         samplerDesc.magFilter = MTLSamplerMinMagFilterLinear;
         samplerDesc.mipFilter = MTLSamplerMipFilterNotMipmapped;
-        samplerDesc.sAddressMode = MTLSamplerAddressModeClampToEdge;
-        samplerDesc.tAddressMode = MTLSamplerAddressModeClampToEdge;
+        samplerDesc.sAddressMode = MTLSamplerAddressModeRepeat;
+        samplerDesc.tAddressMode = MTLSamplerAddressModeRepeat;
         samplerDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
         _linearSampler = [(id<MTLDevice>)device newSamplerStateWithDescriptor:samplerDesc];
     }

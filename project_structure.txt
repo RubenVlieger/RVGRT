@@ -392,7 +392,9 @@ The build system uses **Slang** (shader languagecompiler, `slangc`) to transpile
 3. `xcrun metallib` links all `.air` files → `default.metallib`
 
 **Windows (CUDA):**
-1. `slangc -target cuda` generates `.cu` files from `.slang` sources
+1. `slangc -target cuda` generates `.cu` files from `.slang` sources (per-kernel to avoid duplicate symbols)
+2. `gen_cuda_wrappers.py` post-processes each `.cu` file, renames GlobalParams structs, generates `Launch_*` wrapper functions
+3. nvcc compiles the post-processed `.cu` files
 
 ### Kernel Entry Points
 
@@ -413,6 +415,8 @@ The build system uses **Slang** (shader languagecompiler, `slangc`) to transpile
 Key files in `CMakeLists.txt`:
 - `src/renderer/kernels/slang/*.slang` — all shader sources
 - `slang_binary` FetchContent — downloads and builds Slang compiler
+- `gen_cuda_wrappers.py` — post-processes CUDA output, generates Launch_* wrappers
+- `CudaShaderLaunchers.generated.cuh` — auto-generated header with Launch_* declarations
 - Platform-specific compilation via `slangc` and `xcrun toolchain`
 
 Whenever implementing new features, refer to the pipeline map. E.g., adding localized light sources requires changes to Pass 1 (Direct) and Pass 2 (Indirect). Adding fluid physics requires touching `MaterialMap.mm` and `Intersection.slang`. Adding text or HUD elements uses the `TextRenderer` system described in Section 6. Adding console commands is documented in Section 8.

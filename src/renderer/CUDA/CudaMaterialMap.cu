@@ -21,7 +21,7 @@ static inline int posmod(int a, int m) {
 }
 
 CudaMaterialMap::CudaMaterialMap()
-    : d_indirection(nullptr), d_sectors(nullptr), d_sectorMasks(nullptr),
+    : d_indirectionArray(nullptr), d_indirectionTex(0), d_sectors(nullptr), d_sectorMasks(nullptr),
       _brickPool(), _firstUpdate(true), _nextSectorHandle(1), _cudaStream(nullptr) {
   
   // Create CUDA stream for async operations
@@ -61,22 +61,43 @@ CudaMaterialMap::CudaMaterialMap()
 
   // --- Create GPU Resources ---
 
-  // L1: Indirection 3D Texture as flat buffer
-  size_t indirectionSize = totalCells * sizeof(uint32_t);
-  err = cudaMalloc(&d_indirection, indirectionSize);
+  // L1: Indirection 3D Texture array
+  cudaChannelFormatDesc channelDesc = cudaCreateChannelDesc(32, 0, 0, 0, cudaChannelFormatKindUnsigned);
+  cudaExtent extent = make_cudaExtent(_indW, _indH, _indD);
+  err = cudaMalloc3DArray(&d_indirectionArray, &channelDesc, extent);
   if (err != cudaSuccess) {
-    fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to allocate indirection buffer: %s\n", cudaGetErrorString(err));
+    fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to allocate indirection 3D array: %s\n", cudaGetErrorString(err));
     return;
   }
-  cudaMemset(d_indirection, 0, indirectionSize);
+
+  // Create texture object for indirection
+  cudaResourceDesc resDesc = {};
+  resDesc.resType = cudaResourceTypeArray;
+  resDesc.res.array.array = d_indirectionArray;
+
+  cudaTextureDesc texDesc = {};
+  texDesc.addressMode[0] = cudaAddressModeClamp;
+  texDesc.addressMode[1] = cudaAddressModeClamp;
+  texDesc.addressMode[2] = cudaAddressModeClamp;
+  texDesc.filterMode = cudaFilterModePoint;
+  texDesc.readMode = cudaReadModeElementType;
+  texDesc.normalizedCoords = 0;
+
+  err = cudaCreateTextureObject(&d_indirectionTex, &resDesc, &texDesc, nullptr);
+  if (err != cudaSuccess) {
+    fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to create indirection texture object: %s\n", cudaGetErrorString(err));
+    cudaFreeArray(d_indirectionArray);
+    d_indirectionArray = nullptr;
+    return;
+  }
 
   // L2: Sector buffer (pre-allocated for max sectors)
   size_t sectorBufferSize = (MAX_ACTIVE_SECTORS + 1) * sizeof(SectorInfo);
   err = cudaMalloc(&d_sectors, sectorBufferSize);
   if (err != cudaSuccess) {
     fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to allocate sector buffer: %s\n", cudaGetErrorString(err));
-    cudaFree(d_indirection);
-    d_indirection = nullptr;
+    cudaFreeArray(d_indirectionArray);
+    d_indirectionArray = nullptr;
     return;
   }
   cudaMemset(d_sectors, 0, sectorBufferSize);
@@ -89,9 +110,9 @@ CudaMaterialMap::CudaMaterialMap()
   err = cudaMalloc(&d_sectorMasks, totalSuper * sizeof(uint64_t));
   if (err != cudaSuccess) {
     fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to allocate sector mask buffer: %s\n", cudaGetErrorString(err));
-    cudaFree(d_indirection);
+    cudaFreeArray(d_indirectionArray);
     cudaFree(d_sectors);
-    d_indirection = nullptr;
+    d_indirectionArray = nullptr;
     d_sectors = nullptr;
     return;
   }
@@ -106,9 +127,13 @@ CudaMaterialMap::~CudaMaterialMap() {
     cudaStreamDestroy(reinterpret_cast<cudaStream_t>(_cudaStream));
     _cudaStream = nullptr;
   }
-  if (d_indirection) {
-    cudaFree(d_indirection);
-    d_indirection = nullptr;
+  if (d_indirectionTex) {
+    cudaDestroyTextureObject(d_indirectionTex);
+    d_indirectionTex = 0;
+  }
+  if (d_indirectionArray) {
+    cudaFreeArray(d_indirectionArray);
+    d_indirectionArray = nullptr;
   }
   if (d_sectors) {
     cudaFree(d_sectors);
@@ -539,10 +564,13 @@ bool CudaMaterialMap::UpdateStreaming(simd_float3 cameraPos) {
   if (anyChanged || unloaded > 0) {
     RebuildSectorMasks();
 
-    // Upload indirection buffer to GPU
-    size_t indirectionSize = _indW * _indH * _indD * sizeof(uint32_t);
-    cudaError_t err = cudaMemcpy(d_indirection, _indirectionCPU.data(), 
-                                 indirectionSize, cudaMemcpyHostToDevice);
+    // Upload indirection 3D array to GPU
+    cudaMemcpy3DParms parms = {0};
+    parms.srcPtr = make_cudaPitchedPtr(_indirectionCPU.data(), _indW * sizeof(uint32_t), _indW, _indH);
+    parms.dstArray = d_indirectionArray;
+    parms.extent = make_cudaExtent(_indW, _indH, _indD);
+    parms.kind = cudaMemcpyHostToDevice;
+    cudaError_t err = cudaMemcpy3D(&parms);
     if (err != cudaSuccess) {
       fprintf(stderr, "[CudaMaterialMap] ERROR: Failed to upload indirection: %s\n", cudaGetErrorString(err));
     }
