@@ -17,4 +17,6 @@
 
 /.agents    
 /vendor/streamline-sdk-v2.9.0
+/vendor
+/slang_generated
 # all CUDA and Windows files!

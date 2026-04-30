@@ -1,37 +1,39 @@
-#include "shader_macros.h"
-
-#if defined(PLATFORM_METAL)
-#include <metal_stdlib>
-using namespace metal;
-#endif
-
-#include "cumath.h"
-#include "TerrainGeneration.h"
-#include "renderer/ShaderTypes.h"
-
-// ============================================================================
-// KERNELS: Material Generation
-// 
+// Material Generation
 // Procedural terrain generation and brick filling.
-// Generates voxel data on-demand for the streaming world.
-// ============================================================================
 
+#include "ShaderTypes.slang"
+#include "Settings.slang"
+#include "TerrainGen.slang"
+
+RWStructuredBuffer<uint64_t> resultBuffer;
+StructuredBuffer<SectorWorkItem> workItems;
+RWStructuredBuffer<uint64_t> resultBufferStreaming;
+StructuredBuffer<BrickWorkItem> workList;
+RWStructuredBuffer<SectorInfo> sectorBuffer;
+RWStructuredBuffer<uint64_t> occupancyBuffer;
+RWStructuredBuffer<uint8_t> dataBuffer;
+
+uniform int3 worldOrigin;
+uniform uint totalItems;
+
+Texture3D<uint> indirection;
+RWStructuredBuffer<uint64_t> geoPool;
+RWStructuredBuffer<uint8_t> matPool;
+
+[ForceInline]
 inline uint GetLinearIndex(uint3 pos, uint sizeX, uint sizeY) {
     return pos.x + (pos.y * sizeX) + (pos.z * sizeX * sizeY);
 }
 
-#if defined(PLATFORM_METAL)
-inline int countbits_64(ulong v) {
-    return popcount(v);
+[ForceInline]
+inline int countbits_64(uint64_t v) {
+    return countbits(v);
 }
-#else
-__device__ inline int countbits_64(ulong v) {
-    return __popcll(v);
-}
-#endif
 
 // Procedural material ID based on position
-uint8_t get_procedural_material_id(float3 pos) {
+
+[ForceInline]
+inline uint8_t get_procedural_material_id(float3 pos) {
     int y = (int)pos.y;
     
     // Bedrock at bottom
@@ -53,13 +55,13 @@ uint8_t get_procedural_material_id(float3 pos) {
     // Surface layers
     if (depthFromSurface >= 0 && depthFromSurface < 5) {
         if (biomeNoise < -0.2f) {
-            return (depthFromSurface == 0) ? MAT_SAND : MAT_SANDSTONE;
+            return uint8_t((depthFromSurface == 0) ? MAT_SAND : MAT_SANDSTONE);
         }
         else if (biomeNoise > 0.5f && y > 260) {
             return MAT_BRICK;
         }
         else {
-            return (depthFromSurface == 0) ? MAT_GRASS : MAT_DIRT;
+            return uint8_t((depthFromSurface == 0) ? MAT_GRASS : MAT_DIRT);
         }
     }
     
@@ -79,46 +81,45 @@ uint8_t get_procedural_material_id(float3 pos) {
     return MAT_STONE;
 }
 
+[ForceInline]
 inline uint GetSectorIndex(uint3 pos, uint sx, uint sy) {
     return pos.x + (pos.y * sx) + (pos.z * sx * sy);
 }
 
-// Kernel: Analyze sectors for initial generation
-KERNEL(XMap_AnalyzeSectors)(
-    PARAM_BUFFER(uint64_t, resultBuffer, 0),
-    DECLARE_GID_3D()
-)
-{
-#if defined(PLATFORM_METAL)
-    uint sx = IND_X / 4;
-    uint sy = IND_Y / 4;
-    uint sz = IND_Z / 4;
-    if (gid.x >= sx || gid.y >= sy || gid.z >= sz) return;
-#else
-    int3 gid = make_int3(blockIdx.x, blockIdx.y, blockIdx.z);
-    uint sx = IND_X / 4;
-    uint sy = IND_Y / 4;
-    uint sz = IND_Z / 4;
-    if (gid.x >= sx || gid.y >= sy || gid.z >= sz) return;
-#endif
+[ForceInline]
+inline uint64_t pack_4x4x4_block(float3 startPos) {
+    uint64_t packed = 0;
+    for(int z=0; z<4; z++) {
+        for(int y=0; y<4; y++) {
+            for(int x=0; x<4; x++) {
+                if(Evaluate(startPos.x + x, startPos.y + y, startPos.z + z) > 0.0f) {
+                    packed |= (1ULL << (x + y * 4 + z * 16));
+                }
+            }
+        }
+    }
+    return packed;
+}
 
-    uint sectorIndex = GetSectorIndex(uint3(gid.x, gid.y, gid.z), sx, sy);
-#if defined(PLATFORM_METAL)
+// Kernel: Analyze sectors for initial generation
+[shader("compute")]
+[numthreads(4, 4, 4)]
+void XMap_AnalyzeSectors(uint3 gid : SV_DispatchThreadID)
+{
+    uint sx = IND_X / 4;
+    uint sy = IND_Y / 4;
+    uint sz = IND_Z / 4;
+    if (gid.x >= sx || gid.y >= sy || gid.z >= sz) return;
+
+    uint sectorIndex = GetSectorIndex(gid, sx, sy);
     float3 sectorWorldPos = float3(gid) * 32.0f;
-#else
-    float3 sectorWorldPos = make_float3(gid.x, gid.y, gid.z) * 32.0f;
-#endif
     uint64_t activeBricksMask = 0;
 
     for(int i = 0; i < 64; i++) {
         int bx = i & 3;
         int bz = (i >> 2) & 3;
         int by = (i >> 4) & 3;
-#if defined(PLATFORM_METAL)
         float3 brickPos = sectorWorldPos + float3(bx, by, bz) * 8.0f;
-#else
-        float3 brickPos = sectorWorldPos + make_float3(bx, by, bz) * 8.0f;
-#endif
 
         bool active = false;
         for(int dz = 0; dz < 8; dz += 3) {
@@ -134,44 +135,27 @@ KERNEL(XMap_AnalyzeSectors)(
             if(active) break;
         }
         
-        if (active) activeBricksMask |= (1UL << i);
+        if (active) activeBricksMask |= (1ULL << i);
     }
     resultBuffer[sectorIndex] = activeBricksMask;
 }
 
 // Kernel: Analyze sectors for streaming
-KERNEL(XMap_AnalyzeStreaming)(
-    PARAM_BUFFER(SectorWorkItem, workItems, 0),
-    PARAM_BUFFER(uint64_t, resultBuffer, 1),
-    PARAM_CONSTANT(uint, totalItems, 2),
-    DECLARE_GID()
-)
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void XMap_AnalyzeStreaming(uint3 gid : SV_DispatchThreadID)
 {
-    uint gid_val;
-#if !defined(PLATFORM_METAL)
-    gid_val = blockIdx.x * blockDim.x + threadIdx.x;
-#else
-    gid_val = GET_GID_X();
-#endif
-    if (gid_val >= totalItems) return;
+    if (gid.x >= totalItems) return;
 
-    SectorWorkItem item = workItems[gid_val];
-#if defined(PLATFORM_METAL)
+    SectorWorkItem item = workItems[gid.x];
     float3 sectorWorldPos = float3(item.worldX, item.worldY, item.worldZ) * 32.0f;
-#else
-    float3 sectorWorldPos = make_float3(item.worldX, item.worldY, item.worldZ) * 32.0f;
-#endif
     uint64_t activeBricksMask = 0;
 
     for(int i = 0; i < 64; i++) {
         int bx = i & 3;
         int bz = (i >> 2) & 3;
         int by = (i >> 4) & 3;
-#if defined(PLATFORM_METAL)
         float3 brickPos = sectorWorldPos + float3(bx, by, bz) * 8.0f;
-#else
-        float3 brickPos = sectorWorldPos + make_float3(bx, by, bz) * 8.0f;
-#endif
 
         bool active = false;
         for(int dz = 0; dz < 8; dz += 3) {
@@ -187,32 +171,21 @@ KERNEL(XMap_AnalyzeStreaming)(
             if(active) break;
         }
         
-        if (active) activeBricksMask |= (1UL << i);
+        if (active) activeBricksMask |= (1ULL << i);
     }
-    resultBuffer[gid_val] = activeBricksMask;
+    resultBufferStreaming[gid.x] = activeBricksMask;
 }
 
 // Kernel: Fill brick data
-KERNEL(XMap_FillBricks)(
-    PARAM_BUFFER(BrickWorkItem, workList, 0),
-    PARAM_BUFFER(SectorInfo, sectorBuffer, 1),
-    PARAM_BUFFER(uint64_t, occupancyBuffer, 2),
-    PARAM_BUFFER(uchar, dataBuffer, 3),
-    PARAM_CONSTANT(int3, worldOrigin, 4),
-    DECLARE_GID()
-)
+[shader("compute")]
+[numthreads(64, 1, 1)]
+void XMap_FillBricks(uint3 gid : SV_DispatchThreadID)
 {
-#if defined(PLATFORM_METAL)
-    uint gid_val = GET_GID_X();
+    uint gid_val = gid.x;
     uint threadgroupID = gid_val / 64;
     uint workItemIndex = threadgroupID / 8;
     uint subBrickIndex = threadgroupID % 8;
     uint threadID_local = gid_val % 64;
-#else
-    uint workItemIndex = blockIdx.x / 8;
-    uint subBrickIndex = blockIdx.x % 8;
-    uint threadID_local = threadIdx.x;
-#endif
     
     BrickWorkItem item = workList[workItemIndex];
     
@@ -225,99 +198,45 @@ KERNEL(XMap_FillBricks)(
     uint s_y = s_rem % sy;
     uint s_z = s_rem / sy;
     
-#if defined(PLATFORM_METAL)
     float3 sectorPos = float3(int(s_x) + worldOrigin.x,
                                int(s_y) + worldOrigin.y,
                                int(s_z) + worldOrigin.z) * 32.0f;
-#else
-    float3 sectorPos = make_float3(s_x + worldOrigin.x,
-                                    s_y + worldOrigin.y,
-                                    s_z + worldOrigin.z) * 32.0f;
-#endif
     
     uint b_x = item.localBrickIndex & 3;
     uint b_z = (item.localBrickIndex >> 2) & 3;
     uint b_y = (item.localBrickIndex >> 4) & 3;
     
-#if defined(PLATFORM_METAL)
     float3 brickPos = sectorPos + float3(b_x, b_y, b_z) * 8.0f;
-#else
-    float3 brickPos = sectorPos + make_float3(b_x, b_y, b_z) * 8.0f;
-#endif
     
     uint sb_x = subBrickIndex & 1;
     uint sb_z = (subBrickIndex >> 1) & 1;
     uint sb_y = (subBrickIndex >> 2) & 1;
     
-#if defined(PLATFORM_METAL)
     float3 subBrickPos = brickPos + float3(sb_x, sb_y, sb_z) * 4.0f;
-#else
-    float3 subBrickPos = brickPos + make_float3(sb_x, sb_y, sb_z) * 4.0f;
-#endif
     
     uint v_x = threadID_local & 3;
     uint v_z = (threadID_local >> 2) & 3;
     uint v_y = (threadID_local >> 4) & 3;
     
-#if defined(PLATFORM_METAL)
     float3 voxelPos = subBrickPos + float3(v_x, v_y, v_z);
-#else
-    float3 voxelPos = subBrickPos + make_float3(v_x, v_y, v_z);
-#endif
     
     float density = Evaluate(voxelPos.x, voxelPos.y, voxelPos.z);
     bool isSolid = density > 0.0f;
     
-#if defined(PLATFORM_METAL)
-    threadgroup atomic_uint groupMaskHigh;
-    threadgroup atomic_uint groupMaskLow;
-    
-    if (threadID_local == 0) {
-        atomic_store_explicit(&groupMaskHigh, 0, memory_order_relaxed);
-        atomic_store_explicit(&groupMaskLow, 0, memory_order_relaxed);
-    }
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-    
-    if (isSolid) {
-        if (threadID_local < 32) {
-            atomic_fetch_or_explicit(&groupMaskLow, (1u << threadID_local), memory_order_relaxed);
-        } else {
-            atomic_fetch_or_explicit(&groupMaskHigh, (1u << (threadID_local - 32)), memory_order_relaxed);
-        }
-        
-        uint8_t matID = get_procedural_material_id(voxelPos);
-        uint64_t finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID_local;
-        dataBuffer[finalDataIdx] = matID;
-    } else {
-        uint64_t finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID_local;
-        dataBuffer[finalDataIdx] = 0;
-    }
-    
-    threadgroup_barrier(mem_flags::mem_threadgroup);
-    
-    if (threadID_local == 0) {
-        uint low = atomic_load_explicit(&groupMaskLow, memory_order_relaxed);
-        uint high = atomic_load_explicit(&groupMaskHigh, memory_order_relaxed);
-        uint64_t fullMask = (uint64_t(high) << 32) | uint64_t(low);
-        
-        occupancyBuffer[item.occupancyOffset + subBrickIndex] = fullMask;
-    }
-#else
-    // CUDA path
-    __shared__ uint groupMaskHigh;
-    __shared__ uint groupMaskLow;
+    static groupshared uint groupMaskHigh;
+    static groupshared uint groupMaskLow;
     
     if (threadID_local == 0) {
         groupMaskHigh = 0;
         groupMaskLow = 0;
     }
-    __syncthreads();
+    GroupMemoryBarrierWithGroupSync();
     
     if (isSolid) {
         if (threadID_local < 32) {
-            atomicOr(&groupMaskLow, (1u << threadID_local));
+            InterlockedOr(groupMaskLow, (1u << threadID_local));
         } else {
-            atomicOr(&groupMaskHigh, (1u << (threadID_local - 32)));
+            InterlockedOr(groupMaskHigh, (1u << (threadID_local - 32)));
         }
         
         uint8_t matID = get_procedural_material_id(voxelPos);
@@ -328,75 +247,39 @@ KERNEL(XMap_FillBricks)(
         dataBuffer[finalDataIdx] = 0;
     }
     
-    __syncthreads();
+    GroupMemoryBarrierWithGroupSync();
     
     if (threadID_local == 0) {
         uint64_t fullMask = (uint64_t(groupMaskHigh) << 32) | uint64_t(groupMaskLow);
         occupancyBuffer[item.occupancyOffset + subBrickIndex] = fullMask;
     }
-#endif
-}
-
-ulong pack_4x4x4_block(float3 startPos) {
-    ulong packed = 0;
-    for(int z=0; z<4; z++) {
-        for(int y=0; y<4; y++) {
-            for(int x=0; x<4; x++) {
-                if(Evaluate(startPos.x + x, startPos.y + y, startPos.z + z) > 0.0f) {
-                    packed |= (1UL << (x + y * 4 + z * 16));
-                }
-            }
-        }
-    }
-    return packed;
 }
 
 // Kernel: Fill dynamic atlases
-KERNEL(FillDynamicAtlases)(
-    PARAM_TEXTURE_READ(tex3d_u32, indirection, 0),
-    PARAM_BUFFER(uint, geoPool, 0),
-    PARAM_BUFFER(uchar, matPool, 1),
-    DECLARE_GID_3D()
-)
+[shader("compute")]
+[numthreads(8, 8, 8)]
+void FillDynamicAtlases(uint3 gid : SV_DispatchThreadID)
 {
-#if !defined(PLATFORM_METAL)
-    int3 gid = make_int3(blockIdx.x * blockDim.x + threadIdx.x,
-                         blockIdx.y * blockDim.y + threadIdx.y,
-                         blockIdx.z * blockDim.z + threadIdx.z);
-#endif
     if (gid.x >= IND_X || gid.y >= IND_Y || gid.z >= IND_Z) return;
 
-    uint index = TEX_READ_3D(indirection, gid);
+    uint index = indirection[gid];
 
     if (index < IND_OFFSET) return;
 
     uint brickIdx = index - IND_OFFSET;
 
-#if defined(PLATFORM_METAL)
-    device ulong* geoPool64 = (device ulong*)geoPool;
-#else
-    ulong* geoPool64 = (ulong*)geoPool;
-#endif
     uint64_t geoBaseIdx = (uint64_t)brickIdx * 8;
     uint64_t matBaseIdx = (uint64_t)brickIdx * 512;
 
-#if defined(PLATFORM_METAL)
     float3 worldBase = float3(gid) * 8.0f;
-#else
-    float3 worldBase = make_float3(gid.x, gid.y, gid.z) * 8.0f;
-#endif
 
     for(int z=0; z<2; z++) {
         for(int y=0; y<2; y++) {
             for(int x=0; x<2; x++) {
-#if defined(PLATFORM_METAL)
                 float3 chunkPos = worldBase + float3(x*4, y*4, z*4);
-#else
-                float3 chunkPos = worldBase + make_float3(x*4, y*4, z*4);
-#endif
-                ulong packed = pack_4x4x4_block(chunkPos);
+                uint64_t packed = pack_4x4x4_block(chunkPos);
                 uint localChunkIdx = x + (y * 2) + (z * 4);
-                geoPool64[geoBaseIdx + localChunkIdx] = packed;
+                geoPool[geoBaseIdx + localChunkIdx] = packed;
             }
         }
     }
@@ -404,11 +287,7 @@ KERNEL(FillDynamicAtlases)(
     for(int z=0; z<8; z++) {
         for(int y=0; y<8; y++) {
             for(int x=0; x<8; x++) {
-#if defined(PLATFORM_METAL)
                 float3 voxelPos = worldBase + float3(x,y,z);
-#else
-                float3 voxelPos = worldBase + make_float3(x,y,z);
-#endif
                 uint8_t matID = 0;
                 
                 if (Evaluate(voxelPos.x, voxelPos.y, voxelPos.z) > 0.0f) {

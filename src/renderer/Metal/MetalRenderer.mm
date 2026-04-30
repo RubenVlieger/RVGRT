@@ -5,9 +5,11 @@
 #include "cumath.h"
 #include "renderer/MaterialMap.hpp"
 #include "renderer/ShaderTypes.h"
+#include "renderer/ShaderGlobalParams.hpp"
 #include "renderer/shader_settings.h"
 #include "console/GameConsole.hpp"
 #include "console/ConsoleBuffer.hpp"
+#include "ShaderBindings.generated.hpp"
 #include <MetalFX/MetalFX.h>
 #import <MetalKit/MetalKit.h>
 #include <cassert>
@@ -53,7 +55,19 @@ MetalRenderer::MetalRenderer(Device device)
     // Create GPU buffers
     CreateExposureBuffer();
     CreateCharacterBuffer();
-    
+
+    // Create shared linear sampler
+    {
+        MTLSamplerDescriptor *samplerDesc = [[MTLSamplerDescriptor alloc] init];
+        samplerDesc.minFilter = MTLSamplerMinMagFilterLinear;
+        samplerDesc.magFilter = MTLSamplerMinMagFilterLinear;
+        samplerDesc.mipFilter = MTLSamplerMipFilterNotMipmapped;
+        samplerDesc.sAddressMode = MTLSamplerAddressModeRepeat;
+        samplerDesc.tAddressMode = MTLSamplerAddressModeRepeat;
+        samplerDesc.rAddressMode = MTLSamplerAddressModeClampToEdge;
+        _linearSampler = [(id<MTLDevice>)device newSamplerStateWithDescriptor:samplerDesc];
+    }
+
 // Initialize render targets
   Initialize(State::dispWIDTH, State::dispHEIGHT);
   
@@ -357,15 +371,14 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     [encoder pushDebugGroup:@"Pass 0: Approx"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoDistApprox];
-    [encoder setTexture:(id<MTLTexture>)manager.GetHalfDist().texture atIndex:0];
-    [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
-    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:2];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:3];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer() offset:0 atIndex:4];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer() offset:0 atIndex:5];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer() offset:0 atIndex:6];
-    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:7];
+    {
+        GlobalParams gp = { camData, frameData };
+        [encoder setBytes:&gp length:sizeof(GlobalParams) atIndex:ShaderBindings::distApproximationKernel::buffer::globalParams];
+    }
+    [encoder setTexture:(id<MTLTexture>)manager.GetHalfDist().texture atIndex:ShaderBindings::distApproximationKernel::texture::distTex];
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:ShaderBindings::distApproximationKernel::texture::indirection];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:ShaderBindings::distApproximationKernel::buffer::sectorBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:ShaderBindings::distApproximationKernel::buffer::charData];
     [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize8];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
@@ -380,21 +393,24 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     [encoder pushDebugGroup:@"Pass 1: GBuffer"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoGBuffer];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDirectLight().texture atIndex:0];
-    [encoder setTexture:(id<MTLTexture>)manager.GetAlbedo().texture atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)manager.GetNormal().texture atIndex:2];
-    [encoder setTexture:(id<MTLTexture>)manager.GetMotion().texture atIndex:3];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:4];
-    [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
-    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:5];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:3];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer() offset:0 atIndex:4];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer() offset:0 atIndex:5];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer() offset:0 atIndex:6];
-    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:7];
-    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:8];
-    [encoder setTexture:(id<MTLTexture>)manager.GetHalfDist().texture atIndex:9];
+    {
+        GlobalParams gp = { camData, frameData };
+        [encoder setBytes:&gp length:sizeof(GlobalParams) atIndex:ShaderBindings::GBufferAndDirectLight::buffer::globalParams];
+    }
+    [encoder setTexture:(id<MTLTexture>)manager.GetDirectLight().texture atIndex:ShaderBindings::GBufferAndDirectLight::texture::texDirectLight];
+    [encoder setTexture:(id<MTLTexture>)manager.GetAlbedo().texture atIndex:ShaderBindings::GBufferAndDirectLight::texture::texAlbedo];
+    [encoder setTexture:(id<MTLTexture>)manager.GetNormal().texture atIndex:ShaderBindings::GBufferAndDirectLight::texture::texNormal];
+    [encoder setTexture:(id<MTLTexture>)manager.GetMotion().texture atIndex:ShaderBindings::GBufferAndDirectLight::texture::texMotion];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:ShaderBindings::GBufferAndDirectLight::texture::texDepth];
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:ShaderBindings::GBufferAndDirectLight::texture::indirection];
+    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:ShaderBindings::GBufferAndDirectLight::texture::textureAtlas];
+    [encoder setTexture:(id<MTLTexture>)manager.GetHalfDist().texture atIndex:ShaderBindings::GBufferAndDirectLight::texture::halfDistTex];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:ShaderBindings::GBufferAndDirectLight::buffer::sectorBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer() offset:0 atIndex:ShaderBindings::GBufferAndDirectLight::buffer::occupancyBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer() offset:0 atIndex:ShaderBindings::GBufferAndDirectLight::buffer::dataBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:ShaderBindings::GBufferAndDirectLight::buffer::charData];
+    [encoder setSamplerState:(id<MTLSamplerState>)_linearSampler atIndex:ShaderBindings::GBufferAndDirectLight::sampler::atlasSampler];
+    [encoder setSamplerState:(id<MTLSamplerState>)_linearSampler atIndex:ShaderBindings::GBufferAndDirectLight::sampler::distSampler];
     [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
@@ -410,18 +426,20 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     [encoder pushDebugGroup:@"Pass 2: Indirect"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoIndirect];
-    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirectHalf().texture atIndex:0];
-    [encoder setTexture:(id<MTLTexture>)manager.GetNormal().texture atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:2];
-    [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
-    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:3];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:3];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer() offset:0 atIndex:4];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer() offset:0 atIndex:5];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer() offset:0 atIndex:6];
-    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:7];
-    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:8];
+    {
+        GlobalParams gp = { camData, frameData };
+        [encoder setBytes:&gp length:sizeof(GlobalParams) atIndex:ShaderBindings::IndirectBounce::buffer::globalParams];
+    }
+    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirectHalf().texture atIndex:ShaderBindings::IndirectBounce::texture::texRawIndirect];
+    [encoder setTexture:(id<MTLTexture>)manager.GetNormal().texture atIndex:ShaderBindings::IndirectBounce::texture::texNormal];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:ShaderBindings::IndirectBounce::texture::texDepth];
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:ShaderBindings::IndirectBounce::texture::indirection];
+    [encoder setTexture:(__bridge id<MTLTexture>)_texturepack.getTextureObject() atIndex:ShaderBindings::IndirectBounce::texture::textureAtlas];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:ShaderBindings::IndirectBounce::buffer::sectorBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer() offset:0 atIndex:ShaderBindings::IndirectBounce::buffer::occupancyBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetDataBuffer() offset:0 atIndex:ShaderBindings::IndirectBounce::buffer::dataBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:ShaderBindings::IndirectBounce::buffer::charData];
+    [encoder setSamplerState:(id<MTLSamplerState>)_linearSampler atIndex:ShaderBindings::IndirectBounce::sampler::atlasSampler];
     [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
@@ -447,13 +465,13 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     [encoder pushDebugGroup:@"Pass 3: Accumulate"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoAccumulate];
-    [encoder setTexture:(id<MTLTexture>)manager.GetAccum(currIdx).texture atIndex:0];
-    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirect().texture atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)manager.GetAccum(prevIdx).texture atIndex:2];
-    [encoder setTexture:(id<MTLTexture>)manager.GetMotion().texture atIndex:3];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:4];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(prevIdx).texture atIndex:5];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDirectLight().texture atIndex:6];
+    [encoder setTexture:(id<MTLTexture>)manager.GetAccum(currIdx).texture atIndex:ShaderBindings::TemporalAccumulation::texture::texAccum];
+    [encoder setTexture:(id<MTLTexture>)manager.GetRawIndirect().texture atIndex:ShaderBindings::TemporalAccumulation::texture::texRawIndirect];
+    [encoder setTexture:(id<MTLTexture>)manager.GetAccum(prevIdx).texture atIndex:ShaderBindings::TemporalAccumulation::texture::texHistory];
+    [encoder setTexture:(id<MTLTexture>)manager.GetMotion().texture atIndex:ShaderBindings::TemporalAccumulation::texture::texMotion];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:ShaderBindings::TemporalAccumulation::texture::texDepth];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(prevIdx).texture atIndex:ShaderBindings::TemporalAccumulation::texture::texPrevDepth];
+    [encoder setSamplerState:(id<MTLSamplerState>)_linearSampler atIndex:ShaderBindings::TemporalAccumulation::sampler::historySampler];
     [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
@@ -503,16 +521,18 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     [encoder pushDebugGroup:@"Pass 5: Volumetric"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoVolumetric];
-    [encoder setTexture:(id<MTLTexture>)manager.GetVolumetric(currIdx).texture atIndex:0];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)manager.GetVolumetric(prevIdx).texture atIndex:2];
-    [encoder setBytes:&camData length:sizeof(CameraData) atIndex:0];
-    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:3];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:3];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer() offset:0 atIndex:4];
-    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorMaskBuffer() offset:0 atIndex:6];
-    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:7];
+    {
+        GlobalParams gp = { camData, frameData };
+        [encoder setBytes:&gp length:sizeof(GlobalParams) atIndex:ShaderBindings::VolumetricFog::buffer::globalParams];
+    }
+    [encoder setTexture:(id<MTLTexture>)manager.GetVolumetric(currIdx).texture atIndex:ShaderBindings::VolumetricFog::texture::texVolumetric];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:ShaderBindings::VolumetricFog::texture::texDepth];
+    [encoder setTexture:(id<MTLTexture>)manager.GetVolumetric(prevIdx).texture atIndex:ShaderBindings::VolumetricFog::texture::texHistory];
+    [encoder setTexture:(id<MTLTexture>)_materialMap.GetIndirectionTexture() atIndex:ShaderBindings::VolumetricFog::texture::indirection];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetSectorBuffer() offset:0 atIndex:ShaderBindings::VolumetricFog::buffer::sectorBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_materialMap.GetOccupancyBuffer() offset:0 atIndex:ShaderBindings::VolumetricFog::buffer::occupancyBuffer];
+    [encoder setBuffer:(id<MTLBuffer>)_characterBuffer offset:0 atIndex:ShaderBindings::VolumetricFog::buffer::charData];
+    [encoder setSamplerState:(id<MTLSamplerState>)_linearSampler atIndex:ShaderBindings::VolumetricFog::sampler::historySampler];
     [encoder dispatchThreads:gridSizeHalf threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
@@ -525,11 +545,11 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     [encoder pushDebugGroup:@"Pass 6: Exposure"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoExposure];
-    [encoder setBuffer:(id<MTLBuffer>)_exposureBuffer offset:0 atIndex:0];
-    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDirectLight().texture atIndex:0];
-    [encoder setTexture:(id<MTLTexture>)manager.GetAccum(currIdx).texture atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)manager.GetAlbedo().texture atIndex:2];
+    [encoder setBytes:&frameData length:sizeof(FrameData) atIndex:ShaderBindings::ComputeExposure::buffer::globalParams];
+    [encoder setBuffer:(id<MTLBuffer>)_exposureBuffer offset:0 atIndex:ShaderBindings::ComputeExposure::buffer::exposure];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDirectLight().texture atIndex:ShaderBindings::ComputeExposure::texture::texDirect];
+    [encoder setTexture:(id<MTLTexture>)manager.GetAccum(currIdx).texture atIndex:ShaderBindings::ComputeExposure::texture::texAccum];
+    [encoder setTexture:(id<MTLTexture>)manager.GetAlbedo().texture atIndex:ShaderBindings::ComputeExposure::texture::texAlbedo];
     [encoder dispatchThreads:groupSize threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
@@ -542,13 +562,13 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     }
     [encoder pushDebugGroup:@"Pass 7: Composite"];
     [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoComposite];
-    [encoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:0];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDirectLight().texture atIndex:1];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDenoiseTemp().texture atIndex:2];
-    [encoder setTexture:(id<MTLTexture>)manager.GetAlbedo().texture atIndex:3];
-    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:4];
-    [encoder setTexture:(id<MTLTexture>)manager.GetVolumetric(currIdx).texture atIndex:5];
-    [encoder setBuffer:(id<MTLBuffer>)_exposureBuffer offset:0 atIndex:0];
+    [encoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:ShaderBindings::Composite::texture::texFinal];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDirectLight().texture atIndex:ShaderBindings::Composite::texture::texDirect];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDenoiseTemp().texture atIndex:ShaderBindings::Composite::texture::texAccum];
+    [encoder setTexture:(id<MTLTexture>)manager.GetAlbedo().texture atIndex:ShaderBindings::Composite::texture::texAlbedo];
+    [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:ShaderBindings::Composite::texture::texDepth];
+    [encoder setTexture:(id<MTLTexture>)manager.GetVolumetric(currIdx).texture atIndex:ShaderBindings::Composite::texture::texVolumetric];
+    [encoder setBuffer:(id<MTLBuffer>)_exposureBuffer offset:0 atIndex:ShaderBindings::Composite::buffer::exposure];
     [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
     [encoder popDebugGroup];
     if (_supportsTimestamps) {
@@ -562,12 +582,13 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     if (_fontAtlas.IsValid() && _textRenderer.GetNumGlyphs() > 0) {
         [encoder pushDebugGroup:@"Pass 8: TextOverlay"];
         [encoder setComputePipelineState:(id<MTLComputePipelineState>)_psoTextOverlay];
-        [encoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:0];
-        [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:1];
-        [encoder setTexture:(id<MTLTexture>)_textRenderer.GetAtlasTexture() atIndex:2];
-        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetGlyphBuffer() offset:0 atIndex:0];
-        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetOverlayDataBuffer() offset:0 atIndex:1];
-        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetTileBuffer() offset:0 atIndex:2];
+        [encoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:ShaderBindings::TextOverlay::texture::texComposite];
+        [encoder setTexture:(id<MTLTexture>)manager.GetDepth(currIdx).texture atIndex:ShaderBindings::TextOverlay::texture::texDepth];
+        [encoder setTexture:(id<MTLTexture>)_textRenderer.GetAtlasTexture() atIndex:ShaderBindings::TextOverlay::texture::texAtlas];
+        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetGlyphBuffer() offset:0 atIndex:ShaderBindings::TextOverlay::buffer::glyphs];
+        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetOverlayDataBuffer() offset:0 atIndex:ShaderBindings::TextOverlay::buffer::overlayData];
+        [encoder setBuffer:(id<MTLBuffer>)_textRenderer.GetTileBuffer() offset:0 atIndex:ShaderBindings::TextOverlay::buffer::tileData];
+        [encoder setSamplerState:(id<MTLSamplerState>)_linearSampler atIndex:ShaderBindings::TextOverlay::sampler::atlasSampler];
         [encoder dispatchThreads:gridSizeFull threadsPerThreadgroup:groupSize];
         [encoder popDebugGroup];
     }
@@ -611,8 +632,9 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
         id<MTLComputeCommandEncoder> fallbackEncoder = [cmdBuf computeCommandEncoder];
         [fallbackEncoder pushDebugGroup:@"Fallback Blit"];
         [fallbackEncoder setComputePipelineState:(id<MTLComputePipelineState>)_psoFallbackBlit];
-        [fallbackEncoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:0];
-        [fallbackEncoder setTexture:(id<MTLTexture>)_outputTexture atIndex:1];
+        [fallbackEncoder setTexture:(id<MTLTexture>)manager.GetCompositeResult().texture atIndex:ShaderBindings::FallbackBlit::texture::texSrc];
+        [fallbackEncoder setTexture:(id<MTLTexture>)_outputTexture atIndex:ShaderBindings::FallbackBlit::texture::texDst];
+        [fallbackEncoder setSamplerState:(id<MTLSamplerState>)_linearSampler atIndex:ShaderBindings::FallbackBlit::sampler::blitSampler];
         MTLSize outputGrid = MTLSizeMake(State::screenWIDTH, State::screenHEIGHT, 1);
         [fallbackEncoder dispatchThreads:outputGrid threadsPerThreadgroup:groupSize];
         [fallbackEncoder popDebugGroup];

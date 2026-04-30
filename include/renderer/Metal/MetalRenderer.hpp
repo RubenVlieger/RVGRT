@@ -93,6 +93,9 @@ private:
     id _timestampBuffer;
     bool _supportsTimestamps;
     
+    // Shared sampler state
+    id _linearSampler;
+
     // Text rendering
     FontAtlas _fontAtlas;
     TextRenderer _textRenderer;

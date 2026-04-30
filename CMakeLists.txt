@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 
 SET(APP_NAME RVGRT)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum OS X deployment version")
@@ -11,6 +11,116 @@ else()
 endif()
 
 message("Project name: " ${CMAKE_PROJECT_NAME})
+
+# ------------------------------------------------------------------
+#  Slang Compiler Setup
+# ------------------------------------------------------------------
+include(FetchContent)
+
+set(SLANG_VERSION "2026.7.1")
+if(APPLE)
+    if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64|aarch64")
+        set(SLANG_URL "https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-aarch64.zip")
+    else()
+        set(SLANG_URL "https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-macos-x86_64.zip")
+    endif()
+elseif(WIN32)
+    set(SLANG_URL "https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-windows-x86_64.zip")
+else()
+    set(SLANG_URL "https://github.com/shader-slang/slang/releases/download/v${SLANG_VERSION}/slang-${SLANG_VERSION}-linux-x86_64.zip")
+endif()
+
+FetchContent_Declare(
+    slang_binary
+    URL ${SLANG_URL}
+)
+FetchContent_Populate(slang_binary)
+
+find_program(SLANGC slangc PATHS ${slang_binary_SOURCE_DIR}/bin NO_DEFAULT_PATH REQUIRED)
+message(STATUS "Found slangc: ${SLANGC}")
+
+set(SLANG_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang")
+set(SLANG_GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/slang_generated")
+file(MAKE_DIRECTORY ${SLANG_GENERATED_DIR})
+
+set(SLANG_LIB_FILES
+    ${SLANG_SOURCE_DIR}/ShaderTypes.slang
+    ${SLANG_SOURCE_DIR}/Tables.slang
+    ${SLANG_SOURCE_DIR}/Math.slang
+    ${SLANG_SOURCE_DIR}/TerrainGen.slang
+    ${SLANG_SOURCE_DIR}/Intersection.slang
+    ${SLANG_SOURCE_DIR}/Raytracing.slang
+    ${SLANG_SOURCE_DIR}/Settings.slang
+)
+
+set(SLANG_KERNEL_FILES
+    ${SLANG_SOURCE_DIR}/dist_approx.slang
+    ${SLANG_SOURCE_DIR}/direct_light.slang
+    ${SLANG_SOURCE_DIR}/indirect_bounce.slang
+    ${SLANG_SOURCE_DIR}/bilateral_upsample.slang
+    ${SLANG_SOURCE_DIR}/temporal_acc.slang
+    ${SLANG_SOURCE_DIR}/denoise.slang
+    ${SLANG_SOURCE_DIR}/volumetric.slang
+    ${SLANG_SOURCE_DIR}/exposure.slang
+    ${SLANG_SOURCE_DIR}/composite.slang
+    ${SLANG_SOURCE_DIR}/material_gen.slang
+    ${SLANG_SOURCE_DIR}/text_overlay.slang
+)
+
+# Kernel-specific entry points and source files (shared between platforms)
+set(KERNEL_SOURCES
+    dist_approx.slang
+    direct_light.slang
+    indirect_bounce.slang
+    bilateral_upsample.slang
+    temporal_acc.slang
+    denoise.slang
+    volumetric.slang
+    exposure.slang
+    composite.slang
+    composite.slang
+    material_gen.slang
+    material_gen.slang
+    material_gen.slang
+    material_gen.slang
+    text_overlay.slang
+)
+
+set(KERNEL_ENTRY_POINTS
+    distApproximationKernel
+    GBufferAndDirectLight
+    IndirectBounce
+    BilateralUpsample
+    TemporalAccumulation
+    BilateralDenoise
+    VolumetricFog
+    ComputeExposure
+    Composite
+    FallbackBlit
+    XMap_AnalyzeSectors
+    XMap_AnalyzeStreaming
+    XMap_FillBricks
+    FillDynamicAtlases
+    TextOverlay
+)
+
+set(SLANG_ENTRY_POINTS
+    -entry distApproximationKernel -stage compute
+    -entry GBufferAndDirectLight -stage compute
+    -entry IndirectBounce -stage compute
+    -entry BilateralUpsample -stage compute
+    -entry TemporalAccumulation -stage compute
+    -entry BilateralDenoise -stage compute
+    -entry VolumetricFog -stage compute
+    -entry ComputeExposure -stage compute
+    -entry Composite -stage compute
+    -entry FallbackBlit -stage compute
+    -entry XMap_AnalyzeSectors -stage compute
+    -entry XMap_AnalyzeStreaming -stage compute
+    -entry XMap_FillBricks -stage compute
+    -entry FillDynamicAtlases -stage compute
+    -entry TextOverlay -stage compute
+)
 
 # Set language standards
 set(CMAKE_CXX_STANDARD 20)
@@ -61,44 +171,77 @@ if(WIN32)
         src/CudaD3D12Texture.cu
     )
     
-    # --- Shader files ---
-    # Compile .shader files directly with NVCC
-    set(SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/renderer/kernels/shaders")
-    
-    set(SHADER_FILES
-        tables.shader
-        dist_approx.shader
-        direct_light.shader
-        indirect_bounce.shader
-        bilateral_upsample.shader
-        temporal_acc.shader
-        denoise.shader
-        volumetric.shader
-        exposure.shader
-        composite.shader
-        material_gen.shader
-        text_overlay.shader
-    )
-    
-    foreach(SHADER ${SHADER_FILES})
-        set(SHADER_PATH "${SHADER_SOURCE_DIR}/${SHADER}")
-        list(APPEND WIN_CUDA_SOURCES ${SHADER_PATH})
-        
-        # Set CUDA-specific compile options for shader files
-        set_source_files_properties(${SHADER_PATH} PROPERTIES 
-            LANGUAGE CUDA
-            COMPILE_OPTIONS "-DPLATFORM_CUDA=1"
+    # --- Slang shader compilation (per-kernel to avoid duplicate globals) ---
+    list(LENGTH KERNEL_SOURCES KERNEL_COUNT)
+    math(EXPR KERNEL_LAST "${KERNEL_COUNT} - 1")
+
+    set(SLANG_GENERATED_CUDA_FILES "")
+    foreach(IDX RANGE 0 ${KERNEL_LAST})
+        list(GET KERNEL_SOURCES ${IDX} KERNEL_SOURCE)
+        list(GET KERNEL_ENTRY_POINTS ${IDX} KERNEL_ENTRY_POINT)
+
+        set(GENERATED_CUDA_FILE "${SLANG_GENERATED_DIR}/${KERNEL_ENTRY_POINT}.cu")
+        list(APPEND SLANG_GENERATED_CUDA_FILES "${GENERATED_CUDA_FILE}")
+
+        add_custom_command(
+            OUTPUT "${GENERATED_CUDA_FILE}"
+            COMMAND ${SLANGC}
+                -target cuda
+                -entry ${KERNEL_ENTRY_POINT}
+                -stage compute
+                -I "${CMAKE_SOURCE_DIR}/include"
+                -I "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang"
+                -D__SLANG__
+                "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+                -depfile "${GENERATED_CUDA_FILE}.d"
+                -o "${GENERATED_CUDA_FILE}"
+            DEPENDS "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+            DEPFILE "${GENERATED_CUDA_FILE}.d"
+            COMMENT "Transpiling ${KERNEL_ENTRY_POINT} to CUDA C++..."
         )
     endforeach()
-    
-    message(STATUS "Using shader files: ${SHADER_FILES}")
+
+    # Post-process generated CUDA files and create launch wrappers
+    set(CUDA_POSTPROC_DIR "${SLANG_GENERATED_DIR}/cuda_postproc")
+    set(CUDA_WRAPPER_HEADER "${CMAKE_CURRENT_BINARY_DIR}/CudaShaderLaunchers.generated.cuh")
+
+    set(CUDA_WRAPPER_BYPRODUCTS "")
+    foreach(IDX RANGE 0 ${KERNEL_LAST})
+        list(GET KERNEL_ENTRY_POINTS ${IDX} KERNEL_ENTRY_POINT)
+        list(APPEND CUDA_WRAPPER_BYPRODUCTS "${CUDA_POSTPROC_DIR}/${KERNEL_ENTRY_POINT}.cu")
+    endforeach()
+
+    add_custom_command(
+        OUTPUT ${CUDA_WRAPPER_HEADER} ${CUDA_WRAPPER_BYPRODUCTS}
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/gen_cuda_wrappers.py"
+                "${SLANG_GENERATED_DIR}"
+                "${CUDA_POSTPROC_DIR}"
+                "${CUDA_WRAPPER_HEADER}"
+        DEPENDS ${SLANG_GENERATED_CUDA_FILES}
+        COMMENT "Generating CUDA kernel launch wrappers..."
+    )
+    add_custom_target(GenerateCUDAWrappers DEPENDS "${CUDA_WRAPPER_HEADER}")
+
+    # Collect all post-processed .cu files as CUDA sources
+    set(CUDA_WRAPPER_SOURCES "")
+    foreach(IDX RANGE 0 ${KERNEL_LAST})
+        list(GET KERNEL_ENTRY_POINTS ${IDX} KERNEL_ENTRY_POINT)
+        set(WRAPPER_CU "${CUDA_POSTPROC_DIR}/${KERNEL_ENTRY_POINT}.cu")
+        list(APPEND CUDA_WRAPPER_SOURCES "${WRAPPER_CU}")
+    endforeach()
+    list(APPEND WIN_CUDA_SOURCES ${CUDA_WRAPPER_SOURCES})
+    set_source_files_properties(${CUDA_WRAPPER_SOURCES} PROPERTIES LANGUAGE CUDA)
+
+    message(STATUS "Using Slang shader sources: ${SLANG_KERNEL_FILES}")
 
     # --- Create the Windows Executable ---
     add_executable(${APP_NAME} WIN32
         ${WIN_SOURCES}
         ${WIN_CUDA_SOURCES}
     )
-    
+    add_dependencies(${APP_NAME} GenerateCUDAWrappers)
+    target_include_directories(${APP_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
+
     target_sources(${APP_NAME} PRIVATE exports.def)
 
     # --- CUDA Properties ---
@@ -178,64 +321,74 @@ elseif(APPLE)
         ${MACOS_ICON}
     )
     
-    # --- Metal shader compilation ---
-    # Compile .shader files directly (they contain PLATFORM_METAL preprocessor directives)
-    set(SHADER_SOURCE_DIR "${CMAKE_SOURCE_DIR}/src/renderer/kernels/shaders")
-    
-    set(SHADER_FILES
-        tables.shader
-        dist_approx.shader
-        direct_light.shader
-        indirect_bounce.shader
-        bilateral_upsample.shader
-        temporal_acc.shader
-        denoise.shader
-        volumetric.shader
-        exposure.shader
-        composite.shader
-        material_gen.shader
-        text_overlay.shader
-    )
-    
+    # --- Slang to Metal shader compilation ---
     find_program(XCRUN_TOOL xcrun REQUIRED)
     message(STATUS "Found xcrun for Metal shader compilation")
-    
-    set(MAC_METAL_SOURCES "")
-    foreach(SHADER ${SHADER_FILES})
-        set(SHADER_PATH "${SHADER_SOURCE_DIR}/${SHADER}")
-        list(APPEND MAC_METAL_SOURCES ${SHADER_PATH})
-    endforeach()    
-    set(MAC_METAL_AIR_FILES "")
-    set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib") 
 
-    find_program(XCRUN_TOOL xcrun REQUIRED)
+    set(MAC_METAL_LIBRARY_SRC "${CMAKE_CURRENT_BINARY_DIR}/default.metallib")
 
-    foreach(METAL_FILE ${MAC_METAL_SOURCES})
-        get_filename_component(METAL_FILENAME ${METAL_FILE} NAME_WE)
-        set(AIR_FILE "${CMAKE_CURRENT_BINARY_DIR}/${METAL_FILENAME}.air")
-        list(APPEND MAC_METAL_AIR_FILES ${AIR_FILE})
+    list(LENGTH KERNEL_SOURCES KERNEL_COUNT)
+    math(EXPR KERNEL_LAST "${KERNEL_COUNT} - 1")
+
+    set(SLANG_GENERATED_METAL_FILES "")
+    set(SLANG_GENERATED_AIR_FILES "")
+
+    foreach(IDX RANGE 0 ${KERNEL_LAST})
+        list(GET KERNEL_SOURCES ${IDX} KERNEL_SOURCE)
+        list(GET KERNEL_ENTRY_POINTS ${IDX} KERNEL_ENTRY_POINT)
+
+        set(GENERATED_METAL_FILE "${SLANG_GENERATED_DIR}/${KERNEL_ENTRY_POINT}.metal")
+        set(GENERATED_AIR_FILE "${SLANG_GENERATED_DIR}/${KERNEL_ENTRY_POINT}.air")
+        list(APPEND SLANG_GENERATED_METAL_FILES "${GENERATED_METAL_FILE}")
+        list(APPEND SLANG_GENERATED_AIR_FILES "${GENERATED_AIR_FILE}")
 
         add_custom_command(
-            OUTPUT "${AIR_FILE}"
+            OUTPUT "${GENERATED_METAL_FILE}"
+            COMMAND ${SLANGC}
+                -target metal
+                -entry ${KERNEL_ENTRY_POINT}
+                -stage compute
+                -I "${CMAKE_SOURCE_DIR}/include"
+                -I "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang"
+                -D__SLANG__
+                "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+                -depfile "${GENERATED_METAL_FILE}.d"
+                -o "${GENERATED_METAL_FILE}"
+            DEPENDS "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+            DEPFILE "${GENERATED_METAL_FILE}.d"
+            COMMENT "Transpiling ${KERNEL_ENTRY_POINT} to MSL..."
+        )
+
+        add_custom_command(
+            OUTPUT "${GENERATED_AIR_FILE}"
             COMMAND ${XCRUN_TOOL} metal -c
                     -x metal
-                    -DPLATFORM_METAL=1
                     -frecord-sources
                     -gline-tables-only
                     -I "${CMAKE_SOURCE_DIR}/include"
-                    "${METAL_FILE}"
-                    -o "${AIR_FILE}"
-            DEPENDS "${METAL_FILE}" "${CMAKE_SOURCE_DIR}/include/shader_macros.h"
-            COMMENT "Compiling Metal shader ${METAL_FILE}"
+                    "${GENERATED_METAL_FILE}"
+                    -o "${GENERATED_AIR_FILE}"
+            DEPENDS "${GENERATED_METAL_FILE}"
+            COMMENT "Compiling ${KERNEL_ENTRY_POINT} MSL to AIR..."
         )
     endforeach()
 
     add_custom_command(
         OUTPUT "${MAC_METAL_LIBRARY_SRC}"
-        COMMAND ${XCRUN_TOOL} metallib -o "${MAC_METAL_LIBRARY_SRC}" ${MAC_METAL_AIR_FILES}
-        DEPENDS ${MAC_METAL_AIR_FILES}
-        COMMENT "Creating Metal library from ${MAC_METAL_AIR_FILES}"
+        COMMAND ${XCRUN_TOOL} metallib -o "${MAC_METAL_LIBRARY_SRC}" ${SLANG_GENERATED_AIR_FILES}
+        DEPENDS ${SLANG_GENERATED_AIR_FILES}
+        COMMENT "Linking AIR files to metallib..."
     )
+
+    # --- Generate shader binding constants header from compiled .metal files ---
+    set(SHADER_BINDINGS_HEADER "${CMAKE_CURRENT_BINARY_DIR}/ShaderBindings.generated.hpp")
+    add_custom_command(
+        OUTPUT "${SHADER_BINDINGS_HEADER}"
+        COMMAND python3 "${CMAKE_SOURCE_DIR}/gen_shader_bindings.py" "${SLANG_GENERATED_DIR}" "${SHADER_BINDINGS_HEADER}"
+        DEPENDS ${SLANG_GENERATED_METAL_FILES}
+        COMMENT "Generating shader binding constants..."
+    )
+    add_custom_target(GenerateShaderBindings DEPENDS "${SHADER_BINDINGS_HEADER}")
 
     add_custom_target(BuildMetalShaders DEPENDS "${MAC_METAL_LIBRARY_SRC}")
     
@@ -263,7 +416,8 @@ elseif(APPLE)
     COMMENT "Stripping extended attributes to prevent CodeSign detritus error"
 )
 
-    add_dependencies(${APP_NAME} BuildMetalShaders)
+    add_dependencies(${APP_NAME} BuildMetalShaders GenerateShaderBindings)
+    target_include_directories(${APP_NAME} PRIVATE ${CMAKE_CURRENT_BINARY_DIR})
 
     #set_target_properties(${APP_NAME} PROPERTIES UNITY_BUILD ON)
     target_compile_options(${APP_NAME} PRIVATE -fobjc-arc)

@@ -32,8 +32,8 @@ public:
   /// Per-frame streaming update. Returns true if any sectors changed.
   bool UpdateStreaming(simd_float3 cameraPos);
 
-  // Getters for rendering bindings (device pointers)
-  uint32_t* GetIndirectionPtr() const { return d_indirection; }
+  // Getters for rendering bindings
+  cudaTextureObject_t GetIndirectionTexture() const { return d_indirectionTex; }
   SectorInfo* GetSectorBufferPtr() const { return d_sectors; }
   uint64_t* GetOccupancyPtr() const { return _brickPool.GetOccupancyPtr(); }
   uint8_t* GetDataPtr() const { return _brickPool.GetDataPtr(); }
@@ -49,8 +49,9 @@ public:
 
 private:
   // --- GPU Resources ---
-  // L1: 3D Texture as flat buffer (R32Uint). Value = sector handle (index into SectorBuffer)
-  uint32_t* d_indirection;
+  // L1: 3D Texture array (R32Uint). Value = sector handle (index into SectorBuffer)
+  cudaArray_t d_indirectionArray;
+  cudaTextureObject_t d_indirectionTex;
 
   // L2: Buffer of SectorInfo structs
   SectorInfo* d_sectors;

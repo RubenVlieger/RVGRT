@@ -27,118 +27,12 @@
     } \
 } while(0)
 
-// ============================================================================
-// CONSTANT MEMORY (matching Metal's constant buffers)
-// ============================================================================
-
-__constant__ CameraData c_camera;
-__constant__ FrameData c_frame;
+#include "CudaShaderLaunchers.generated.cuh"
 
 // ============================================================================
-// KERNEL DECLARATIONS (from preprocessed .shader files)
-// These will be linked from the preprocessed shader files
+// STUB KERNEL (defined locally, not from Slang)
 // ============================================================================
 
-// Distance Approximation Pass (half-res)
-__global__ void distApproximationKernel(
-    cudaSurfaceObject_t distSurf,
-    const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* occupancyBuffer,
-    const uint8_t* dataBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
-    int width, int height
-);
-
-// GBuffer + Direct Light Pass (full-res)
-__global__ void GBufferAndDirectLight(
-    cudaSurfaceObject_t texDirectLight,
-    cudaSurfaceObject_t texAlbedo,
-    cudaSurfaceObject_t texNormal,
-    cudaSurfaceObject_t texMotion,
-    cudaSurfaceObject_t texDepth,
-    cudaTextureObject_t halfDistTex,
-    cudaTextureObject_t textureAtlas,
-    const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* occupancyBuffer,
-    const uint8_t* dataBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
-    int width, int height
-);
-
-// Indirect Bounce Pass (full-res)
-__global__ void IndirectBounce(
-    cudaSurfaceObject_t texRawIndirect,
-    cudaTextureObject_t texNormal,
-    cudaTextureObject_t texDepth,
-    const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* occupancyBuffer,
-    const uint8_t* dataBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
-    int width, int height
-);
-
-// Temporal Accumulation Pass (full-res)
-__global__ void TemporalAccumulation(
-    cudaSurfaceObject_t texAccum,
-    cudaTextureObject_t texRawIndirect,
-    cudaTextureObject_t texHistory,
-    cudaTextureObject_t texMotion,
-    cudaTextureObject_t texDepth,
-    cudaTextureObject_t texPrevDepth,
-    cudaTextureObject_t texDirect,
-    int width, int height
-);
-
-// Bilateral Denoise Pass (full-res, multi-iteration)
-__global__ void BilateralDenoise(
-    cudaSurfaceObject_t output,
-    cudaTextureObject_t input,
-    cudaTextureObject_t texNormal,
-    cudaTextureObject_t texDepth,
-    int stepWidth,
-    int width, int height
-);
-
-// Volumetric Fog Pass (half-res)
-__global__ void VolumetricFog(
-    cudaSurfaceObject_t texVolumetric,
-    cudaTextureObject_t texDepth,
-    cudaTextureObject_t texHistory,
-    const uint32_t* indirection,
-    const SectorInfo* sectorBuffer,
-    const uint64_t* sectorMaskBuffer,
-    const CharacterGPUData* charData,
-    int width, int height
-);
-
-// Compute Exposure Pass (reduction)
-__global__ void ComputeExposure(
-    ExposureData* exposure,
-    cudaTextureObject_t texDirect,
-    cudaTextureObject_t texAccum,
-    cudaTextureObject_t texAlbedo,
-    int width, int height
-);
-
-// Composite Pass (full-res)
-__global__ void Composite(
-    cudaSurfaceObject_t texFinal,
-    cudaTextureObject_t texDirect,
-    cudaTextureObject_t texAccum,
-    cudaTextureObject_t texAlbedo,
-    cudaTextureObject_t texDepth,
-    cudaTextureObject_t texVolumetric,
-    const ExposureData* exposure,
-    int width, int height
-);
-
-// DLSS Input Preparation (copy composite to interop texture)
 __global__ void CopyToInteropKernel(
     cudaSurfaceObject_t src,
     cudaSurfaceObject_t dst,
@@ -419,13 +313,7 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     // Upload character data to GPU
     CUDA_CHECK(cudaMemcpyAsync(_characterBuffer, &charData, sizeof(CharacterGPUData),
                                cudaMemcpyHostToDevice, _cudaStream));
-    
-    // Upload constant data
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(c_camera, &camData, sizeof(CameraData),
-                                       0, cudaMemcpyHostToDevice, _cudaStream));
-    CUDA_CHECK(cudaMemcpyToSymbolAsync(c_frame, &frameData, sizeof(FrameData),
-                                       0, cudaMemcpyHostToDevice, _cudaStream));
-    
+
     // Grid and block sizes
     dim3 gridSizeFull((_width + 15) / 16, (_height + 15) / 16);
     dim3 gridSizeHalf((_width / 2 + 7) / 8, (_height / 2 + 7) / 8);
@@ -435,138 +323,152 @@ void CudaRenderer::Draw(const Character& character, unsigned int frameCount) {
     // ============================================================================
     // PASS 0: Distance Approximation (half-res, 8x8 threads)
     // ============================================================================
-    distApproximationKernel<<<gridSizeHalf, groupSize8, 0, _cudaStream>>>(
+    Launch_distApproximationKernel(
+        _cudaStream, gridSizeHalf, groupSize8,
         _halfDistTexture.surface,
-        _materialMap.GetIndirectionPtr(),
+        camData,
+        frameData,
+        _materialMap.GetIndirectionTexture(),
         _materialMap.GetSectorBufferPtr(),
         _materialMap.GetOccupancyPtr(),
         _materialMap.GetDataPtr(),
         _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
-        _width, _height
+        _characterBuffer
     );
     
     // ============================================================================
     // PASS 1: GBuffer + Direct Light (full-res, 16x16 threads)
     // ============================================================================
-    GBufferAndDirectLight<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    Launch_GBufferAndDirectLight(
+        _cudaStream, gridSizeFull, groupSize16,
         _texDirectLight.surface,
         _texAlbedo.surface,
         _texNormal.surface,
         _texMotion.surface,
         _texDepth[currIdx].surface,
-        _halfDistTexture.texture,
-        _texturepack.getTextureObject(),
-        _materialMap.GetIndirectionPtr(),
+        camData,
+        frameData,
+        _materialMap.GetIndirectionTexture(),
         _materialMap.GetSectorBufferPtr(),
         _materialMap.GetOccupancyPtr(),
         _materialMap.GetDataPtr(),
         _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
-        _width, _height
+        _characterBuffer,
+        _texturepack.getTextureObject(),
+        _halfDistTexture.texture
     );
     
     // ============================================================================
     // PASS 2: Indirect Bounce (full-res)
     // ============================================================================
-    IndirectBounce<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    Launch_IndirectBounce(
+        _cudaStream, gridSizeFull, groupSize16,
         _texRawIndirect.surface,
         _texNormal.texture,
         _texDepth[currIdx].texture,
-        _materialMap.GetIndirectionPtr(),
+        camData,
+        frameData,
+        _texturepack.getTextureObject(),
+        _materialMap.GetIndirectionTexture(),
         _materialMap.GetSectorBufferPtr(),
         _materialMap.GetOccupancyPtr(),
         _materialMap.GetDataPtr(),
         _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
-        _width, _height
+        _characterBuffer
     );
     
     // ============================================================================
     // PASS 3: Temporal Accumulation
     // ============================================================================
-    TemporalAccumulation<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    Launch_TemporalAccumulation(
+        _cudaStream, gridSizeFull, groupSize16,
         _texAccum[currIdx].surface,
         _texRawIndirect.texture,
         _texAccum[prevIdx].texture,
         _texMotion.texture,
         _texDepth[currIdx].texture,
         _texDepth[prevIdx].texture,
-        _texDirectLight.texture,
-        _width, _height
+        _texDirectLight.texture
     );
     
     // ============================================================================
     // PASS 4: Bilateral Denoise (3 iterations: step 1, 2, 4)
     // ============================================================================
     // Iteration 1: step = 1
-    BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    Launch_BilateralDenoise(
+        _cudaStream, gridSizeFull, groupSize16,
         _texDenoiseTemp.surface,
         _texAccum[currIdx].texture,
         _texNormal.texture,
         _texDepth[currIdx].texture,
-        1,
-        _width, _height
+        1
     );
-    
+
     // Iteration 2: step = 2
-    BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    Launch_BilateralDenoise(
+        _cudaStream, gridSizeFull, groupSize16,
         _texDenoised.surface,
         _texDenoiseTemp.texture,
         _texNormal.texture,
         _texDepth[currIdx].texture,
-        2,
-        _width, _height
+        2
     );
-    
+
     // Iteration 3: step = 4
-    BilateralDenoise<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    Launch_BilateralDenoise(
+        _cudaStream, gridSizeFull, groupSize16,
         _texDenoiseTemp.surface,
         _texDenoised.texture,
         _texNormal.texture,
         _texDepth[currIdx].texture,
-        4,
-        _width, _height
+        4
     );
     
     // ============================================================================
     // PASS 5: Volumetric Fog (half-res)
     // ============================================================================
-    VolumetricFog<<<gridSizeHalf, groupSize8, 0, _cudaStream>>>(
+    Launch_VolumetricFog(
+        _cudaStream, gridSizeHalf, groupSize8,
         _texVolumetric[currIdx].surface,
         _texDepth[currIdx].texture,
         _texVolumetric[prevIdx].texture,
-        _materialMap.GetIndirectionPtr(),
+        camData,
+        frameData,
+        _materialMap.GetIndirectionTexture(),
         _materialMap.GetSectorBufferPtr(),
+        _materialMap.GetOccupancyPtr(),
+        _materialMap.GetDataPtr(),
         _materialMap.GetSectorMaskPtr(),
-        (CharacterGPUData*)_characterBuffer,
-        _width, _height
+        _characterBuffer
     );
     
     // ============================================================================
     // PASS 6: Compute Exposure (reduction kernel)
     // ============================================================================
     dim3 singleGroup(16, 16);
-    ComputeExposure<<<singleGroup, singleGroup, 0, _cudaStream>>>(
-        (ExposureData*)_exposureBuffer,
+    Launch_ComputeExposure(
+        _cudaStream, singleGroup, singleGroup,
+        _exposureBuffer,
+        frameData,
         _texDirectLight.texture,
         _texAccum[currIdx].texture,
-        _texAlbedo.texture,
-        _width, _height
+        _texAlbedo.texture
     );
-    
+
     // ============================================================================
     // PASS 7: Composite (full-res)
     // ============================================================================
-    Composite<<<gridSizeFull, groupSize16, 0, _cudaStream>>>(
+    Launch_Composite(
+        _cudaStream, gridSizeFull, groupSize16,
         _texCompositeResult.surface,
         _texDirectLight.texture,
         _texDenoiseTemp.texture,  // Output from final denoise iteration
         _texAlbedo.texture,
         _texDepth[currIdx].texture,
         _texVolumetric[currIdx].texture,
-        (ExposureData*)_exposureBuffer,
-        _width, _height
+        _exposureBuffer,
+        0,  // texSrc (unused by Composite, part of shared GlobalParams)
+        0   // texDst (unused by Composite, part of shared GlobalParams)
     );
     
     // Store jitter for next frame (for DLSS)
