@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.21 FATAL_ERROR)
 
 SET(APP_NAME RVGRT)
 set(CMAKE_OSX_DEPLOYMENT_TARGET "14.0" CACHE STRING "Minimum OS X deployment version")
@@ -193,9 +193,10 @@ if(WIN32)
                 -I "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang"
                 -D__SLANG__
                 "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+                -depfile "${GENERATED_CUDA_FILE}.d"
                 -o "${GENERATED_CUDA_FILE}"
             DEPENDS "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
-                   ${SLANG_LIB_FILES}
+            DEPFILE "${GENERATED_CUDA_FILE}.d"
             COMMENT "Transpiling ${KERNEL_ENTRY_POINT} to CUDA C++..."
         )
     endforeach()
@@ -351,9 +352,10 @@ elseif(APPLE)
                 -I "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang"
                 -D__SLANG__
                 "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
+                -depfile "${GENERATED_METAL_FILE}.d"
                 -o "${GENERATED_METAL_FILE}"
             DEPENDS "${CMAKE_SOURCE_DIR}/src/renderer/kernels/slang/${KERNEL_SOURCE}"
-                   ${SLANG_LIB_FILES}
+            DEPFILE "${GENERATED_METAL_FILE}.d"
             COMMENT "Transpiling ${KERNEL_ENTRY_POINT} to MSL..."
         )
 

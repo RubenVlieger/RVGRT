@@ -5,6 +5,7 @@
 // Accesses global resources directly to work around Slang compiler limitations
 // with passing resources alongside scalars to user functions.
 
+
 #include "Settings.slang"
 #include "Tables.slang"
 
