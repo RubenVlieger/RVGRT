@@ -93,7 +93,7 @@ inline uint64_t pack_4x4x4_block(float3 startPos) {
         for(int y=0; y<4; y++) {
             for(int x=0; x<4; x++) {
                 if(Evaluate(startPos.x + x, startPos.y + y, startPos.z + z) > 0.0f) {
-                    packed |= (1UL << (x + y * 4 + z * 16));
+                    packed |= (1ULL << (x + y * 4 + z * 16));
                 }
             }
         }
@@ -135,7 +135,7 @@ void XMap_AnalyzeSectors(uint3 gid : SV_DispatchThreadID)
             if(active) break;
         }
         
-        if (active) activeBricksMask |= (1UL << i);
+        if (active) activeBricksMask |= (1ULL << i);
     }
     resultBuffer[sectorIndex] = activeBricksMask;
 }
@@ -171,7 +171,7 @@ void XMap_AnalyzeStreaming(uint3 gid : SV_DispatchThreadID)
             if(active) break;
         }
         
-        if (active) activeBricksMask |= (1UL << i);
+        if (active) activeBricksMask |= (1ULL << i);
     }
     resultBufferStreaming[gid.x] = activeBricksMask;
 }

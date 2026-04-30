@@ -8,7 +8,7 @@
 #define SHADOWS 1
 
 #define CHARACTER_MODELS 1
-#define USE_METALFX 0
+#define USE_METALFX 1
 
 #define SHADOW_MAXDIST 256.0f
 #define SHADOW_STEPS 64
@@ -147,11 +147,14 @@ static const uint64_t BYTESIZE = 1073741824;
 #define MAT_SOULSAND 88
 #define MAT_GLOWSTONE 89
 
-// Indirection grid dimensions
+// Indirection grid dimensions at brick resolution (world_size / brick_size = world_size / 8)
+// Used by material generation kernels (XMap_AnalyzeSectors, XMap_FillBricks)
 static const int IND_X = 512;
 static const int IND_Y = 64;
 static const int IND_Z = 512;
 static const int IND_OFFSET = 2;
+
+
 
 // Sector sentinels
 #define SECTOR_HANDLE_EMPTY 0u
