@@ -211,49 +211,77 @@ struct CudaRendererTraits {
 using PlatformRendererTraits = CudaRendererTraits;
 
 // ============================================================================
-// Web/WebGPU Renderer Traits (Placeholder for future)
+// Web/WebGPU Renderer Traits
 // ============================================================================
 #else
 
+// Forward-declare WebGPU C types to avoid including webgpu.h in this header
+struct WGPUDeviceImpl;
+struct WGPUQueueImpl;
+struct WGPUCommandBufferImpl;
+struct WGPUComputePassEncoderImpl;
+struct WGPUComputePipelineImpl;
+struct WGPUTextureImpl;
+struct WGPUTextureViewImpl;
+struct WGPUBufferImpl;
+struct WGPUSamplerImpl;
+
+typedef struct WGPUDeviceImpl* WGPUDevice;
+typedef struct WGPUQueueImpl* WGPUQueue;
+typedef struct WGPUCommandBufferImpl* WGPUCommandBuffer;
+typedef struct WGPUComputePassEncoderImpl* WGPUComputePassEncoder;
+typedef struct WGPUComputePipelineImpl* WGPUComputePipeline;
+typedef struct WGPUTextureImpl* WGPUTexture;
+typedef struct WGPUTextureViewImpl* WGPUTextureView;
+typedef struct WGPUBufferImpl* WGPUBuffer;
+typedef struct WGPUSamplerImpl* WGPUSampler;
+
 struct WebRendererTraits {
-    // Placeholder for WebGPU implementation
-    using Device = void*;
-    using CommandBuffer = void*;
-    using ComputeEncoder = void*;
-    using PipelineState = void*;
-    using Texture = void*;
-    using Buffer = void*;
-    using Scaler = void*;
-    using CommandQueue = void*;
+    using Device = WGPUDevice;
+    using CommandBuffer = WGPUCommandBuffer;
+    using ComputeEncoder = WGPUComputePassEncoder;
+    using PipelineState = WGPUComputePipeline;
+    using Texture = WGPUTextureView;     // Views are bound to shaders
+    using Buffer = WGPUBuffer;
+    using Scaler = void*;                // No native upscaler; use FallbackBlit
+    using CommandQueue = WGPUQueue;
     
+    // Render target stores both texture (for copies) and view (for shader binding)
     struct RenderTarget {
-        Texture texture = nullptr;
+        WGPUTexture texture = nullptr;
+        WGPUTextureView view = nullptr;
         uint32_t width = 0;
         uint32_t height = 0;
         TextureFormat format;
     };
     
-    using MaterialMapType = void*;
+    using MaterialMapType = class WebMaterialMap;
     
     static Device GetDevice();
+    
     static RenderTarget CreateRenderTarget(Device device, uint32_t width, uint32_t height, 
                                            TextureFormat format, const char* name);
     static void DestroyRenderTarget(Device device, RenderTarget& target);
+    
     static Buffer CreateBuffer(Device device, size_t size, const char* name);
     static void DestroyBuffer(Device device, Buffer buffer);
     static void* MapBuffer(Buffer buffer);
     static void UnmapBuffer(Buffer buffer);
     static void UploadBuffer(Buffer buffer, const void* data, size_t size);
+    
     static ComputeEncoder CreateEncoder(CommandBuffer cmdBuf, const char* name);
     static void DestroyEncoder(ComputeEncoder encoder);
+    
     static void SetPipelineState(ComputeEncoder encoder, PipelineState pso);
     static void SetTexture(ComputeEncoder encoder, uint32_t index, Texture texture);
     static void SetBuffer(ComputeEncoder encoder, uint32_t index, Buffer buffer, uint64_t offset = 0);
     static void SetConstantData(ComputeEncoder encoder, uint32_t index, const void* data, size_t size);
-    static void DispatchKernel(ComputeEncoder encoder, PipelineState pso, GridSize grid, GroupSize group);
+    static void DispatchKernel(ComputeEncoder encoder, GridSize grid, GroupSize group);
     static void MemoryBarrier(ComputeEncoder encoder);
+    
     static void ApplyUpscaling(CommandBuffer cmdBuf, Scaler scaler, Texture input, Texture output,
                                Texture depth, Texture motion, bool reset, float jitterX, float jitterY);
+    
     static void Log(const char* format, ...);
     static void LogError(const char* format, ...);
 };

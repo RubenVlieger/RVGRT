@@ -52,7 +52,12 @@
 // Brick pool capacity (how many 8x8x8 bricks can exist simultaneously)
 // Each brick uses 576 bytes (64 occupancy + 512 data)
 // At 6M bricks: ~3.3GB total
-#define BRICK_POOL_CAPACITY (6 * 1024 * 1024)
+// WebGPU is limited to 2GB buffers, so we reduce capacity.
+#ifdef __EMSCRIPTEN__
+#define BRICK_POOL_CAPACITY (2 * 1024 * 1024)  // 2M bricks ~ 1.3 GB
+#else
+#define BRICK_POOL_CAPACITY (6 * 1024 * 1024)  // 6M bricks ~ 3.3 GB
+#endif
 
 // Maximum active sectors (must be >= indirection cells)
 // 256 * 16 * 256 = 1,048,576 sectors
@@ -141,7 +146,11 @@
 // RAY TRACING SETTINGS
 // ============================================================================
 #define RT_MAX_DIST 1000.0f
+#ifdef __EMSCRIPTEN__
+#define RT_MAX_STEPS 128
+#else
 #define RT_MAX_STEPS 256
+#endif
 #define RT_EPSILON 0.001f
 
 // ============================================================================

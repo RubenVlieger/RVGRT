@@ -595,8 +595,8 @@ void MetalRenderer::Draw(CommandBuffer cmdBuf,
     if (_temporalScaler) {
         // MetalFX Temporal Scaler - feed current render as input, output to history buffer
         id<MTLFXTemporalScaler_Unlocked> scaler = (id<MTLFXTemporalScaler_Unlocked>)_temporalScaler;
-        scaler.motionVectorScale = simd_make_float2(-(float)State::dispWIDTH, -(float)State::dispHEIGHT);
-        scaler.jitterOffset = simd_make_float2(-character.jitterX, -character.jitterY);
+        scaler.motionVectorScale = simd_make_float2((float)State::dispWIDTH, (float)State::dispHEIGHT);
+        scaler.jitterOffset = simd_make_float2(character.jitterX, character.jitterY);
 
         // MetalFX inputs/outputs
         ((id<MTLFXTemporalScaler>)_temporalScaler).colorTexture = (id<MTLTexture>)manager.GetCompositeResult().texture;

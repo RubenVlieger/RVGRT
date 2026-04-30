@@ -50,6 +50,31 @@ struct CudaBrickPoolTraits {
 
 using PlatformBrickPoolTraits = CudaBrickPoolTraits;
 
+#else
+
+// Forward-declare WebGPU buffer type
+struct WGPUBufferImpl;
+typedef struct WGPUBufferImpl* WGPUBuffer;
+
+struct WebBrickPoolTraits {
+    using OccupancyBuffer = WGPUBuffer;
+    using DataBuffer = WGPUBuffer;      // Host uploads packed u32 data for WGSL
+    using DeviceHandle = void*;         // WebGraphicsDevice pointer
+
+    static DeviceHandle GetDevice();
+    
+    static OccupancyBuffer AllocateOccupancy(DeviceHandle device, size_t size);
+    static DataBuffer AllocateData(DeviceHandle device, size_t size);
+    static void ZeroOccupancy(DeviceHandle device, OccupancyBuffer buffer, size_t size);
+    static void ZeroData(DeviceHandle device, DataBuffer buffer, size_t size);
+    static void FreeBuffer(WGPUBuffer buffer);
+    
+    static void Log(const char* format, ...);
+    static void LogError(const char* format, ...);
+};
+
+using PlatformBrickPoolTraits = WebBrickPoolTraits;
+
 #endif
 
 }

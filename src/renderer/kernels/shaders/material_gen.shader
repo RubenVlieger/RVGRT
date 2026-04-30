@@ -16,6 +16,66 @@ using namespace metal;
 // Generates voxel data on-demand for the streaming world.
 // ============================================================================
 
+<<<<<<< Updated upstream:src/renderer/kernels/shaders/material_gen.shader
+=======
+#include "ShaderTypes.slang"
+#include "Settings.slang"
+#include "TerrainGen.slang"
+
+RWStructuredBuffer<uint64_t> resultBuffer;
+StructuredBuffer<SectorWorkItem> workItems;
+RWStructuredBuffer<uint64_t> resultBufferStreaming;
+StructuredBuffer<BrickWorkItem> workList;
+RWStructuredBuffer<SectorInfo> sectorBuffer;
+RWStructuredBuffer<uint64_t> occupancyBuffer;
+RWStructuredBuffer<uint8_t> dataBuffer;
+
+uniform int3 worldOrigin;
+uniform uint totalItems;
+
+Texture3D<uint> indirection;
+RWStructuredBuffer<uint64_t> geoPool;
+RWStructuredBuffer<uint8_t> matPool;
+
+// WGSL does not support array<u8> in storage buffers.
+// We provide packed u32 buffers for WGSL and helpers to write individual bytes.
+RWStructuredBuffer<uint> packedDataBuffer;
+RWStructuredBuffer<uint> packedMatPool;
+
+[ForceInline]
+inline void WriteDataBuffer(uint index, uint value) {
+    __target_switch {
+        case cuda:  { dataBuffer[index] = uint8_t(value); }
+        case metal: { dataBuffer[index] = uint8_t(value); }
+        case wgsl:  {
+            uint wordIdx = index >> 2;
+            uint shift = (index & 3) * 8;
+            uint mask = 0xFFu << shift;
+            uint packed = (value & 0xFFu) << shift;
+            uint current = packedDataBuffer[wordIdx];
+            packedDataBuffer[wordIdx] = (current & ~mask) | packed;
+        }
+    }
+}
+
+[ForceInline]
+inline void WriteMatPool(uint index, uint value) {
+    __target_switch {
+        case cuda:  { matPool[index] = uint8_t(value); }
+        case metal: { matPool[index] = uint8_t(value); }
+        case wgsl:  {
+            uint wordIdx = index >> 2;
+            uint shift = (index & 3) * 8;
+            uint mask = 0xFFu << shift;
+            uint packed = (value & 0xFFu) << shift;
+            uint current = packedMatPool[wordIdx];
+            packedMatPool[wordIdx] = (current & ~mask) | packed;
+        }
+    }
+}
+
+[ForceInline]
+>>>>>>> Stashed changes:src/renderer/kernels/slang/material_gen.slang
 inline uint GetLinearIndex(uint3 pos, uint sizeX, uint sizeY) {
     return pos.x + (pos.y * sizeX) + (pos.z * sizeX * sizeY);
 }
@@ -31,7 +91,13 @@ __device__ inline int countbits_64(ulong v) {
 #endif
 
 // Procedural material ID based on position
+<<<<<<< Updated upstream:src/renderer/kernels/shaders/material_gen.shader
 uint8_t get_procedural_material_id(float3 pos) {
+=======
+
+[ForceInline]
+inline uint get_procedural_material_id(float3 pos) {
+>>>>>>> Stashed changes:src/renderer/kernels/slang/material_gen.slang
     int y = (int)pos.y;
     
     // Bedrock at bottom
@@ -278,6 +344,9 @@ KERNEL(XMap_FillBricks)(
     }
     threadgroup_barrier(mem_flags::mem_threadgroup);
     
+    uint matID = get_procedural_material_id(voxelPos);
+    uint64_t finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID_local;
+    
     if (isSolid) {
         if (threadID_local < 32) {
             atomic_fetch_or_explicit(&groupMaskLow, (1u << threadID_local), memory_order_relaxed);
@@ -285,12 +354,9 @@ KERNEL(XMap_FillBricks)(
             atomic_fetch_or_explicit(&groupMaskHigh, (1u << (threadID_local - 32)), memory_order_relaxed);
         }
         
-        uint8_t matID = get_procedural_material_id(voxelPos);
-        uint64_t finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID_local;
-        dataBuffer[finalDataIdx] = matID;
+        WriteDataBuffer(finalDataIdx, matID);
     } else {
-        uint64_t finalDataIdx = item.dataOffset + (subBrickIndex * 64) + threadID_local;
-        dataBuffer[finalDataIdx] = 0;
+        WriteDataBuffer(finalDataIdx, 0);
     }
     
     threadgroup_barrier(mem_flags::mem_threadgroup);
@@ -406,17 +472,21 @@ KERNEL(FillDynamicAtlases)(
             for(int x=0; x<8; x++) {
 #if defined(PLATFORM_METAL)
                 float3 voxelPos = worldBase + float3(x,y,z);
+<<<<<<< Updated upstream:src/renderer/kernels/shaders/material_gen.shader
 #else
                 float3 voxelPos = worldBase + make_float3(x,y,z);
 #endif
                 uint8_t matID = 0;
+=======
+                uint matID = 0;
+>>>>>>> Stashed changes:src/renderer/kernels/slang/material_gen.slang
                 
                 if (Evaluate(voxelPos.x, voxelPos.y, voxelPos.z) > 0.0f) {
                     matID = get_procedural_material_id(voxelPos);
                 }
                 
                 uint localVoxelIdx = x + (y * 8) + (z * 64);
-                matPool[matBaseIdx + localVoxelIdx] = matID;
+                WriteMatPool(matBaseIdx + localVoxelIdx, matID);
             }
         }
     }

@@ -9,7 +9,11 @@
 // FEATURE TOGGLES
 // ---------------------------------------------------------------------------------
 #define VOLUMETRIC_FOG 1
+<<<<<<< Updated upstream
 #define INDIRECT_LIGHTING 0
+=======
+#define INDIRECT_LIGHTING
+>>>>>>> Stashed changes
 #define REFLECTIONS 1
 #define SHADOWS 0
 
